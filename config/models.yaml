@@ -4,11 +4,15 @@
 
 embedding:
   vi:
-    model: Qwen/Qwen3-Embedding-8B
-    provider: deepinfra      # OpenAI-compatible; key: DEEPINFRA_API_KEY
-    dimensions: 4096         # hỗ trợ MRL, có thể giảm (VD 1024/2048) nếu cần tiết kiệm
-    max_input_tokens: 32000
-    query_instruction: "Instruct: Given a question from an MEP engineer, retrieve relevant passages from project documents\nQuery: "
+    # 2026-10-28: chuyển sang Gemini (DeepInfra cần nạp tiền). Quay lại Qwen3 → khôi phục khối dưới + migrate --recreate + ingest --force.
+    #   model: Qwen/Qwen3-Embedding-8B · provider: deepinfra · dimensions: 4096 · max_input_tokens: 32000
+    #   query_instruction: "Instruct: Given a question from an MEP engineer, retrieve relevant passages from project documents\nQuery: "
+    model: gemini-embedding-2
+    provider: google
+    dimensions: 3072
+    max_input_tokens: 8192
+    task_type_document: RETRIEVAL_DOCUMENT
+    task_type_query: RETRIEVAL_QUERY
     collection: child_chunks_vi
   en:
     model: gemini-embedding-2   # GA 04/2026; nếu ListModels chưa có thì dùng gemini-embedding-2-preview
@@ -19,8 +23,13 @@ embedding:
     task_type_query: RETRIEVAL_QUERY
     collection: child_chunks_en
 
+# Tokenizer đếm token (ngưỡng chunk / ngân sách context). Gemini không có tokenizer offline → BPE Qwen3 làm xấp xỉ.
+# Đổi tokenizer => số token đổi => phải chunk lại.
+token_counter:
+  hf_tokenizer: Qwen/Qwen3-Embedding-8B
+
 sparse:
-  method: bm25               # Qdrant BM25 cho cả vi và en (Qwen3/Gemini không có sparse)
+  method: bm25              # Qdrant BM25 cho cả vi và en (Qwen3/Gemini không có sparse)
   keep_tokens_regex: config/keyword_patterns.yaml  # giữ nguyên mã kỹ thuật: DN65, 1.5mm2, 5.7.1, TCVN 5687:2024...
 
 # Ứng viên đánh giá ở dự án chọn embedding:

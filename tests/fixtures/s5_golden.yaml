@@ -1,6 +1,7 @@
 # Bộ câu hỏi vàng S5 (docs/query-pipeline.md mục 6).
 # expected_section: tài liệu (doc_type theo folder_map, stream, doc_code) + section_key mong đợi
-#   (section_key = khóa chính; alt_section_keys = khóa chấp nhận thêm, VD mục cha của bảng).
+#   (section_key = khóa chính; alt_section_keys = khóa chấp nhận thêm, VD mục cha của bảng;
+#    seed_section_keys = khóa chỉ dùng khi chạy trên query_seed – seed gộp mục con khác bản ingest thật).
 # expected_values: mỗi phần tử là 1 chuỗi hoặc danh sách cách viết tương đương (khớp 1 trong số đó);
 #   so khớp sau khi chuẩn hóa: lowercase, ²→2, bỏ khoảng trắng, '·', '°'.
 # in_seed: câu có dữ liệu trong tests/fixtures/query_seed (phiên B). #11 cần ingest Westin thật.
@@ -109,8 +110,9 @@ questions:
       doc_type: DESIGN_REPORT
       stream: DESIGN_CONSULTANT
       doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
-      section_key: part_i__table_4_2_1     # bảng không đánh số trong mục 4.2 (Phần I)
-      alt_section_keys: [part_i__sec_4_2]
+      section_key: part_i__table_4_2_f_1   # bảng không đánh số trong mục 4.2.f (Phần I) – theo ingest thật
+      alt_section_keys: [part_i__sec_4_2_f]
+      seed_section_keys: [part_i__table_4_2_1, part_i__sec_4_2]   # khóa trong query_seed (gộp a–h vào 4.2)
     expected_values:
       - "25 L/s"
     expected_status: OK
@@ -122,8 +124,9 @@ questions:
       doc_type: DESIGN_REPORT
       stream: DESIGN_CONSULTANT
       doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
-      section_key: part_i__sec_4_2          # "mục 4" → 4.2.g Thông tin mặt dựng
-      alt_section_keys: [part_i__sec_4]
+      section_key: part_i__sec_4_2_g        # "mục 4" → 4.2.g Thông tin mặt dựng – theo ingest thật
+      alt_section_keys: []
+      seed_section_keys: [part_i__sec_4_2]
     expected_values:
       - ["5.6 W/m²K", "5.6 W/m²·°K", "5.6 W/m²·K", "5.6 W/m2K", "5,6 W/m²K", "5.6 W/(m²K)", "5.6 W/m².K"]
     expected_status: OK

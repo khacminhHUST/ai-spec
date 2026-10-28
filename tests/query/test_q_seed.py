@@ -60,4 +60,5 @@ def test_golden_yaml_matches_seed(data):
         sec = q.get("expected_section")
         if not q["in_seed"] or not sec:
             continue
-        assert (codes[sec["doc_code"]], sec["section_key"]) in keys, q["id"]
+        seed_keys = sec.get("seed_section_keys") or [sec["section_key"]]  # seed gộp mục con khác bản ingest
+        assert any((codes[sec["doc_code"]], k) in keys for k in seed_keys), q["id"]

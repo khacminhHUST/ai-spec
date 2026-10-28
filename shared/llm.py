@@ -64,13 +64,29 @@ class MockChatModel(BaseChatModel):
 
 
 def get_chat_model(role: Role, settings: Settings | None = None, **overrides: Any) -> BaseChatModel:
+    """Khóa ngoài provider/model/temperature trong config (VD thinking_level) được chuyển tiếp cho provider."""
     s = settings or get_settings()
     cfg = {**llm_cfg(role, s), **overrides}
     if s.is_mock(cfg["provider"]):
         return MockChatModel()
     from langchain.chat_models import init_chat_model
 
-    return init_chat_model(
-        cfg["model"], model_provider=cfg["provider"], temperature=cfg.get("temperature", 0),
-        api_key=s.api_key(cfg["provider"]),
-    )
+    provider, model = cfg.pop("provider"), cfg.pop("model")
+    cfg.setdefault("temperature", 0)
+    if provider == "google_genai" and "thinking_level" in cfg:
+        cfg["thinking_config"] = {"thinking_level": cfg.pop("thinking_level")}
+    return init_chat_model(model, model_provider=provider, api_key=s.api_key(provider), **cfg)
+
+
+def message_text(msg: Any) -> str:
+    """Nội dung text của AIMessage/AIMessageChunk (Gemini có thể trả content dạng list block)."""
+    content = getattr(msg, "content", msg)
+    if isinstance(content, str):
+        return content
+    parts = []
+    for block in content or []:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict) and block.get("type") == "text":
+            parts.append(block.get("text", ""))
+    return "".join(parts)

@@ -34,7 +34,7 @@ def values_found(answer: str, expected: list) -> list[bool]:
 def section_hit(sec: dict | None, context: list[dict], doc_ids: dict[str, str]) -> bool | None:
     if not sec:
         return None
-    keys = {sec["section_key"], *sec.get("alt_section_keys", [])}
+    keys = {sec["section_key"], *sec.get("alt_section_keys", []), *sec.get("seed_section_keys", [])}
     doc_id = doc_ids.get(sec["doc_code"])
     return any(b["doc_id"] == doc_id and b["section_key"] in keys for b in context)
 

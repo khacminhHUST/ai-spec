@@ -104,6 +104,7 @@ def build_profile(deps: Deps, project_id: str) -> dict[str, Any]:
     return {
         "project_id": project_id,
         "name": info.get("name", project_id),
+        "aliases": list(info.get("aliases") or []),
         "streams": streams,
         "docs": docs,
         "source_priority": priority,

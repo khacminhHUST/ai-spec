@@ -14,7 +14,10 @@ _POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="retr")
 
 
 def plan_branches(router: dict[str, Any], profiles: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
-    """Nhánh = project × stream × lang; bỏ nhánh stream không có tài liệu ở lang đó; bỏ en nếu queries_en rỗng."""
+    """Nhánh = project × stream × lang; bỏ nhánh stream không có tài liệu ở lang đó; bỏ en nếu queries_en rỗng.
+
+    Router chỉ định stream nhưng không stream nào có tài liệu → mở rộng ra mọi stream (tránh NOT_FOUND giả).
+    """
     streams = router.get("streams") or STREAMS
     langs = ["vi"] + (["en"] if router.get("queries_en") else [])
     if not router.get("queries_vi"):
@@ -26,6 +29,8 @@ def plan_branches(router: dict[str, Any], profiles: dict[str, dict[str, Any]]) -
             for lang in langs:
                 if lang in have:
                     branches.append({"project_id": pid, "stream": st, "lang": lang})
+    if not branches and router.get("streams"):
+        return plan_branches({**router, "streams": []}, profiles)
     return branches
 
 

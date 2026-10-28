@@ -45,7 +45,9 @@ def test_empty_streams_means_all_streams_with_docs(deps):
 def test_streams_filter_and_no_en_queries(deps):
     br = plan_branches({"queries_vi": ["x"], "queries_en": [], "streams": ["DESIGN_CONSULTANT"]}, _profiles(deps, [S5]))
     assert br == [{"project_id": S5, "stream": "DESIGN_CONSULTANT", "lang": "vi"}]
-    assert plan_branches({"queries_vi": ["x"], "queries_en": [], "streams": ["CONTRACT"]}, _profiles(deps, [S5])) == []
+    # stream router chọn không có tài liệu → mở rộng ra mọi stream có tài liệu (tránh NOT_FOUND giả)
+    br = plan_branches({"queries_vi": ["x"], "queries_en": [], "streams": ["CONTRACT"]}, _profiles(deps, [S5]))
+    assert br and all(b["stream"] != "CONTRACT" for b in br)
 
 
 def test_branch_filters_payload(deps):

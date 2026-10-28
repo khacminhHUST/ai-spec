@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
 
 # provider trong config → nhóm key/mock
-_PROVIDER_GROUP = {"deepinfra": "deepinfra", "google": "google", "google_genai": "google"}
+_PROVIDER_GROUP = {"deepinfra": "deepinfra", "google": "google", "google_genai": "google", "local": "local"}
 _NS_RE = re.compile(r"^[a-z_][a-z0-9_]{0,40}$")
 
 
@@ -71,11 +71,14 @@ class Settings:
     # ---- provider / mock ----
     def api_key(self, provider: str) -> str | None:
         group = provider_group(provider)
-        return self.google_api_key if group == "google" else self.deepinfra_api_key
+        return {"google": self.google_api_key, "deepinfra": self.deepinfra_api_key}.get(group)
 
     def is_mock(self, provider: str) -> bool:
+        """Mock khi MEP_MOCK chỉ định, hoặc provider cần key mà thiếu key (local không cần key)."""
         group = provider_group(provider)
-        return "all" in self.mock or group in self.mock or not self.api_key(provider)
+        if "all" in self.mock or group in self.mock:
+            return True
+        return group != "local" and not self.api_key(provider)
 
     # ---- tiện ích ----
     def embedding_cfg(self, lang: str) -> dict[str, Any]:

@@ -45,15 +45,14 @@ def test_path_partial_max_one_hop(mock_settings):
     assert len(grader_calls) == 2           # trước và sau Targeted Fetch, không lặp thêm
 
 
-def test_path_not_found_no_branch(mock_settings):
-    llm = scripted_llm(router_json(q="Giá trị hợp đồng gói thầu cơ điện?", intent_type="CONTRACT_TERM",
-                                   streams=["CONTRACT"], queries_vi=["giá trị hợp đồng"]),
-                       answer="Không tìm thấy thông tin trong tài liệu dự án.")
+def test_stream_without_docs_falls_back(mock_settings):
+    """Router chọn stream CONTRACT (chưa có tài liệu) → tìm trên mọi stream có tài liệu, không NOT_FOUND giả."""
+    llm = scripted_llm(router_json(q="Thời gian bảo hành hệ thống điện?", intent_type="CONTRACT_TERM",
+                                   streams=["CONTRACT"], queries_vi=["thời gian bảo hành hệ thống điện"]),
+                       answer="Bảo hành 24 tháng [1].")
     deps = make_deps(mock_settings, llm=llm)
-    out = run_turn(_graph(deps), "test_engineer", "Giá trị hợp đồng?")
-    assert out["status"] == "NOT_FOUND" and out["citations"] == [] and out["context"] == []
-    assert deps.retriever.calls == []
-    assert "TRẠNG THÁI: NOT_FOUND" in llm.calls[-1][-1].content
+    run_turn(_graph(deps), "test_engineer", "Thời gian bảo hành hệ thống điện?")
+    assert deps.retriever.calls and all(c["stream"] != "CONTRACT" for c in deps.retriever.calls)
 
 
 def test_path_not_found_below_threshold(mock_settings):

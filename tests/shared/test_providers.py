@@ -46,8 +46,9 @@ def test_get_providers_mock(mock_settings):
 
 
 def test_mock_when_key_missing(settings):
-    s = dataclasses.replace(settings, mock=frozenset(), deepinfra_api_key=None)
-    assert s.is_mock("deepinfra") and isinstance(get_reranker(s), MockReranker)
+    s = dataclasses.replace(settings, mock=frozenset(), deepinfra_api_key=None, google_api_key=None)
+    assert s.is_mock("deepinfra") and s.is_mock("google_genai") and not s.is_mock("local")
+    assert isinstance(get_embedder("vi", s), MockEmbedder) and isinstance(get_chat_model("main", s), MockChatModel)
 
 
 def test_mock_embedder_similarity(mock_settings):

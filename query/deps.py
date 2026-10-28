@@ -68,19 +68,7 @@ class Deps:
 
 # ------------------------------------------------------------------ tiện ích LLM
 
-def message_text(msg: Any) -> str:
-    """Nội dung text của AIMessage/AIMessageChunk (content có thể là list block)."""
-    content = getattr(msg, "content", msg)
-    if isinstance(content, str):
-        return content
-    parts = []
-    for block in content or []:
-        if isinstance(block, str):
-            parts.append(block)
-        elif isinstance(block, dict) and block.get("type") == "text":
-            parts.append(block.get("text", ""))
-    return "".join(parts)
-
+from shared.llm import message_text  # noqa: E402,F401  (re-export cho router/grader/generator)
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 

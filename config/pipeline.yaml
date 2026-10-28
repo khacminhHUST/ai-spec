@@ -6,10 +6,12 @@ llm:
     provider: google_genai    # dùng init_chat_model(provider, model)
     model: gemini-3.5-flash-lite
     temperature: 0
+    thinking_level: low       # đo 2026-10-28: 1.2s → 0.9s
   main:                       # N7 Generator – cân bằng chính xác & tốc độ
     provider: google_genai
     model: gemini-3.8-flash
     temperature: 0.1
+    thinking_level: low       # đo 2026-10-28: TTFT 7.7s (mặc định) → 1.9s (low)
   # Phương án nâng cấp cho câu hỏi khó/so sánh nhiều nguồn (chậm hơn): gemini-4-argon
 
 router:
@@ -27,8 +29,14 @@ retrieval:
   branch_timeout_s: 5
 
 rerank:
-  model: Qwen/Qwen3-Reranker-8B   # đa ngữ, cùng họ với embedding VN
-  provider: deepinfra             # key: DEEPINFRA_API_KEY
+  # 2026-10-28: chạy cục bộ (GPU) thay DeepInfra Qwen3-Reranker-8B (cần nạp tiền).
+  # Quay lại: model: Qwen/Qwen3-Reranker-8B · provider: deepinfra
+  model: Qwen/Qwen3-Reranker-0.6B
+  provider: local                 # transformers, GPU nếu có
+  device: auto
+  batch_size: 32
+  max_length: 640             # child ≤ 400 token + breadcrumb + câu hỏi
+  instruction: "Given a question from an MEP engineer, judge whether the passage from project documents helps answer it"
   min_score: 0.3
   max_per_doc: 5
 
