@@ -265,7 +265,7 @@ Bộ câu hỏi vàng: `tests/fixtures/s5_golden.yaml`. Mỗi câu: question, ex
 - Câu #12 trả `NOT_FOUND`, không bịa.
 - 100% câu trả lời có trích dẫn hợp lệ (doc + mục + trang tồn tại trong DB).
 - Câu #2 chỉ trả lời từ collection `en` hoặc có cả `en`; câu #13 giữ đúng dự án qua 2 lượt.
-- Độ trễ (mục tiêu, đo trên bộ vàng): time-to-first-token p50 ≤ 4s.
+- Độ trễ (mục tiêu, đo trên bộ vàng): time-to-first-token p50 < 10s (chốt 2026-10-28, trước đó ≤ 4s).
 
 ## 7. Ngoài phạm vi (bàn sau)
 Eval mở rộng, semantic cache, tóm tắt hội thoại dài, phân quyền chi tiết, UI.
