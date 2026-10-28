@@ -23,6 +23,7 @@ pytestmark = pytest.mark.unit
     "Khay, thang, hộp cáp v.v. Bản này áp dụng.",
     "Phát hành Rev.01 Đã duyệt.",
     "Cable No. 5 Shall be used.",
+    "Khu vực khối đế gaming., chiều dài của tuyến cáp.",   # không cắt khi sau dấu chấm không có khoảng trắng
 ])
 def test_khong_cat_trong_mau_bi_che(text):
     sents = split_sentences(text, "vi")

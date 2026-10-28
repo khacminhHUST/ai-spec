@@ -60,7 +60,7 @@ def _underthesea_cuts(masked: str) -> set[int]:
             j = end
             while j < len(masked) and masked[j].isspace():
                 j += 1
-            if 0 < j < len(masked):
+            if end < j < len(masked):  # bắt buộc có khoảng trắng sau dấu câu
                 cuts.add(j)
         pos = end
     return cuts
