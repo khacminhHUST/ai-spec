@@ -111,8 +111,9 @@ def _norm_rev(s: str) -> str:
 
 
 def revision_from(filename: str, cover_text: str, cover_tables: list[Block]) -> tuple[str | None, str | None]:
-    pats = [re.compile(p) for p in ingestion_cfg()["metadata"]["revision_patterns"]]
-    for p in pats:
+    cfg = ingestion_cfg()["metadata"]
+    pats = [re.compile(p) for p in cfg["revision_patterns"]]
+    for p in pats + [re.compile(x) for x in cfg.get("revision_filename_patterns", [])]:
         m = p.search(filename)
         if m:
             return _norm_rev(m.group("rev")), "filename"
@@ -180,12 +181,13 @@ def issuer_from(text: str) -> str | None:
     return None
 
 
-_TITLE_EXCLUDE = re.compile(r"(?i)^(dự án|công trình|địa điểm|project|tên dự án|location|chủ đầu tư|owner)\b")
+_TITLE_EXCLUDE = re.compile(r"(?i)^(dự án|công trình|địa điểm|project|tên dự án|location|chủ đầu tư|owner|công ty|company)\b")
 
 
 def title_from(blocks: list[Block], filename: str) -> str:
     cands = [b for b in blocks if b.page == 1 and b.kind in ("heading", "text") and not _TITLE_EXCLUDE.match(b.text)
-             and len(b.text.split()) >= 2 and len(b.text) >= 12 and sum(c.isalpha() for c in b.text) > 8]
+             and len(b.text.split()) >= 2 and len(b.text) >= 12 and sum(c.isalpha() for c in b.text) > 8
+             and "|" not in b.text and not re.search(r"\b(19|20)\d{2}\b", b.text) and "*" not in b.text]
     heads = [b for b in cands if b.kind == "heading"] or cands
     if heads:
         return heads[0].text[:300]

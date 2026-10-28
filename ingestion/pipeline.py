@@ -84,7 +84,7 @@ def process(path: str | Path, *, project: str | None = None, building: str | Non
     for lang, blocks in per_lang_blocks.items():
         t = time.time()
         blocks = reorder_headings(postprocess(blocks, prof, warnings))
-        if not langinfo["bilingual"]:
+        if not langinfo["bilingual"] and prof.get("recover_headings"):
             n_rec = recover_textlayer_headings(blocks, layer, prof, parsed.n_pages, lang)
             if n_rec:
                 warnings.append(f"{lang}: khôi phục {n_rec} heading từ text layer (Docling bỏ sót)")
@@ -164,7 +164,7 @@ def make_report(parsed: ParsedDoc, meta: DocMeta, langinfo: dict, per_lang: dict
             "n_children_table": sum(1 for c in r.children if c.type == "TABLE_ROWS"),
             "integrity_pass": len(r.drafts) - len(fails), "integrity_fail": fails,
             "oversized_children": over, "empty_children": empty,
-            "boundary_violations": boundary_violations(r.children),
+            "boundary_violations": [v for d in r.drafts for v in boundary_violations(d, by_parent.get(d.parent.parent_id, []))],
             "llm": r.llm_stats,
             "rejected_headings": len(r.structure.rejected),
             "section_keys": [d.parent.section_key for d in r.drafts],

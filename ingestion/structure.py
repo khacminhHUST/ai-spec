@@ -176,7 +176,7 @@ class _Numbering:
         if self.cur is None:
             return None
         if not st:
-            return [ch] if ch == "a" else None
+            return [ch]
         if len(st) == 1:
             if ch == "a":
                 return [st[0], "a"]
@@ -376,6 +376,10 @@ def toc_chapters(lines_by_page: dict[int, list[str]], cfg: dict, n_pages: int = 
     return out
 
 
+def _alnum(s: str) -> str:
+    return re.sub(r"[\W_]+", "", s.lower())
+
+
 def recover_textlayer_headings(blocks: list[Block], layer, prof: dict, n_pages: int, lang: str) -> int:
     """Heading có trong text layer nhưng Docling bỏ sót (nằm trong vùng hình, nhãn caption…) → chèn khối heading.
     Chỉ nhận dòng khớp regex 1 cấp heading, không trùng text khối nào cùng trang. Còn phải qua kiểm tra số mục."""
@@ -394,14 +398,14 @@ def recover_textlayer_headings(blocks: list[Block], layer, prof: dict, n_pages: 
     for page in range(1, n_pages + 1):
         if page in toc:
             continue
-        texts = by_page.get(page, [])
-        joined = re.sub(r"\s+", "", " ".join(texts))
+        texts = by_page.get(page - 1, []) + by_page.get(page, []) + by_page.get(page + 1, [])
+        joined = _alnum(" ".join(texts))
         for txt, bb in layer.line_boxes(page):
             if len(txt) > 160 or not any(p.match(txt) for p in levels):
                 continue
             if re.search(r"\.{4,}|\s\d{1,4}$", txt):
                 continue  # dòng mục lục
-            if re.sub(r"\s+", "", txt) in joined:
+            if _alnum(txt) in joined:
                 continue
             nb = Block("heading", txt, page, bb, label="textlayer_heading", lang=lang, meta={"recovered": True})
             pos = next((i for i, x in enumerate(blocks) if x.page > page or (x.page == page and x.bbox[1] > bb[1])),

@@ -68,7 +68,7 @@ def validate_groups(raw, n_units: int, unit_tokens: list[int], max_tokens: int) 
 
 
 def greedy_groups(unit_tokens: list[int], max_tokens: int, min_tokens: int) -> list[tuple[int, int, None]]:
-    """Gộp tham lam theo token; nhóm cuối quá nhỏ → gộp vào nhóm trước nếu vừa."""
+    """Gộp tham lam theo token; nhóm cuối quá nhỏ (< min) → cân bằng lại với nhóm trước."""
     groups: list[list[int]] = []
     cur, tok = [], 0
     for i, t in enumerate(unit_tokens):
@@ -79,11 +79,13 @@ def greedy_groups(unit_tokens: list[int], max_tokens: int, min_tokens: int) -> l
         tok += t
     if cur:
         groups.append(cur)
-    if len(groups) > 1:
+    # nhóm cuối quá nhỏ → chuyển dần đơn vị cuối của nhóm trước sang (không vượt max)
+    while len(groups) > 1 and len(groups[-2]) > 1:
         last_tok = sum(unit_tokens[i] for i in groups[-1])
-        prev_tok = sum(unit_tokens[i] for i in groups[-2])
-        if last_tok < min_tokens and prev_tok + last_tok <= max_tokens:
-            groups[-2] += groups.pop()
+        moved = unit_tokens[groups[-2][-1]]
+        if last_tok >= min_tokens or last_tok + moved > max_tokens:
+            break
+        groups[-1].insert(0, groups[-2].pop())
     return [(g[0], g[-1], None) for g in groups]
 
 

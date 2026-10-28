@@ -11,6 +11,7 @@
 # bilingual: tài liệu song ngữ theo cột (tỷ lệ theo chiều rộng trang).
 # chapters_from_toc: lấy danh sách chương + trang bắt đầu từ trang mục lục (Westin: chương không có số trên trang bìa).
 # split_patterns: mẫu heading cấp con dùng khi 1 mục vượt max_parent_tokens.
+# recover_headings: khôi phục heading có trong text layer mà Docling bỏ sót (chỉ bật khi cần).
 
 defaults:
   caption: auto
@@ -44,6 +45,7 @@ profiles:
 
   BRAND_STANDARD:     # Westin: chương GR1 / 4C / 15C (từ mục lục) › mục 4C.6, 9.7
     scope: never
+    recover_headings: true   # heading nằm trong vùng hình bị Docling bỏ sót → khôi phục từ text layer
     chapters_from_toc:
       max_page: 3
       pattern: '^(?P<num>GR\d{1,2}|\d{1,2}[A-D]?)\s+(?P<title>[A-Z].*?)\s+(?P<page>\d{1,4})$'

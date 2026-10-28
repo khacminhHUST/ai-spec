@@ -120,6 +120,10 @@ def docling_blocks(doc) -> tuple[list[Block], dict[int, tuple[float, float]]]:
         bbox = _bbox_tl(prov[0].bbox, h)
         if kind == "table":
             blk = _table_block(item, page, bbox, h)
+            if not any(c.strip() for r in blk.rows or [] for c in r):
+                # bảng rỗng (Docling nhận nhầm hình/mặt bằng) → coi như hình, không tạo parent
+                blocks.append(Block("picture", "", page, bbox, label="empty_table"))
+                continue
             if len(prov) > 1:
                 blk.page_end = prov[-1].page_no
             blocks.append(blk)

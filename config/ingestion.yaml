@@ -31,9 +31,10 @@ header_footer:
 
 # Metadata (ingestion/metadata.py)
 metadata:
-  revision_patterns:            # áp dụng lần lượt cho tên file rồi trang bìa
-    - '\bRev(?:ision)?[.\s_\-]*(?P<rev>\d{1,3}[A-Z]?)\b'
-    - '\bR(?P<rev>\d{2})\b'
+  revision_patterns:            # áp dụng cho tên file rồi trang bìa
+    - '(?<![A-Za-z])Rev(?:ision)?[.\s_\-]*(?P<rev>\d{1,3}[A-Z]?)(?![0-9])'
+  revision_filename_patterns:   # chỉ áp dụng cho tên file (trên bìa dễ nhầm, VD gas R22)
+    - '(?<![A-Za-z0-9])R(?P<rev>\d{2})(?![0-9])'
   stage_patterns:               # (regex, giá trị) – tên file + trang bìa + đường dẫn
     - ['(?i)thiết kế kỹ thuật|detail(?:ed)? design|\bTKKT\b', 'TKKT']
     - ['(?i)thiết kế cơ sở|basic design|\bTKCS\b', 'TKCS']

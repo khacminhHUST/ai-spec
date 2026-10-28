@@ -64,6 +64,13 @@ def md_row(row: list[str]) -> str:
     return "| " + " | ".join(_cell(c) for c in row) + " |"
 
 
+def data_row(row: list[str]) -> str:
+    """Dòng dữ liệu; dòng phân nhóm (ô gộp bị Docling nhân bản) → chỉ giữ ô đầu."""
+    if is_group_row(row):
+        return md_row([next(c for c in row if c.strip())] + [""] * (len(row) - 1))
+    return md_row(row)
+
+
 def table_header_md(header_rows: list[list[str]], ncol: int) -> str:
     if not header_rows:
         return ""
@@ -204,7 +211,7 @@ def _table_parent(t: TableSec, by_key: dict[str, Section], meta: DocMeta, lang: 
     name = caption or (f"Bảng trong mục {_display(sec)}" if lang == "vi" else f"Table in {_display(sec)}") if sec else (
         caption or t.key)
     hdr_md = table_header_md(header, ncol) if header else ""
-    rows_md = "\n".join(md_row(r) for r in data)
+    rows_md = "\n".join(data_row(r) for r in data)
     content = "\n\n".join(x for x in (caption, (hdr_md + "\n" + rows_md) if hdr_md else rows_md) if x)
     refs = extract_references((caption or "") + "\n" + "\n".join(" ".join(r) for r in rows))
     p = ParentChunk(
@@ -301,9 +308,9 @@ def table_children(d: ParentDraft, lang: str, max_tokens: int, bc_tokens: int, w
     def prefix(group: str | None) -> str:
         return "\n".join(x for x in (name, hdr, (f"[{group}]" if group else None)) if x)
 
-    whole = prefix(None) + "\n" + "\n".join(md_row(r) for r in rows)
+    whole = prefix(None) + "\n" + "\n".join(data_row(r) for r in rows)
     if count_tokens(whole, lang) + bc_tokens <= max_tokens:
-        return [ChildDraft("\n".join(md_row(r) for r in rows), None, min(pages), max(pages), prefix(None))]
+        return [ChildDraft("\n".join(data_row(r) for r in rows), None, min(pages), max(pages), prefix(None))]
     # chia theo dòng phân nhóm
     segs: list[tuple[str | None, list[int]]] = []
     for i, r in enumerate(rows):
@@ -319,12 +326,12 @@ def table_children(d: ParentDraft, lang: str, max_tokens: int, bc_tokens: int, w
         cur_tok = 0
         first = True
         for i in idxs:
-            line = md_row(rows[i])
+            line = data_row(rows[i])
             pre = prefix(None if first else group)
             base = count_tokens(pre, lang) + bc_tokens + 4
             lt = count_tokens(line, lang)
             if cur and base + cur_tok + lt > max_tokens:
-                out.append(ChildDraft("\n".join(md_row(rows[k]) for k in cur), group,
+                out.append(ChildDraft("\n".join(data_row(rows[k]) for k in cur), group,
                                       min(pages[k] for k in cur), max(pages[k] for k in cur),
                                       prefix(None if first else group)))
                 first = False
@@ -335,7 +342,7 @@ def table_children(d: ParentDraft, lang: str, max_tokens: int, bc_tokens: int, w
             cur.append(i)
             cur_tok += lt
         if cur:
-            out.append(ChildDraft("\n".join(md_row(rows[k]) for k in cur), group,
+            out.append(ChildDraft("\n".join(data_row(rows[k]) for k in cur), group,
                                   min(pages[k] for k in cur), max(pages[k] for k in cur),
                                   prefix(None if first else group)))
     return out
@@ -411,20 +418,30 @@ def integrity_check(draft: ParentDraft, children: list[ChildChunk]) -> bool:
     return squash("".join(c.raw_text for c in children)) == squash(draft.body)
 
 
-def boundary_violations(children: list[ChildChunk]) -> list[str]:
-    """Ranh giới giữa 2 child liên tiếp cùng parent không được nằm trong số thập phân / mã tiêu chuẩn."""
+_CODE_WITH_SPACE = re.compile(r"\b(?:TCVN|QCVN|BS\s?EN|BS|IEC|ISO|ASTM|NFPA|ASHRAE|SMACNA|UL|EN)\s\d[\w.:\-/]*")
+
+
+def boundary_violations(draft: ParentDraft, children: list[ChildChunk]) -> list[str]:
+    """Điểm cắt giữa 2 child liên tiếp (vị trí trong nội dung parent) phải là khoảng trắng và không nằm trong
+    số thập phân / số mục / mã tiêu chuẩn (kể cả mã có khoảng trắng như 'TCVN 5687:2024')."""
     from ingestion.sentences import _protect_re
 
-    bad = []
-    for a, b in zip(children, children[1:]):
-        if a.parent_id != b.parent_id or a.type != "TEXT":
+    if draft.table is not None or len(children) < 2:
+        return []
+    body = draft.body
+    spans = [(m.start(), m.end()) for m in _protect_re().finditer(body)]
+    spans += [(m.start(), m.end()) for m in _CODE_WITH_SPACE.finditer(body)]
+    bad, cur = [], 0
+    for a in children[:-1]:
+        pos = body.find(a.raw_text, cur)
+        if pos < 0:
+            bad.append(f"{a.child_id}: không định vị được trong parent")
             continue
-        left, right = a.raw_text[-40:], b.raw_text[:40]
-        joined = left + " " + right
-        cut = len(left)
-        for m in _protect_re().finditer(joined):
-            if m.start() < cut < m.end() - 1 and not joined[m.start():m.end()].endswith(" "):
-                bad.append(f"{a.child_id}|{b.child_id}: {joined[max(0, m.start() - 5):m.end() + 5]!r}")
-        if re.search(r"\d[.,]$", left.rstrip()) and re.match(r"\d", right) and not left.endswith((" ", "\n")):
-            bad.append(f"{a.child_id}|{b.child_id}: số thập phân bị cắt")
+        cut = pos + len(a.raw_text)
+        cur = cut
+        if cut < len(body) and not body[cut].isspace():
+            bad.append(f"{a.child_id}: cắt giữa từ {body[max(0, cut - 15):cut + 15]!r}")
+        for s, e in spans:
+            if s < cut < e:
+                bad.append(f"{a.child_id}: cắt trong mẫu {body[s:e]!r}")
     return bad
