@@ -16,3 +16,6 @@ internal:
     pattern: '\bĐiều\s+(?P<num>\d+)'
   - kind: appx
     pattern: '\b(?:Phụ lục|Appendix|Annex)\s+(?P<num>[A-Z0-9]{1,3})\b'
+  # Westin: tham chiếu chương/mục dạng <15C>, <GR3>, <4C.6> (Ingestion bổ sung)
+  - kind: sec
+    pattern: '<(?P<num>(?:GR)?\d{1,2}[A-D]?(?:\.\d{1,2})*)>'
