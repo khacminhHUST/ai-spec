@@ -38,7 +38,7 @@ def test_regex_only_checks_primary_blocks(deps):
 @pytest.mark.parametrize("missing,hop,expected", [
     ([], 0, "OK"), ([], 1, "OK"),                                   # D
     (["table_4_3"], 1, "PARTIAL"), ([QUERY_PREFIX + "x"], 1, "PARTIAL"),  # E
-    ([NONE_MARK + "x"], 1, "NOT_FOUND"),
+    ([NONE_MARK + "x"], 1, "PARTIAL"),
     (["table_4_3"], 0, "FETCH"), ([NONE_MARK + "x"], 0, "FETCH"),   # F
 ])
 def test_route_after_grade(missing, hop, expected):

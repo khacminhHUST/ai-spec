@@ -19,13 +19,14 @@ from query.retrieval import rerank, run_branch
 
 log = logging.getLogger(__name__)
 QUERY_PREFIX = "query:"
-NONE_MARK = "none:"   # LLM grader: context không liên quan → sau khi đã fetch vẫn vậy thì NOT_FOUND
+NONE_MARK = "none:"   # LLM grader: context không liên quan (N7 hạ PARTIAL → NOT_FOUND nếu câu trả lời không trích dẫn)
 
 GRADER_SYSTEM = """Bạn kiểm tra xem CONTEXT (trích từ tài liệu dự án) có đủ thông tin để trả lời CÂU HỎI không.
 Chỉ trả về 1 JSON object: {"verdict": "ENOUGH" | "PARTIAL" | "NONE", "missing_query": "<truy vấn tìm phần còn thiếu, rỗng nếu ENOUGH>"}
-- ENOUGH: context chứa câu trả lời.
-- PARTIAL: context liên quan nhưng thiếu một phần.
-- NONE: context không chứa thông tin để trả lời câu hỏi."""
+- ENOUGH: context chứa thông tin trả lời trực tiếp câu hỏi (kể cả khi tên gọi/đơn vị khác, VD "gym" = "Health club"; ô trống trong bảng không tính là thiếu).
+- PARTIAL: context liên quan nhưng thiếu thông tin CỐT LÕI mà câu hỏi yêu cầu.
+- NONE: context không chứa thông tin để trả lời câu hỏi.
+Ưu tiên ENOUGH khi context đã có giá trị người dùng hỏi."""
 
 
 def regex_missing(deps: Deps, context: list[dict[str, Any]]) -> list[str]:
@@ -81,12 +82,15 @@ def grade(deps: Deps, question: str, context: list[dict[str, Any]], top1: float)
 
 
 def route_after_grade(missing: list[str], hop_count: int, max_hops: int) -> str:
-    """D: đủ → 'OK' · E: thiếu & đã fetch → 'PARTIAL' (hoặc 'NOT_FOUND' nếu LLM nói không liên quan) · F: → 'FETCH'."""
+    """D: đủ → 'OK' · E: thiếu & đã fetch → 'PARTIAL' · F: thiếu & chưa fetch → 'FETCH'."""
     if not missing:
         return "OK"
-    if hop_count >= max_hops:
-        return "NOT_FOUND" if all(m.startswith(NONE_MARK) for m in missing) else "PARTIAL"
-    return "FETCH"
+    return "PARTIAL" if hop_count >= max_hops else "FETCH"
+
+
+def only_irrelevant(missing: list[str]) -> bool:
+    """Grader LLM đánh giá context không liên quan (không có thiếu hụt nào khác)."""
+    return bool(missing) and all(m.startswith(NONE_MARK) for m in missing)
 
 
 def targeted_fetch(deps: Deps, state: dict[str, Any]) -> dict[str, Any]:

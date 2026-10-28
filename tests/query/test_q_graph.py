@@ -102,3 +102,28 @@ def test_stream_events(mock_settings):
     assert kinds[0] == "status" and kinds[-2:] == ["citations", "done"]
     assert "".join(e["data"] for e in events if e["event"] == "token") == "6 lần đường kính ngoài [1]."
     assert events[-1]["data"]["status"] == "OK"
+
+
+def test_partial_irrelevant_without_citation_becomes_not_found(mock_settings):
+    class Low:
+        def score(self, q, docs):
+            return [0.35] * len(docs)
+
+    llm = scripted_llm(BEND, grader='{"verdict": "NONE", "missing_query": ""}',
+                       answer="Không tìm thấy thông tin này trong tài liệu dự án.")
+    deps = make_deps(mock_settings, llm=llm)
+    deps.reranker = Low()
+    out = run_turn(_graph(deps), "test_engineer", "Giá trị hợp đồng?")
+    assert out["status"] == "NOT_FOUND" and out["citations"] == [] and out["hop_count"] == 1
+
+
+def test_partial_irrelevant_but_cited_stays_partial(mock_settings):
+    class Low:
+        def score(self, q, docs):
+            return [0.35] * len(docs)
+
+    llm = scripted_llm(BEND, grader='{"verdict": "NONE"}', answer="6 lần đường kính ngoài [1].")
+    deps = make_deps(mock_settings, llm=llm)
+    deps.reranker = Low()
+    out = run_turn(_graph(deps), "test_engineer", "Bán kính uốn?")
+    assert out["status"] == "PARTIAL" and out["citations"]

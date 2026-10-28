@@ -82,16 +82,23 @@ def build_messages(question: str, status: str, context: list[dict[str, Any]], pr
     return [SystemMessage(SYSTEM), HumanMessage(human)]
 
 
-def extract_citations(answer: str, context: list[dict[str, Any]], status: str) -> list[dict[str, Any]]:
-    if status == "NOT_FOUND" or not context:
-        return []
-    by_n = {b["n"]: b for b in context}
+def cited_numbers(answer: str, context: list[dict[str, Any]]) -> list[int]:
+    """Các số [n] hợp lệ LLM đã trích dẫn (theo thứ tự xuất hiện)."""
+    valid = {b["n"] for b in context}
     ns: list[int] = []
     for m in _CITE_RE.finditer(answer):
         for x in re.split(r"[,;]", m.group(1)):
             n = int(x.strip())
-            if n in by_n and n not in ns:
+            if n in valid and n not in ns:
                 ns.append(n)
+    return ns
+
+
+def extract_citations(answer: str, context: list[dict[str, Any]], status: str) -> list[dict[str, Any]]:
+    if status == "NOT_FOUND" or not context:
+        return []
+    by_n = {b["n"]: b for b in context}
+    ns = cited_numbers(answer, context)
     if not ns:  # LLM quên trích dẫn → gắn khối chính điểm cao nhất
         ns = [b["n"] for b in context if not b.get("is_reference")][:2] or [context[0]["n"]]
     cites = []

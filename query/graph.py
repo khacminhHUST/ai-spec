@@ -16,8 +16,8 @@ from langgraph.types import Send
 
 from query.context import build_context
 from query.deps import Deps
-from query.generator import generate
-from query.grader import grade, route_after_grade, targeted_fetch
+from query.generator import cited_numbers, generate
+from query.grader import grade, only_irrelevant, route_after_grade, targeted_fetch
 from query.resolver import clarify_message, load_profiles, resolve
 from query.retrieval import plan_branches, rerank, run_branch
 from query.router import run_router
@@ -151,6 +151,9 @@ def build_graph(deps: Deps, checkpointer=None):
             deps, state["router"]["rewritten_question"], status, state.get("context") or [],
             state.get("project_profiles") or {}, state.get("missing") or [], on_token=lambda t: _emit("token", t),
         )
+        if status == "PARTIAL" and only_irrelevant(state.get("missing") or [])                 and not cited_numbers(answer, state.get("context") or []):
+            # Grader: context không liên quan, và N7 không trích dẫn được nguồn nào → không có trong tài liệu.
+            status, cites = "NOT_FOUND", []
         return {"answer": answer, "citations": cites, "status": status}
 
     def ask_clarify_node(state: GraphState) -> dict:
