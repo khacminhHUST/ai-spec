@@ -10,7 +10,9 @@ const EXAMPLES = [
 
 export default function ChatView({ messages, onExample }: { messages: Message[]; onExample: (q: string) => void }) {
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [messages]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [messages]);
 
   if (messages.length === 0)
     return (

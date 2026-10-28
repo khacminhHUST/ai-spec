@@ -12,7 +12,9 @@ interface Props {
 
 export default function Sidebar({ userId, onUserChange, conversations, activeId, onSelect, onNew }: Props) {
   const [draft, setDraft] = useState(userId);
-  useEffect(() => setDraft(userId), [userId]);
+  useEffect(() => {
+    setDraft(userId);
+  }, [userId]);
 
   const commit = () => {
     const u = draft.trim();
