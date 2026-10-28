@@ -1,0 +1,182 @@
+# Bộ câu hỏi vàng S5 (docs/query-pipeline.md mục 6).
+# expected_section: tài liệu (doc_type theo folder_map, stream, doc_code) + section_key mong đợi
+#   (section_key = khóa chính; alt_section_keys = khóa chấp nhận thêm, VD mục cha của bảng).
+# expected_values: mỗi phần tử là 1 chuỗi hoặc danh sách cách viết tương đương (khớp 1 trong số đó);
+#   so khớp sau khi chuẩn hóa: lowercase, ²→2, bỏ khoảng trắng, '·', '°'.
+# in_seed: câu có dữ liệu trong tests/fixtures/query_seed (phiên B). #11 cần ingest Westin thật.
+user_id: test_engineer
+project_id: 26DA06
+
+questions:
+  - id: 1
+    question: "Bán kính uốn cong tối thiểu của cáp tiết diện lớn hơn 25mm² là bao nhiêu?"
+    expected_section:
+      doc_type: SPEC
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_ELECTRICAL_SPEC
+      section_key: table_5_7_1
+      alt_section_keys: [sec_5_7]
+    expected_values:
+      - "6 lần đường kính ngoài"
+    expected_status: OK
+    in_seed: true
+
+  - id: 2
+    question: "What is the minimum bend radius for armoured cable?"
+    expected_section:
+      doc_type: SPEC
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_ELECTRICAL_SPEC
+      section_key: table_5_7_1
+      alt_section_keys: [sec_5_7]
+      lang: en          # nghiệm thu: chỉ trả lời từ collection en hoặc có cả en
+    expected_values:
+      - ["6 times outside diameter", "6 times the outside diameter", "six times the outside diameter"]
+    expected_status: OK
+    in_seed: true
+
+  - id: 3
+    question: "Tiết diện tối thiểu dây cấp nguồn chiếu sáng không có ổ cắm?"
+    expected_section:
+      doc_type: SPEC
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_ELECTRICAL_SPEC
+      section_key: table_5_7_2
+      alt_section_keys: [sec_5_7]
+    expected_values:
+      - ["1.5mm²", "1.5mm2", "1,5mm²", "1,5mm2"]
+    expected_status: OK
+    in_seed: true
+
+  - id: 4
+    question: "Màu dây pha A, B, C quy định thế nào?"
+    expected_section:
+      doc_type: SPEC
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_ELECTRICAL_SPEC
+      section_key: sec_5_7
+      alt_section_keys: []
+    expected_values:
+      - "vàng"
+      - ["xanh lá", "xanh lá cây"]
+      - "đỏ"
+    expected_status: OK
+    in_seed: true
+
+  - id: 5
+    question: "Thời gian bảo hành hệ thống điện bao lâu?"
+    expected_section:
+      doc_type: SPEC
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_ELECTRICAL_SPEC
+      section_key: sec_5_23
+      alt_section_keys: []
+    expected_values:
+      - "24 tháng"
+    expected_status: OK
+    in_seed: true
+
+  - id: 6
+    question: "Lưu lượng gió tươi cho phòng ngủ khách sạn S5?"
+    expected_section:
+      doc_type: DESIGN_REPORT
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
+      section_key: table_4_3
+      alt_section_keys: []
+    expected_values:
+      - ["2.5 L/s.người", "2.5 L/s.person", "2.5 L/s/người", "2,5 L/s.người", "2.5 L/s/person", "2.5 L/s per person"]
+      - ["0.3 L/s/m²", "0.3 L/s/m2", "0.3 L/s.m²", "0,3 L/s/m²", "0.3 L/s per m²"]
+    expected_status: OK
+    in_seed: true
+
+  - id: 7
+    question: "Hành lang yêu cầu thông gió bao nhiêu?"
+    expected_section:
+      doc_type: DESIGN_REPORT
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
+      section_key: table_4_3
+      alt_section_keys: []
+    expected_values:
+      - "2 ACH"
+    expected_status: OK
+    in_seed: true
+
+  - id: 8
+    question: "Gió thải toilet công cộng?"
+    expected_section:
+      doc_type: DESIGN_REPORT
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
+      section_key: part_i__table_4_2_1     # bảng không đánh số trong mục 4.2 (Phần I)
+      alt_section_keys: [part_i__sec_4_2]
+    expected_values:
+      - "25 L/s"
+    expected_status: OK
+    in_seed: true
+
+  - id: 9
+    question: "U-value kính mặt dựng dùng tính tải lạnh?"
+    expected_section:
+      doc_type: DESIGN_REPORT
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
+      section_key: part_i__sec_4_2          # "mục 4" → 4.2.g Thông tin mặt dựng
+      alt_section_keys: [part_i__sec_4]
+    expected_values:
+      - ["5.6 W/m²K", "5.6 W/m²·°K", "5.6 W/m²·K", "5.6 W/m2K", "5,6 W/m²K", "5.6 W/(m²K)", "5.6 W/m².K"]
+    expected_status: OK
+    in_seed: true
+
+  - id: 10
+    question: "Thiết bị PCCC phải chịu nhiệt độ ngoài trời tối đa bao nhiêu?"
+    expected_section:
+      doc_type: TECH_INSTRUCTION
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_FIRE_TECH_INSTRUCTION
+      section_key: chap_1__sec_2
+      alt_section_keys: []
+    expected_values:
+      - ["40°C", "40oC", "40o C", "40 độ C", "40ºC"]
+    expected_status: OK
+    in_seed: true
+
+  - id: 11
+    question: "Westin quy định gì cho phòng kỹ thuật MEP?"
+    expected_section:
+      doc_type: BRAND_STANDARD
+      stream: OPERATOR_STANDARD
+      doc_code: 26DA06_S5_OPERATOR_STANDARD_GENERAL_BRAND_STANDARD
+      section_key: sec_9_7
+      alt_section_keys: []
+    expected_values: []          # chỉ kiểm tra trích dẫn sec_9_7
+    expected_citation_section: sec_9_7
+    expected_status: OK
+    in_seed: false
+
+  - id: 12
+    question: "Giá trị hợp đồng gói thầu cơ điện là bao nhiêu?"
+    expected_section: null
+    expected_values: []
+    expected_status: NOT_FOUND
+    in_seed: true
+
+  - id: 13
+    turns:
+      - question: "Gió tươi phòng gym S5?"
+        expected_values:
+          - ["10 L/s.người", "10 L/s.person", "10 L/s/người", "10 L/s/person", "10 L/s per person"]
+      - question: "Còn lounge thì sao?"
+        expected_values:
+          - ["3.8 L/s.người", "3.8 L/s.person", "3.8 L/s/người", "3,8 L/s.người", "3.8 L/s/person", "3.8 L/s per person"]
+          - ["0.9 L/s/m²", "0.9 L/s/m2", "0.9 L/s.m²", "0,9 L/s/m²", "0.9 L/s per m²"]
+    expected_section:
+      doc_type: DESIGN_REPORT
+      stream: DESIGN_CONSULTANT
+      doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
+      section_key: table_4_3
+      alt_section_keys: []
+    expected_active_projects: [26DA06]   # giữ đúng dự án qua 2 lượt
+    expected_status: OK
+    in_seed: true

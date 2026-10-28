@@ -1,0 +1,315 @@
+# Seed – Spec Điện lắp đặt (CPG, song ngữ EN trái | VN phải). Nội dung chép nguyên văn từ PDF gốc
+# (chỉ sửa khoảng trắng do trích xuất PDF). Trang = số trang PDF (1-based), không phải "Page x of 48".
+document:
+  doc_id: doc_bd42fa85440e
+  file_hash: bd42fa85440efa9b896c6a66fb72e4c71738f085301a6fdf237d1190d550da3c
+  source_path: "S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/2_Yeu cau ky thuat (Spec)/BDD_S5_E5_ELECTRICAL ISTALLATION SPEC_16102026_FINAL.pdf"
+  doc_code: 26DA06_S5_DESIGN_CONSULTANT_ELECTRICAL_SPEC
+  project_id: 26DA06
+  building: S5
+  stream: DESIGN_CONSULTANT
+  disciplines: [ELECTRICAL]
+  title: "Chỉ dẫn kỹ thuật hệ thống điện – Lắp đặt hệ thống điện (Electrical Installation Specification)"
+  issuer: CPG
+  revision: "00"
+  issue_date: 2026-10-16
+  stage: TKKT
+  languages: [vi, en]
+  is_bilingual: true
+  is_latest: true
+doc_label: Spec Điện
+
+parents:
+  # ------------------------------------------------------------ 5.7
+  - section_key: sec_5_7
+    number: "5.7"
+    type: SECTION
+    vi:
+      title: DÂY VÀ CÁP ĐIỆN
+      children:
+        - topic: Bảo vệ cáp và mối nối
+          pages: [21, 21]
+          raw_text: |-
+            5.7 DÂY VÀ CÁP ĐIỆN
+            Trừ trường hợp đặc biệt, cáp phải được bảo vệ trong các phương tiện như khay cáp, thang cáp, ống luồn dây, hộp cáp, rãnh cáp v.v...hoặc chôn dưới đất.
+            Không được phép đặt cáp khi chưa lắp xong các phương tiện bảo vệ như ống luồn dây, khay, thang cáp, hộp cáp, rãnh cáp v.v...
+            Mối nối cáp hoặc dây điện chỉ được chấp nhận trong các trường hợp sau đây:
+            - Điểm nối ở bên trong các thiết bị và khí cụ điện.
+            - Điểm nối nằm trên dây tiếp đất đi cùng tuyến cáp. Có thể nối hoặc phân nhánh dây tiếp đất ngay trong khay cáp, thang cáp hoặc hộp cáp.
+            - Điểm nối ở bên trong các hộp nối và phụ kiện chuyên dùng thuộc các mạch chiếu sáng, ổ cắm, thông tin, báo cháy v.v...
+        - topic: Tuyến cáp và bán kính uốn cong
+          pages: [21, 21]
+          raw_text: |-
+            Cáp từ dưới đất đi lên hoặc luồn qua tường phải đặt trong các đoạn ống luồn cứng và phải thực hiện biện pháp chống thấm, chống ăn mòn và phá hoại cơ học.
+            Tuyến cáp phải được lựa chọn sao cho ngắn nhất và phải bảo đảm an toàn không bị hư hỏng về cơ học, do chấn động, bị gỉ, bị nóng quá mức quy định. Cần tránh đặt các dây cáp bắt chéo lên nhau hoặc vắt chéo lên các đường ống dẫn khác.
+            Bán kính uốn cong của cáp không thuộc loại cáp mềm phải đủ lớn để không gây hư hỏng cáp và phải tuân theo quy định như sau:
+        - topic: Đánh số tuyến cáp và màu dây pha
+          pages: [22, 23]
+          raw_text: |-
+            Tiết diện tối thiểu của ruột dây dẫn và cáp điện:
+            Mỗi tuyến cáp phải có số hoặc tên gọi.
+            Màu của cáp trong mạng điện xoay chiều 3 pha:
+            - Pha A sơn màu vàng;
+            - Pha B sơn màu xanh lá cây;
+            - Pha C sơn màu đỏ;
+            - Dây trung tính sơn trắng cho mạng điện trung tính cách ly và sơn đen cho mạng điện trung tính nối đất trực tiếp.
+            - Dây nối đất bảo vệ, nếu được cách điện, phải được đánh dấu bằng một trong hai phương pháp sau:
+              - Màu xanh lục/vàng trên suốt chiều dài dây, ngoài ra, đánh dấu bằng màu xanh da trời nhạt ở các đầu nối.
+              - Màu xanh da trời nhạt trên suốt chiều dài dây, ngoài ra, đánh dấu bằng màu xanh lục/vàng tại các đầu nối.
+        - topic: Tiêu chuẩn và chứng nhận cáp động lực
+          pages: [23, 23]
+          raw_text: |-
+            Các loại cáp điện động lực phải đáp ứng tiêu chuẩn sau:
+            - Cáp trung thế (24kV) đáp ứng tiêu chuẩn: IEC 60502-2; TCVN 5935.
+            - Cáp hạ thế (450/750 và 600/1000V) đáp ứng tiêu chuẩn: IEC 60502-1; IEC 60227-3; IEC 60332-1.
+            Các loại cáp điện động lực phải đạt chứng nhận:
+            - Chứng nhận chất lượng của TUV PSB.
+            - Chứng nhận chất lượng của Quacert.
+        - topic: Lỗ mở, hộp cáp và dự phòng chiều dài
+          pages: [23, 23]
+          raw_text: |-
+            Phải xử lý bề mặt khớp nối của ống luồn dây, khay cáp, thang cáp, hộp cáp v.v...để khi lắp đặt, bảo trì thay thế cáp không bị hư hỏng.
+            Các lỗ mở xuyên sàn, tường, đà, vách ngăn cho ống dẫn, khay cáp, thang cáp, hộp cáp phải được trám bằng chất liệu chịu lửa đã được phê duyệt.
+            Cho phép đặt nhiều lớp cáp điện trong hộp cáp, nhưng phải ngăn cách mỗi lớp với nhau. Tổng mặt cắt của cáp điện kể cả các lớp bọc cách điện và các lớp vỏ bọc bên ngoài không được lớn hơn 35% tiết diện của hộp cáp.
+            Cáp nối với cảm biến nằm ngoài tủ điện phải chứa ít nhất một đoạn 150 mm phục vụ bảo trì.
+        - topic: Đi chung cáp và kiểm tra trước lắp đặt
+          pages: [24, 24]
+          raw_text: |-
+            Cáp điện hạ áp không được đi chung với cáp báo cháy hoặc cáp chiếu sáng sự cố trong cùng một ống luồn cáp hoặc máng hộp.
+            Cáp lực hạ áp không được đi chung với cáp thông tin, cáp mạng máy tính, cáp tín hiệu trong cùng một ống luồn cáp hoặc hộp cáp trừ khi có vách ngăn bằng vật liệu cách điện có cấp phù hợp đặt giữa cáp hạ áp với các cáp còn lại.
+            Cáp có màu vàng và xanh kết hợp chỉ được dùng làm dây tiếp đất thiết bị.
+            Trước khi lắp đặt cáp điện phải thực hiện các bước sau:
+            a) Thông mạch dây kể cả dây tiếp đất.
+            b) Đo điện trở cách điện của cáp.
+            c) Điện trở cách điện đo được giữa các lõi cáp với nhau và giữa lõi cáp với đất không được nhỏ hơn 1 MΩ nếu là cáp hạ áp và không được nhỏ hơn 90% giá trị ghi trong biên bản thí nghiệm của nhà chế tạo nếu là cáp trung áp.
+            d) Kiểm tra chất lượng các mối nối cáp và chất lượng làm đầu cáp.
+    en:
+      title: WIRES AND CABLES
+      children:
+        - topic: Cable protection and connections
+          pages: [21, 21]
+          raw_text: |-
+            5.7 WIRES AND CABLES
+            Except in special cases, cables must be protected in cable trays, cable ladders, wire conduit, cable boxes, cable trench etc... or buried underground.
+            Not allowed to install the cables when not complete conduit system to protect cable.
+            Cable connection are only accepted in the following cases:
+            - Inside of equipments
+            - Connection of PE cable inside cable tray, cable ladder, trunking.
+            - Inside junction box of lighting system, socket outlet system, ELV system, Fire alarm system.…
+        - topic: Cable route and bend radius
+          pages: [21, 21]
+          raw_text: |-
+            Cables from underground go up or penetrate through walls need to put in the rigid conduit and waterproof, anti-corrosion and mechanical damage.
+            Cable route must be chosen is the shortest and ensure safe from mechanical damage due to vibration, corrosion, overheating. Avoid install the cables cross over each other or crossed over the other pipeline.
+            Bend radius of the cable (not flexible cable) must be large enough to not damage the cable and must comply with the following table:
+        - topic: Cable route numbering and phase colour code
+          pages: [22, 23]
+          raw_text: |-
+            The minimum cross-sectional area of the conductor and electrical cable:
+            Each cable route shall be numbered or named.
+            The following colour code shall be used for cable and wire in three pahses electrical network:
+            - Cables for A - yellow
+            - Cables for B - green
+            - Cables for C - red
+            - Cable for neutral – white for isolated network, black for earthing direct network
+            - Cable for protected earth (PE) if insulated then colour code shall be one of two solutions as follow:
+              - Green/yellow on the whole length of cable, in addition marked by light blue at the terminals
+              - Light blue on the whole length of cable, in addition marked by green/ yellow at the terminals
+        - topic: Power cable standards and certification
+          pages: [23, 23]
+          raw_text: |-
+            Power cables shall comply with the following standards:
+            - Medium-voltage cables (24 kV): IEC 60502-2; TCVN 5935.
+            - Low-voltage cables (450/750 V and 600/1000 V): IEC 60502-1; IEC 60227-3; IEC 60332-1.
+            All Power Cables shall obtain certification as follow:
+            - Quality Certificate by TUV PSB.
+            - Quality Certificate by Quacert.
+        - topic: Openings, trunking and spare length
+          pages: [23, 23]
+          raw_text: |-
+            Treatment the surface of connection of conduit, cable tray, cable ladder, trunking... to the installation, maintenance, replacement cables are not damaged.
+            Openings in floors, walls, beams, partition for conduits, cabletray, cable ladder, trunking shall be making good around same with approved fire rated fillings.
+            Allow install more layers of cables in the trunking, but shall be separated from each class together. Total cross-section of cables, including cable insulation layer and the outer shell is not greater than 35% cross-section of trunking.
+            The cable connect with sensor outside the switchboards shall be addition at least a 150 mm to serves maintenance.
+        - topic: Cable segregation and pre-installation tests
+          pages: [24, 24]
+          raw_text: |-
+            Power cables don't install together with cables of fire alarm system or cable of emergency lighting system in the same conduit or cable tray or trunking or cable ladder.
+            Power cable shall not install with communication cable, data cable, signal cable in the same conduit or trunking unless use partition with consistent insulating material placed between them.
+            Cable with sheath yellow and green combination only be used for equipment ground wire.
+            Before install cable must perform the following steps
+            a) Measure the continous of the cables and grounding cables
+            b) Measure the insulation resistance of the cable,
+            c) Insulation resistance is measured between the cable cores and between cores with earth should not be less than 1 MΩ for the low voltage cable and not less than 90% of the value recorded in the minutes of the manufacturer's laboratory if the medium-voltage cables created.
+            d) Check quality of cable connections and quality of terminals.
+
+  # bảng bán kính uốn (không đánh số, bảng thứ 1 trong mục 5.7)
+  - section_key: table_5_7_1
+    parent_section_key: sec_5_7
+    number: null
+    type: TABLE
+    vi:
+      title: Bán kính uốn cong tối thiểu của cáp
+      content_md: |-
+        | Loại cáp | Bán kính uốn cong tối thiểu của cáp |
+        |---|---|
+        | Nhiều sợi bện, tiết diện nhỏ hơn 10mm2 cách điện PVC không bọc thép | 3 lần đường kính ngoài của cáp |
+        | Nhiều sợi bện, tiết diện từ 10mm2 đến 25mm2 cách điện PVC không bọc thép | 4 lần đường kính ngoài của cáp |
+        | Cáp lỏi cứng hoặc có bọc thép hoặc có tiết diện lớn hơn 25mm2 | 6 lần đường kính ngoài của cáp |
+      children:
+        - topic: Bán kính uốn cong tối thiểu theo loại cáp
+          type: TABLE_ROWS
+          pages: [21, 22]
+          raw_text: |-
+            Bảng: Bán kính uốn cong tối thiểu của cáp (không thuộc loại cáp mềm)
+            | Loại cáp | Bán kính uốn cong tối thiểu của cáp |
+            |---|---|
+            | Nhiều sợi bện, tiết diện nhỏ hơn 10mm2 cách điện PVC không bọc thép | 3 lần đường kính ngoài của cáp |
+            | Nhiều sợi bện, tiết diện từ 10mm2 đến 25mm2 cách điện PVC không bọc thép | 4 lần đường kính ngoài của cáp |
+            | Cáp lỏi cứng hoặc có bọc thép hoặc có tiết diện lớn hơn 25mm2 | 6 lần đường kính ngoài của cáp |
+    en:
+      title: Minimum bend radius of cable
+      content_md: |-
+        | Cable type | Minimum bend radius of cable |
+        |---|---|
+        | Multi strand, cable section area is smaller 10mm2, isulation PVC not armour shield | 3 times outside diameter of cable |
+        | Multi strand, cable section area is form 10mm2 to 25mm2, isulation PVC not armour shield | 4 times outside diameter of cable |
+        | Cable with rigid core or armour shield or cable section area is larger 25mm2 | 6 times outside diameter of cable |
+      children:
+        - topic: Minimum bend radius by cable type
+          type: TABLE_ROWS
+          pages: [21, 22]
+          raw_text: |-
+            Table: Minimum bend radius of cable (not flexible cable)
+            | Cable type | Minimum bend radius of cable |
+            |---|---|
+            | Multi strand, cable section area is smaller 10mm2, isulation PVC not armour shield | 3 times outside diameter of cable |
+            | Multi strand, cable section area is form 10mm2 to 25mm2, isulation PVC not armour shield | 4 times outside diameter of cable |
+            | Cable with rigid core or armour shield or cable section area is larger 25mm2 | 6 times outside diameter of cable |
+
+  # bảng tiết diện tối thiểu (không đánh số, bảng thứ 2 trong mục 5.7)
+  - section_key: table_5_7_2
+    parent_section_key: sec_5_7
+    number: null
+    type: TABLE
+    vi:
+      title: Tiết diện tối thiểu của ruột dây dẫn và cáp điện
+      content_md: |-
+        | Mạch | Tiết diện tối thiểu |
+        |---|---|
+        | Cấp nguồn cho chiếu sáng không có ổ cắm. | 1.5mm2 |
+        | Cấp nguồn chiếu sáng có ổ cắm hoặc ổ cắm. | 2.5mm2 |
+        | Đường dây từ tủ điện tầng đến tủ điện các phòng. | 10mm2 |
+      children:
+        - topic: Tiết diện tối thiểu dây cấp nguồn
+          type: TABLE_ROWS
+          pages: [22, 22]
+          raw_text: |-
+            Bảng: Tiết diện tối thiểu của ruột dây dẫn và cáp điện
+            | Mạch | Tiết diện tối thiểu |
+            |---|---|
+            | Cấp nguồn cho chiếu sáng không có ổ cắm. | 1.5mm2 |
+            | Cấp nguồn chiếu sáng có ổ cắm hoặc ổ cắm. | 2.5mm2 |
+            | Đường dây từ tủ điện tầng đến tủ điện các phòng. | 10mm2 |
+    en:
+      title: The minimum cross-sectional area of the conductor and electrical cable
+      content_md: |-
+        | Circuit | Minimum cross-sectional area |
+        |---|---|
+        | Supply for lighting without socket outlet. | 1.5mm2 |
+        | Lighting supply with socket or electrical socket. | 2.5mm2 |
+        | The wiring from the floor distribution board to the room distribution boards. | 10mm2 |
+      children:
+        - topic: Minimum conductor cross-sectional area
+          type: TABLE_ROWS
+          pages: [22, 22]
+          raw_text: |-
+            Table: The minimum cross-sectional area of the conductor and electrical cable
+            | Circuit | Minimum cross-sectional area |
+            |---|---|
+            | Supply for lighting without socket outlet. | 1.5mm2 |
+            | Lighting supply with socket or electrical socket. | 2.5mm2 |
+            | The wiring from the floor distribution board to the room distribution boards. | 10mm2 |
+
+  # ------------------------------------------------------------ 5.7.1
+  - section_key: sec_5_7_1
+    parent_section_key: sec_5_7
+    number: "5.7.1"
+    type: SECTION
+    vi:
+      title: CÁP CHỐNG CHÁY
+      children:
+        - topic: Cấu tạo và đặc tính cáp chống cháy
+          pages: [26, 26]
+          raw_text: |-
+            5.7.1 CÁP CHỐNG CHÁY
+            Cách thức lắp đặt cáp chống cháy rất quan trọng và cần tuân thủ các nội dung như sau:
+            a) Ở cấp điện áp 0,6/1kV.
+            b) Cấu tạo:
+            - Lõi dẫn điện: Đồng.
+            - Băng ngăn cháy.
+            - Lớp cách điện: XLPE or FRMI
+            - Lớp độn.
+            - Vỏ bọc ngoài: LSZH (Low Smoke Zero Halogen).
+            c) Cáp chống cháy có đặc điểm sau:
+            Cáp được thử ở cháy nhiệt độ 950 0C trong 3 giờ. Cáp được hoạt động bình thường và không bị bất kỳ gián đoạn nào (theo tiêu chuẩn IEC 60754 -1&2 or BS 6387 CWZ và IEC60332-3-22).
+            Cáp chống cháy phải đảm bảo yêu cầu PCCC theo TCVN qui định hiện hành.
+    en:
+      title: FIRE RESISTANT CABLES (FR cable)
+      children:
+        - topic: FR cable construction and characteristics
+          pages: [26, 26]
+          raw_text: |-
+            5.7.1 FIRE RESISTANT CABLES (FR cable)
+            The method of installing fire-resistant cables is very important and must comply with the following contents:
+            a) Voltage range 0,6/1KV.
+            b) Construction:
+            - Conductor: Copper.
+            - Fire barriers as mica tape.
+            - Insulation: XLPE or FRMI
+            - Filler.
+            - Outer sheath: Low Smoke Zero Halogen (LSZH).
+            c) FR cables have the following characterictics:
+            Cables are subjected to fire at 950 0C for 3 hours. Cable shall again be energized, and there shall not be any breakdown (According to IEC 60754 -1&2 or BS 6387 CWZ and IEC60332-3-22)
+            Fire-resistant cables must comply with fire protection requirements as specified in the current applicable TCVN standards.
+
+  # ------------------------------------------------------------ 5.23
+  - section_key: sec_5_23
+    number: "5.23"
+    type: SECTION
+    vi:
+      title: THỜI HẠN BẢO HÀNH
+      children:
+        - topic: Thời hạn bảo hành 24 tháng
+          pages: [48, 49]
+          raw_text: |-
+            5.23 THỜI HẠN BẢO HÀNH
+            Giai đoạn bảo hành 24 tháng bắt đầu từ ngày ghi trong "Chứng nhận nghiệm thu bàn giao".
+            Trong suốt thời gian bảo hành 24 tháng, Nhà thầu chịu mọi trách nhiệm (bao gồm cả nhân công và vật tư cần thiết) trong việc khắc phục mọi khiếm khuyết xuất hiện bên ngoài.
+            Trường hợp một bộ phận của cụm lắp ráp cần di dời ra khỏi hiện trường để sửa chữa, Nhà thầu phải cung cấp bộ phận hay thiết bị thay thế, và tự thanh toán mọi chi phí liên quan bao gồm phí giao nhận và dỡ tải.
+            Theo tinh thần này, việc di dời khỏi hiện trường bao gồm cả hạng mục có hiện tượng gỉ sét, ăn mòn do quá trình bảo vệ không đầy đủ theo nội dung quy định ở trên.
+        - topic: Không đáp ứng yêu cầu sửa chữa trong 21 ngày
+          pages: [49, 49]
+          raw_text: |-
+            Trường hợp Nhà thầu không trả lời văn bản yêu cầu sửa chữa các khiếm khuyết trong thời gian bảo hành của Chủ đầu tư hay Nhà tư vấn, trong vòng 21 ngày thì công việc khắc phục sửa chữa sẽ được giao cho Thầu khác thực hiện. Mọi chi phí liên quan sẽ được khấu trừ vào phần tiền giữ lại.
+            Nhà thầu sẽ nhận được văn bản thông báo của Chủ đầu tư về vấn đề này vào ngày hết hạn của thời điểm 21 ngày, tính từ ngày Chủ đầu tư gửi thông báo yêu cầu Nhà thầu thực hiện công việc sửa chữa theo các yêu cầu của điều kiện của Hợp đồng.
+            Cần lưu ý là mọi khiếm khuết phải được giải quyết trong thời hạn bảo hành.
+            Đây không phải là vấn đề bảo dưỡng hay bảo hành.
+    en:
+      title: DEFECTS LIABILITY PERIOD (WARRANTY)
+      children:
+        - topic: 24 months defects liability period
+          pages: [48, 49]
+          raw_text: |-
+            5.23 DEFECTS LIABILITY PERIOD (WARRANTY)
+            A 24 months Defects Liability Period shall commence from the date of the Taking Over Certificate.
+            During this 24 months Defects Liability Period the Contractor shall be fully responsible for the rectification of all defects which becomes apparent.
+            Should any part of the installation require to be removed from site for remedial works during this period then the Contractor shall provide replacement parts or equipment and pay for all associated charges including delivering and off loading changes.
+            In this sense removal from site shall include those items showing rust or corrosion due to inadequate protection as clearly specified above.
+        - topic: Failure to respond within 21 days
+          pages: [49, 49]
+          raw_text: |-
+            Should the Contractor fail to respond to a written request to carry out rectification works within the Defects Liability Period, by either the Client or the Engineer, within 21 days, then the work will be carried out by others and the cost of such remedial works will be deducted from the Retention Sum.
+            The Contractor will be formally notified of the Client's intention in this regard at the expiration of 21 days after formal notification to carry out rectification works in accordance with the Contract Conditions.
+            It must be clearly understood that the above is all to do with the warranty of the installation.
+            It is not a maintenance issue or a service issue.

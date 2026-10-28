@@ -1,0 +1,145 @@
+# Seed – Thuyết minh thiết kế kỹ thuật (CPG, VN). Số mục đánh lại theo phần La Mã → section_key có
+# tiền tố part_i__. Bảng đánh số toàn tài liệu (Bảng 4.3) → table_4_3.
+# Bảng gió thải toilet không đánh số, bảng đầu tiên không số trong mục 4.2 → part_i__table_4_2_1.
+document:
+  doc_id: doc_11833346273d
+  file_hash: 11833346273d12a020474356f9fe836599bad6af1576a2fb451546fde960c6c6
+  source_path: "S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/1_Thuyet minh ky thuat/20261017-Bai Dat Do-S5-Detail Design Report-VN.pdf"
+  doc_code: 26DA06_S5_DESIGN_CONSULTANT_HVAC_DESIGN_REPORT
+  project_id: 26DA06
+  building: S5
+  stream: DESIGN_CONSULTANT
+  disciplines: [HVAC, PLUMBING, FIRE, ELECTRICAL, ELV]
+  title: "Thuyết minh thiết kế kỹ thuật hệ thống Cơ-Điện – Tòa nhà S5"
+  issuer: CÔNG TY TNHH CPG VIỆT NAM
+  revision: Rev.01
+  issue_date: 2026-10-17
+  stage: TKKT
+  languages: [vi]
+  is_bilingual: false
+  is_latest: true
+doc_label: Thuyết minh
+
+parents:
+  - section_key: part_i__sec_4_2
+    parent_section_key: part_i__sec_4
+    number: "4.2"
+    type: SECTION
+    vi:
+      title: Điều kiện thiết kế
+      children:
+        - topic: Hệ thống thông gió – yêu cầu gió tươi
+          pages: [10, 10]
+          raw_text: |-
+            e. Hệ thống thông gió:
+            Do tòa nhà được thiết kế bao gồm nhiều không gian khác nhau với các chức năng riêng biệt được xác định. Cung cấp tối thiểu lượng thông gió cho các không gian này là rất quan trọng để đạt được chất lượng không khí trong nhà chấp nhận được. Nhu cầu thông gió đôi khi được gọi là gió ngoài trời cấp cho không gian bên trong phù hợp với không gian chức năng, việc dự kiến số lượng người và vật liệu hoàn thiện bên trong nhà.
+            TCVN 5687: 2024, Marriott Design Guideline-Luxury Collection khuyến cáo mức độ thông gió tối thiểu để cung cấp cho các không gian chức năng khác nhau nhằm duy trì chất lượng không khí trong nhà ở mức chấp nhận được. Các không gian mà số người không được liệt kê trong Tiêu chuẩn thì sẽ tham khảo theo các không gian liệt kê với chức năng tương đương.
+            (Source: Table Appendix F of TCVN 5687-2024 & Marriott Design Guideline)
+            Bảng 4.3
+        - topic: Yêu cầu thông gió – gió thải
+          pages: [11, 11]
+          raw_text: |-
+            f. Yêu Cầu Thông Gió
+            (Source: Table 6.5 of ASHRAE 62.1-2013)
+        - topic: Thông tin mặt dựng – U-value kính, tường, mái
+          pages: [11, 11]
+          raw_text: |-
+            g. Thông tin mặt dựng
+            Các thông tin về kiểu cấu trúc, tường, vách ngăn, trần, sàn, mặt dựng và mái từ bản vẽ kiến trúc (các thông số thỏa mãn yêu cầu tối thiểu của QCVN 09-2017/BXD) sẽ được sử dụng kết hợp với hướng của tòa nhà (tiếp giáp hướng đông, hướng tây, hướng bắc, hướng nam…vv) để tính toán tải lạnh vì liên quan đến nhiệt từ bên ngoài truyền vào.
+            a. Thông số kính mặt dựng
+            U-value : 5.6 W/m²·°K
+            SC : 0.4
+            b. Tường:
+            U-value : 1.8 W/m²·°K
+            c. Mái:
+            U-value : 1.0 W/m²·°K
+
+  - section_key: table_4_3
+    parent_section_key: part_i__sec_4_2
+    number: "4.3"
+    type: TABLE
+    vi:
+      title: Bảng 4.3 – Lưu lượng gió tươi theo công năng
+      content_md: |-
+        Bảng 4.3
+        | Function | Occupant Densities (m²/person) – TCVN 5687-2024 | Occupant Densities (m²/person) – Marriott Guide | Outdoor Air Flow Rate (L/s.person) – TCVN 5687-2024 | Outdoor Air Flow Rate (L/s.person) – Marriott Guide | Recommendation – Occupant Densities (m²/person) | Recommendation – Outdoor Air Flow Rate (L/s.person) |
+        |---|---|---|---|---|---|---|
+        | **General** | | | | | | |
+        | Main Lobby | 3 | 3 | 6.9 | 3.8 L/s.person 0.3 L/s/m2 | | 3.8 L/s.person 0.3 L/s/m2 |
+        | Office Space | 8 | - | 6.9 | 2.5 L/s.person 0.3 L/s/m2 | 8 | 2.5 L/s.person 0.3 L/s/m2 |
+        | **Food and Beverage Service** | | | | | | |
+        | Restaurant dining rooms | 1.4 | | 8.3 | | 1.43 | 5.1 |
+        | **Hotel Room** | | | | | | |
+        | Guest | 10 | 2 persons | 9.7 | 2.5 L/s.person 0.3 L/s/m2 | 2~4 | 2.5 L/s.person 0.3 L/s/m2 |
+        | Corridor | - | - | 1,1 L/s/m2 | Min 2 ACH | | Min 2 ACH |
+        | **Sports & Entertainment** | | | | | | |
+        | Health club | 1.4 | 4 | 10.8 | 10 L/s.person 0.3 L/s/m2 | 4 | 10 L/s.person 0.3 L/s/m2 |
+        | Lounges | - | 1 | | 3.8 L/s.person 0.9 L/s/m2 | 1 | 3.8 L/s.person 0.9 L/s/m2 |
+        (Source: Table Appendix F of TCVN 5687-2024 & Marriott Design Guideline)
+      children:
+        - topic: General – Main Lobby, Office Space
+          type: TABLE_ROWS
+          pages: [10, 10]
+          raw_text: |-
+            Bảng 4.3 – Lưu lượng gió tươi (Outdoor Air Flow Rate)
+            | Function | Occupant Densities (m²/person) – TCVN 5687-2024 | Occupant Densities (m²/person) – Marriott Guide | Outdoor Air Flow Rate (L/s.person) – TCVN 5687-2024 | Outdoor Air Flow Rate (L/s.person) – Marriott Guide | Recommendation – Occupant Densities (m²/person) | Recommendation – Outdoor Air Flow Rate (L/s.person) |
+            |---|---|---|---|---|---|---|
+            | **General** | | | | | | |
+            | Main Lobby | 3 | 3 | 6.9 | 3.8 L/s.person 0.3 L/s/m2 | | 3.8 L/s.person 0.3 L/s/m2 |
+            | Office Space | 8 | - | 6.9 | 2.5 L/s.person 0.3 L/s/m2 | 8 | 2.5 L/s.person 0.3 L/s/m2 |
+        - topic: Food and Beverage Service – Restaurant dining rooms
+          type: TABLE_ROWS
+          pages: [10, 10]
+          raw_text: |-
+            Bảng 4.3 – Lưu lượng gió tươi (Outdoor Air Flow Rate)
+            | Function | Occupant Densities (m²/person) – TCVN 5687-2024 | Occupant Densities (m²/person) – Marriott Guide | Outdoor Air Flow Rate (L/s.person) – TCVN 5687-2024 | Outdoor Air Flow Rate (L/s.person) – Marriott Guide | Recommendation – Occupant Densities (m²/person) | Recommendation – Outdoor Air Flow Rate (L/s.person) |
+            |---|---|---|---|---|---|---|
+            | **Food and Beverage Service** | | | | | | |
+            | Restaurant dining rooms | 1.4 | | 8.3 | | 1.43 | 5.1 |
+        - topic: Hotel Room – Guest, Corridor (phòng ngủ khách sạn, hành lang)
+          type: TABLE_ROWS
+          pages: [10, 10]
+          raw_text: |-
+            Bảng 4.3 – Lưu lượng gió tươi (Outdoor Air Flow Rate)
+            | Function | Occupant Densities (m²/person) – TCVN 5687-2024 | Occupant Densities (m²/person) – Marriott Guide | Outdoor Air Flow Rate (L/s.person) – TCVN 5687-2024 | Outdoor Air Flow Rate (L/s.person) – Marriott Guide | Recommendation – Occupant Densities (m²/person) | Recommendation – Outdoor Air Flow Rate (L/s.person) |
+            |---|---|---|---|---|---|---|
+            | **Hotel Room** | | | | | | |
+            | Guest | 10 | 2 persons | 9.7 | 2.5 L/s.person 0.3 L/s/m2 | 2~4 | 2.5 L/s.person 0.3 L/s/m2 |
+            | Corridor | - | - | 1,1 L/s/m2 | Min 2 ACH | | Min 2 ACH |
+        - topic: Sports & Entertainment – Health club, Lounges (gym, lounge)
+          type: TABLE_ROWS
+          pages: [11, 11]
+          raw_text: |-
+            Bảng 4.3 – Lưu lượng gió tươi (Outdoor Air Flow Rate)
+            | Function | Occupant Densities (m²/person) – TCVN 5687-2024 | Occupant Densities (m²/person) – Marriott Guide | Outdoor Air Flow Rate (L/s.person) – TCVN 5687-2024 | Outdoor Air Flow Rate (L/s.person) – Marriott Guide | Recommendation – Occupant Densities (m²/person) | Recommendation – Outdoor Air Flow Rate (L/s.person) |
+            |---|---|---|---|---|---|---|
+            | **Sports & Entertainment** | | | | | | |
+            | Health club | 1.4 | 4 | 10.8 | 10 L/s.person 0.3 L/s/m2 | 4 | 10 L/s.person 0.3 L/s/m2 |
+            | Lounges | - | 1 | | 3.8 L/s.person 0.9 L/s/m2 | 1 | 3.8 L/s.person 0.9 L/s/m2 |
+            (Source: Table Appendix F of TCVN 5687-2024 & Marriott Design Guideline)
+
+  - section_key: part_i__table_4_2_1
+    parent_section_key: part_i__sec_4_2
+    number: null
+    type: TABLE
+    vi:
+      title: Định mức gió thải nhà vệ sinh (ASHRAE 62.1)
+      content_md: |-
+        | Phòng Chức Năng | Định mức gió thải (L/s.m² floor) |
+        |---|---|
+        | Toilets—private | 25 L/s/unit |
+        | Toilets—private (continuous system) | 12.5 L/s/unit |
+        | Toilets—public | 25 L/s/room |
+        (Source: Table 6.5 of ASHRAE 62.1-2013)
+      children:
+        - topic: Định mức gió thải toilet private / public
+          type: TABLE_ROWS
+          pages: [11, 11]
+          raw_text: |-
+            f. Yêu Cầu Thông Gió – Định mức gió thải
+            | Phòng Chức Năng | Định mức gió thải (L/s.m² floor) |
+            |---|---|
+            | Toilets—private | 25 L/s/unit |
+            | Toilets—private (continuous system) | 12.5 L/s/unit |
+            | Toilets—public | 25 L/s/room |
+            (Source: Table 6.5 of ASHRAE 62.1-2013)
