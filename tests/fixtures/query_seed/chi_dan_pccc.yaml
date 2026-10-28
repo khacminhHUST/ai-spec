@@ -1,0 +1,71 @@
+# Seed – Chỉ dẫn kỹ thuật PCCC (PTN, VN). Mục đánh lại theo chương → chap_1__sec_N.
+document:
+  doc_id: doc_efae3b1e6ca7
+  file_hash: efae3b1e6ca7d5bdae667731075e0025bba55baeaa0848a9ee4ef58019b31d3a
+  source_path: "S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/3_Chi dan ky thuat/S5_CHI DAN KY THUAT.pdf"
+  doc_code: 26DA06_S5_DESIGN_CONSULTANT_FIRE_TECH_INSTRUCTION
+  project_id: 26DA06
+  building: S5
+  stream: DESIGN_CONSULTANT
+  disciplines: [FIRE]
+  title: "Chỉ dẫn kỹ thuật S5 – Bộ môn Phòng cháy chữa cháy"
+  issuer: CÔNG TY TNHH KỸ THUẬT AN TOÀN PTN VIỆT NAM
+  revision: null
+  issue_date: null
+  stage: TKKT
+  languages: [vi]
+  is_bilingual: false
+  is_latest: true
+  warnings: ["revision: không suy ra được", "issue_date: không suy ra được"]
+doc_label: Chỉ dẫn PCCC
+
+parents:
+  - section_key: chap_1__sec_1
+    parent_section_key: chap_1
+    number: "1"
+    type: SECTION
+    vi:
+      title: TỔNG QUAN
+      children:
+        - topic: Tổng quan tài liệu kỹ thuật
+          pages: [4, 4]
+          raw_text: |-
+            1. TỔNG QUAN
+            Một bộ tài liệu đặc tính kỹ thuật riêng sẽ được ban hành, bao gồm các điều khoản bổ sung áp dụng cho hợp đồng cụ thể. Nếu bất kỳ phần nào của tài liệu kỹ thuật mâu thuẫn với tài liệu kỹ thuật riêng này, thì tài liệu kỹ thuật riêng sẽ được ưu tiên áp dụng.
+            Tài liệu kỹ thuật sẽ được đọc cùng với các tài liệu kỹ thuật riêng, bản vẽ, các điều kiện của hợp đồng và tất cả các tài liệu khác liên quan với từng hợp đồng.
+
+  - section_key: chap_1__sec_2
+    parent_section_key: chap_1
+    number: "2"
+    type: SECTION
+    vi:
+      title: ĐIỀU KIỆN KHÍ HẬU
+      children:
+        - topic: Điều kiện khí hậu – nhiệt độ ngoài trời tối đa
+          pages: [4, 4]
+          raw_text: |-
+            2. ĐIỀU KIỆN KHÍ HẬU
+            Nhà thầu phải thích nghi với điều kiện khí hậu hiện tại ở Việt Nam với nhiệt độ cao bên ngoài có thể lên đến 40o C và độ ẩm cũng tương đối cao.
+            Nhà thầu khi đệ trình bản đấu thầu sẽ phải đảm bảo rằng tất cả các vật tư, thiết bị đều phù hợp cho việc sử dụng và vận hành trong các điều kiện khí hậu khác nhau gặp phải.
+
+  - section_key: chap_1__sec_3
+    parent_section_key: chap_1
+    number: "3"
+    type: SECTION
+    vi:
+      title: TIÊU CHUẨN
+      children:
+        - topic: Tiêu chuẩn vật tư thiết bị
+          pages: [4, 4]
+          raw_text: |-
+            3. TIÊU CHUẨN
+            Tất cả các thông tin chi tiết của vật tư, thiết bị, và tiêu chuẩn cài đặt sẽ phải phù hợp với yêu cầu của tài liệu kỹ thuật và các tiêu chuẩn, quy định hiện hành như mô tả trong các phần khác của tài liệu kỹ thuật.
+            Khi các vật tư, thiết bị cung cấp phù hợp với các tiêu chuẩn khác, thì chúng vẫn phải đáp ứng các yêu cầu của tài liệu kỹ thuật này, và bản chi tiết sẽ được cung cấp cho Chủ đầu tư/ hoặc Tổng thầu phê duyệt.
+            Nhà thầu có trách nhiệm cung cấp và thực hiện tất cả các kiểm tra cần thiết và phải đảm bảo chất lượng, cũng như tay nghề thi công để phù hợp với yêu cầu kỹ thuật.
+        - topic: Quy định lắp đặt hệ thống phun nước và máy bơm
+          pages: [4, 5]
+          raw_text: |-
+            Các Quy Định về thiết kế và lắp đặt hệ thống đèn báo động và phòng cháy chữa cháy:
+            a. Việc lắp đặt hệ thống đầu phun nước chống cháy tự động sẽ được cài đặt phù hợp với các tiêu chuẩn hiện hành đã được sửa đổi của Việt Nam hoặc tiêu chuẩn NFPA13 của Mỹ (nếu áp dụng) và thực hiện đúng với yêu cầu của Cơ quan Cảnh sát Phòng Cháy Chữa Cháy và được sự chấp thuận của chính quyền địa phương.
+            b. Máy bơm chữa cháy, nguồn điện cấp và hệ thống đường ống liên quan, bể chứa nước, điều khiển điện, đầu ra, nguồn cung cấp nước,… sẽ phải tuân theo các quy định, điều luật của Cơ quan Cảnh sát Phòng Cháy Chữa Cháy, Bộ xây dựng và của tòa nhà.
+            d. Hệ thống báo cháy được lắp đặt phù hợp với bộ tiêu chuẩn hiện hành đã sửa đổi của Việt Nam hoặc tiêu chuẩn nước ngoài (nếu áp dụng) và thực hiện theo các quy định và các yêu cầu của Cơ quan Cảnh sát Phòng Cháy Chữa cháy.
