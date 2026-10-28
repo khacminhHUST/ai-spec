@@ -4,3 +4,43 @@ chunking:
   min_child_tokens: 80
   long_section_tokens: 1200
   max_parent_tokens: 6000
+
+# Tách câu (ingestion/sentences.py): các mẫu bị che trước khi tách – không cắt bên trong.
+sentence:
+  abbreviations: ['v.v.', 'v.v', 'No.', 'no.', 'Nos.', 'Rev.', 'e.g.', 'i.e.', 'etc.', 'Fig.', 'Ref.', 'approx.',
+                  'Min.', 'Max.', 'min.', 'max.', 'Mr.', 'Ms.', 'Dr.', 'St.', 'Co.', 'Ltd.', 'Inc.', 'vs.', 'Tp.', 'TP.',
+                  'U.S.', 'a.m.', 'p.m.', 'dia.', 'Dia.', 'Pt.', 'Art.', 'Sec.', 'Cl.', 'Vol.', 'Ed.', 'Tel.', 'Fax.']
+  protect_patterns:
+    - '\bRev\.?\s?\d+\b'                 # Rev.01
+    - '\b(?:No|Nos)\.\s?\d+'             # No. 5
+    - '\d+(?:[.,]\d+)+'                  # 1.5 / 3,5 / 5.7.1 / 10.217
+    - 'https?://\S+|www\.\S+|\S+@\S+\.\w+'
+    - '\b[A-Z]\.(?=[A-Z]\.)'              # U.S.A.
+
+# Nhận diện ngôn ngữ / song ngữ (ingestion/bilingual.py)
+language:
+  bilingual_min_ratio: 0.25     # tỷ lệ khối thuộc ngôn ngữ phụ để coi là song ngữ
+  bilingual_min_pages: 0.3      # tỷ lệ trang có cả 2 ngôn ngữ ở 2 cột
+  min_chars_detect: 12          # khối ngắn hơn → không kết luận ngôn ngữ
+
+# Header/footer: khối lặp lại trên nhiều trang
+header_footer:
+  margin_ratio: 0.09            # vùng sát mép trên/dưới trang
+  min_repeat_pages: 3           # trong vùng mép: lặp ≥ N trang → bỏ
+  min_repeat_ratio: 0.3         # ngoài vùng mép: lặp ≥ tỷ lệ trang → bỏ
+
+# Metadata (ingestion/metadata.py)
+metadata:
+  revision_patterns:            # áp dụng cho tên file rồi trang bìa
+    - '(?<![A-Za-z])Rev(?:ision)?[.\s_\-]*(?P<rev>\d{1,3}[A-Z]?)(?![0-9])'
+  revision_filename_patterns:   # chỉ áp dụng cho tên file (trên bìa dễ nhầm, VD gas R22)
+    - '(?<![A-Za-z0-9])R(?P<rev>\d{2})(?![0-9])'
+  stage_patterns:               # (regex, giá trị) – tên file + trang bìa + đường dẫn
+    - ['(?i)thiết kế kỹ thuật|detail(?:ed)? design|\bTKKT\b', 'TKKT']
+    - ['(?i)thiết kế cơ sở|basic design|\bTKCS\b', 'TKCS']
+    - ['(?i)bản vẽ thi công|thiết kế thi công|shop drawing|\bTKTC\b|tender', 'TKTC']
+    - ['(?i)GD[-_ ]thiet[-_ ]ke|giai đoạn thiết kế', 'THIET_KE']
+  issuers:                      # (regex trên trang bìa/2 trang đầu, tên chuẩn)
+    - ['(?i)\bCPG\b', 'CPG']
+    - ['(?i)\bPTN\b', 'PTN']
+    - ['(?i)marriott international', 'Marriott International']

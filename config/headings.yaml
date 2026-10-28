@@ -1,0 +1,69 @@
+# Profile cấu trúc theo loại tài liệu (doc_type trong projects.yaml › folder_map) – dùng ở Ingestion bước 3–4.
+#
+# levels: mẫu heading, thứ tự = ưu tiên khớp. Mỗi mẫu bắt buộc có named group `num` (và `title`).
+#   kind   : sec | chap | part | art | appx  (→ shared.keys.section_key)
+#   root   : true → cấp gốc (phần/chương); số mục cấp dưới có thể đánh lại theo từng gốc
+#   letter : true → mục chữ cái (a. b. …) – số mục = <số mục cha>.<chữ>
+#   labels : nhãn Docling được xét (mặc định section_header; thêm text/list_item nếu heading bị nhận nhầm)
+# scope   : always | auto | never — gắn tiền tố cấp gốc vào section_key (chap_2__sec_3).
+#           auto: chỉ gắn khi số mục bị lặp lại giữa các cấp gốc (VD Thuyết minh: I.1 / II.1).
+# caption : below | above | auto — vị trí "Bảng x.y" so với bảng.
+# bilingual: tài liệu song ngữ theo cột (tỷ lệ theo chiều rộng trang).
+# chapters_from_toc: lấy danh sách chương + trang bắt đầu từ trang mục lục (Westin: chương không có số trên trang bìa).
+# split_patterns: mẫu heading cấp con dùng khi 1 mục vượt max_parent_tokens.
+# recover_headings: khôi phục heading có trong text layer mà Docling bỏ sót (chỉ bật khi cần).
+
+defaults:
+  caption: auto
+  scope: auto
+  caption_pattern: '^(?:Bảng|BẢNG|Table|TABLE)\s+(?P<num>\d+(?:\.\d+)*[A-Za-z]?)\b'
+  # Dòng mục lục: "... 12" hoặc dấu dẫn "....12" ở cuối
+  toc_line_pattern: '(?:\.{4,}\s*\d{1,4}|\s\d{1,4})\s*$'
+
+profiles:
+  SPEC:            # Spec CPG song ngữ: EN trái | VN phải
+    bilingual: {left: en, right: vi, split_x: 0.548}
+    scope: never
+    levels:
+      - {kind: sec, pattern: '^(?P<num>\d{1,2}(?:\.\d{1,2}){1,3})\.?\s+(?P<title>\S.*)$'}
+
+  TECH_INSTRUCTION:   # Chỉ dẫn kỹ thuật PTN: CHƯƠNG N › N. › N.N.
+    scope: always
+    levels:
+      - {kind: chap, root: true, flags: i, labels: [section_header, text, title],
+         pattern: '^CH[ƯU]ƠNG\s+(?P<num>\d{1,2})\s*[–\-:.]?\s*(?P<title>.*)$'}
+      - {kind: sec, pattern: '^(?P<num>\d{1,2}(?:\.\d{1,2}){0,3})\.\s*(?P<title>\S.*)$'}
+
+  DESIGN_REPORT:      # Thuyết minh: I. › 1. › 5.1 › a.
+    scope: auto
+    caption: below
+    levels:
+      - {kind: part, root: true, pattern: '^(?P<num>[IVX]{1,4})\.\s+(?P<title>\S.*)$'}
+      # số 1 cấp bắt buộc có dấu chấm ("1."), nhiều cấp thì tuỳ ("4.1", "7.6.1")
+      - {kind: sec, pattern: '^(?P<num>\d{1,2}\.(?:\d{1,2}(?:\.\d{1,2}){0,2}\.?)?)\s+(?P<title>\S.*)$'}
+      - {kind: sec, letter: true, pattern: '^(?P<num>[a-k])[.)]\s+(?P<title>\S.*)$'}
+
+  BRAND_STANDARD:     # Westin: chương GR1 / 4C / 15C (từ mục lục) › mục 4C.6, 9.7
+    scope: never
+    recover_headings: true   # heading nằm trong vùng hình bị Docling bỏ sót → khôi phục từ text layer
+    chapters_from_toc:
+      max_page: 3
+      pattern: '^(?P<num>GR\d{1,2}|\d{1,2}[A-D]?)\s+(?P<title>[A-Z].*?)\s+(?P<page>\d{1,4})$'
+    levels:
+      - {kind: sec, labels: [section_header, text, title, list_item, caption],
+         pattern: '^(?P<num>(?:GR\d{1,2}|\d{1,2}[A-D]?)\.\d{1,2})\s+(?P<title>[A-Z(&].*)$'}
+    split_patterns:
+      - '^(?P<num>[A-Z])\.\s+'
+
+  CONTRACT:           # Hợp đồng (chưa có mẫu)
+    scope: auto
+    levels:
+      - {kind: appx, root: true, flags: i, pattern: '^PH[ỤU] L[ỤU]C\s+(?P<num>[A-Z0-9]{1,3})\b\s*[:.\-–]?\s*(?P<title>.*)$'}
+      - {kind: art, flags: i, pattern: '^Điều\s+(?P<num>\d{1,3})\s*[:.\-–]?\s*(?P<title>.*)$'}
+      - {kind: sec, flags: i, pattern: '^Khoản\s+(?P<num>\d{1,3})\s*[:.\-–]?\s*(?P<title>.*)$'}
+
+  LEGAL_STANDARD:     # TCVN/QCVN: 1 › 1.1 › Phụ lục A
+    scope: never
+    levels:
+      - {kind: appx, root: true, flags: i, pattern: '^Phụ lục\s+(?P<num>[A-Z])\b\s*[:.\-–]?\s*(?P<title>.*)$'}
+      - {kind: sec, pattern: '^(?P<num>\d{1,2}(?:\.\d{1,2}){0,3})\.?\s+(?P<title>\S.*)$'}
