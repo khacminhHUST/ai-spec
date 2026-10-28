@@ -1,0 +1,46 @@
+[project]
+name = "mep-assistant"
+version = "0.1.0"
+description = "MEP Project Assistant – Backend Core (RAG)"
+requires-python = ">=3.11"
+dependencies = [
+    # shared
+    "pydantic>=2.7",
+    "pyyaml>=6",
+    "python-dotenv>=1",
+    "httpx>=0.27",
+    "psycopg[binary]>=3.2",
+    "psycopg-pool>=3.2",
+    "qdrant-client>=1.12",
+    "google-genai>=1.0",
+    "langchain-core>=0.3",
+    "langchain>=0.3",
+    "langchain-google-genai>=2",
+    "tokenizers>=0.20",
+    "huggingface_hub>=0.25",
+    # ingestion
+    "docling>=2",
+    "underthesea>=6",
+    "lingua-language-detector>=2",
+    # query
+    "langgraph>=0.2",
+    "langgraph-checkpoint-postgres>=2",
+    "rapidfuzz>=3",
+    "fastapi>=0.110",
+    "sse-starlette>=2",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "unit: không gọi mạng, mock LLM/embedding/reranker",
+    "integration: Postgres + Qdrant thật (docker compose), có thể gọi API",
+    "e2e: gọi API thật, dữ liệu đã ingest",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

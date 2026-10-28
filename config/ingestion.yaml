@@ -1,0 +1,6 @@
+# Tham số Ingestion (mặc định theo docs/ingestion.md). Đếm token: shared/tokens.py.
+chunking:
+  max_child_tokens: 400
+  min_child_tokens: 80
+  long_section_tokens: 1200
+  max_parent_tokens: 6000

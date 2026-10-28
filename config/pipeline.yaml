@@ -1,0 +1,46 @@
+# Tham số Query Pipeline (giá trị mặc định – chỉnh khi đo trên bộ câu hỏi vàng)
+
+llm:
+  # Model ID kiểm tra lại bằng ListModels khi khởi động; model bị deprecate thì Google tự route sang bản mới.
+  fast:                       # N1 Router, N6 Grader – ưu tiên tốc độ
+    provider: google_genai    # dùng init_chat_model(provider, model)
+    model: gemini-3.5-flash-lite
+    temperature: 0
+  main:                       # N7 Generator – cân bằng chính xác & tốc độ
+    provider: google_genai
+    model: gemini-3.8-flash
+    temperature: 0.1
+  # Phương án nâng cấp cho câu hỏi khó/so sánh nhiều nguồn (chậm hơn): gemini-4-argon
+
+router:
+  history_turns: 6
+  json_retry: 1
+
+project:
+  fuzzy_threshold: 85         # rapidfuzz, 0-100
+  profile_cache_ttl_s: 600
+
+retrieval:
+  top_k_per_doc: 10
+  keyword_boost: 2.0
+  fusion: rrf
+  branch_timeout_s: 5
+
+rerank:
+  model: Qwen/Qwen3-Reranker-8B   # đa ngữ, cùng họ với embedding VN
+  provider: deepinfra             # key: DEEPINFRA_API_KEY
+  min_score: 0.3
+  max_per_doc: 5
+
+context:
+  token_budget: 24000
+  max_parent_tokens: 6000
+  neighbor_children: 1
+  reference_hops: 1
+
+grader:
+  llm_check_below: 0.5        # chỉ gọi LLM grader khi top1_score < ngưỡng
+  max_hops: 1
+
+checkpointer:
+  backend: postgres           # PostgresSaver, thread_id = conversation_id

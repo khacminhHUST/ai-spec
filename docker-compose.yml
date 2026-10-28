@@ -1,0 +1,21 @@
+name: mep-assistant
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mep
+      POSTGRES_PASSWORD: mep
+      POSTGRES_DB: mep
+    ports: ["5442:5432"]   # 5432/5433 trên máy đã bị chiếm
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mep -d mep"]
+      interval: 3s
+      retries: 20
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    ports: ["6333:6333", "6334:6334"]
+    volumes: [qdrantdata:/qdrant/storage]
+volumes:
+  pgdata:
+  qdrantdata:

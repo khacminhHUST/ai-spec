@@ -1,0 +1,25 @@
+# Seed dữ liệu dự án (nạp vào project_aliases + project profile). Giá trị mặc định – chỉnh theo hợp đồng thực tế.
+projects:
+  - project_id: 26DA06
+    name: Khu đô thị dịch vụ Quảng Trường Biển (88ha)
+    aliases: [Quảng Trường Biển 88ha, Quảng Trường Biển, Bãi Đất Đỏ, BDD, Đất Đỏ, 88ha, Phú Quốc, 26DA06]
+    owner_aliases: [Sun Group, Tập đoàn Sun Group, Công ty TNHH Mặt Trời Phú Quốc]
+    buildings:
+      - building: S5
+        aliases: [S5, Tòa S5, Tòa nhà S5, Lô S5]
+        source_root: S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020
+    # Thứ tự ưu tiên nguồn khi mâu thuẫn (1 = cao nhất). QCVN luôn là mức tối thiểu bắt buộc.
+    source_priority: [CONTRACT, DESIGN_CONSULTANT, OPERATOR_STANDARD, LEGAL_STANDARD]
+    # Ngôn ngữ ưu tiên khi bản VN và EN lệch nhau (theo hợp đồng; mặc định VN)
+    governing_language: vi
+    # Map thư mục mẫu → stream / discipline (dùng cho metadata khi ingest)
+    folder_map:
+      "1_Thuyet minh ky thuat": {stream: DESIGN_CONSULTANT, doc_type: DESIGN_REPORT, disciplines: [HVAC, PLUMBING, FIRE, ELECTRICAL, ELV]}
+      "2_Yeu cau ky thuat (Spec)": {stream: DESIGN_CONSULTANT, doc_type: SPEC, disciplines: [ELECTRICAL]}
+      "3_Chi dan ky thuat": {stream: DESIGN_CONSULTANT, doc_type: TECH_INSTRUCTION, disciplines: [FIRE]}
+      "4_Tieu chuan Marriott": {stream: OPERATOR_STANDARD, doc_type: BRAND_STANDARD, disciplines: [GENERAL]}
+
+# User test (chưa làm phân quyền chi tiết)
+test_users:
+  - user_id: test_engineer
+    projects: [26DA06]

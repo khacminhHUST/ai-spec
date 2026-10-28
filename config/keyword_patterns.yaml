@@ -1,0 +1,10 @@
+# Mã kỹ thuật giữ nguyên thành 1 token khi tokenize BM25 (shared/sparse.py).
+# Dùng chung cho ingest (vector sparse của child) và query (sparse query + exact_keywords).
+# Thứ tự = ưu tiên khớp. Token được lowercase, bỏ khoảng trắng bên trong, ²→2, ³→3.
+patterns:
+  - '\b(?:TCVN|QCVN|BS\s?EN|BS|IEC|ISO|ASTM|NFPA|ASHRAE|SMACNA|UL)\s?[A-Z]?\d+(?:[.\-]\d+)*(?::\s?\d{4})?(?:/[A-ZĐ\-]+)?'   # mã tiêu chuẩn
+  - '\b\d+(?:[.,]\d+)?\s?(?:mm²|mm2|m²|m2|m³|m3|L/s(?:\.người|/m²|/m2)?|W/m²K|W/m2K|kVA|kW|kV|Pa|°C|ACH|mm|m|A|V|W|Hz|dB|lux)(?![A-Za-zÀ-ỹ])'   # số + đơn vị
+  - '\bDN\s?\d+\b'                    # DN65
+  - '\b\d+[A-Za-z]?(?:\.\d+){1,3}\b'  # số mục 5.7.1, 4C.6 (cần ≥ 1 dấu chấm)
+  - '\b[A-Z]{2,}[\-/]?\d+[A-Z0-9\-]*\b'   # mã kiểu LSZH, CAT6A, IP65, GR1
+  - '\b[A-Z]{3,}\b'                   # viết tắt hoa: LSZH, MCCB, ACB

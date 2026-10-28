@@ -1,0 +1,18 @@
+# Regex bắt mã tham chiếu (dùng chung: Ingestion → referenced_ids, Query N6 → phát hiện tham chiếu thiếu).
+# Chuẩn hóa ở shared/keys.py. Bắt buộc có named group: standards → prefix, code; internal → num.
+
+standards:
+  # TCVN 5687:2024 · QCVN 06:2022/BXD · ASHRAE 62.1 · IEC 60331-21 · BS EN 50200 · NFPA 13 · ASTM E84
+  pattern: '\b(?P<prefix>TCVN|QCVN|BS\s?EN|BS|IEC|ISO|ASTM|NFPA|ASHRAE|SMACNA|UL|EN)\s?(?P<code>[A-Z]?\d+(?:[.\-]\d+)*(?::\s?\d{4})?(?:/[A-ZĐ\-]+)?)'
+
+internal:
+  - kind: table
+    pattern: '\b(?:Bảng|Table)\s+(?P<num>\d+(?:\.\d+)*[A-Za-z]?)'
+  - kind: sec
+    pattern: '\b(?:Mục|Section|Clause)\s+(?P<num>[A-Za-z]{0,2}\d+[A-Za-z]?(?:\.\d+)*)'
+  - kind: chap
+    pattern: '\b(?:Chương|Chapter)\s+(?P<num>\d+|[IVXLC]+)\b'
+  - kind: art
+    pattern: '\bĐiều\s+(?P<num>\d+)'
+  - kind: appx
+    pattern: '\b(?:Phụ lục|Appendix|Annex)\s+(?P<num>[A-Z0-9]{1,3})\b'

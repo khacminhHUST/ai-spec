@@ -1,0 +1,11 @@
+.env
+__pycache__/
+.venv/
+artifacts/
+.pytest_cache/
+.cache/
+.worktrees/
+*.egg-info/
+# Tài liệu gốc – chỉ đọc, không commit (đọc qua MEP_DATA_ROOT)
+S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/
+/*.pdf
