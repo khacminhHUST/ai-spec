@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from ingestion.bilingual import detect_languages, postprocess, split_languages
-from ingestion.chunks import table_children
-from ingestion.parse import parse_pdf
-from ingestion.structure import build_structure
-from ingestion.textutil import detect_lang, profile
+from app.services.ingestion.bilingual import detect_languages, postprocess, split_languages
+from app.services.ingestion.chunks import table_children
+from app.services.ingestion.parse import parse_pdf
+from app.services.ingestion.structure import build_structure
+from app.services.ingestion.textutil import detect_lang, profile
 
 pytestmark = pytest.mark.unit
 
@@ -62,8 +62,8 @@ def test_bang_4_cot_tach_thanh_2_bang_2_cot(spec_split):
 
 
 def test_bang_thuyet_minh_4_3_ghep_trang_va_nhom_hotel_room(fixtures_dir):
-    from ingestion.chunks import build_parents
-    from ingestion.metadata import DocMeta
+    from app.services.ingestion.chunks import build_parents
+    from app.services.ingestion.metadata import DocMeta
 
     prof = profile("DESIGN_REPORT")
     pd = parse_pdf(fixtures_dir / "tm_p10-11.pdf")

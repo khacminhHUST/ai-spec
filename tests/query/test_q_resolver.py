@@ -1,7 +1,7 @@
 """Unit N2 – Project Resolver."""
 import pytest
 
-from query.resolver import apply_action, build_profile, clarify_message, match_mention, resolve
+from app.services.query.resolver import apply_action, build_profile, clarify_message, match_mention, resolve
 from tests.query.fakes import PQ, S5, S6, S7, make_deps
 
 pytestmark = pytest.mark.unit
@@ -80,7 +80,7 @@ def test_profile_languages_by_stream(deps):
 
 
 def test_profile_cache_ttl(deps):
-    from query.resolver import load_profiles
+    from app.services.query.resolver import load_profiles
 
     load_profiles(deps, [S5])
     n = deps.repo.calls.count("documents")

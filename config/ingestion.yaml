@@ -1,11 +1,11 @@
-# Tham số Ingestion (mặc định theo docs/ingestion.md). Đếm token: shared/tokens.py.
+# Tham số Ingestion (mặc định theo docs/ingestion.md). Đếm token: app/utils/tokens.py.
 chunking:
   max_child_tokens: 400
   min_child_tokens: 80
   long_section_tokens: 1200
   max_parent_tokens: 6000
 
-# Tách câu (ingestion/sentences.py): các mẫu bị che trước khi tách – không cắt bên trong.
+# Tách câu (app/services/ingestion/sentences.py): các mẫu bị che trước khi tách – không cắt bên trong.
 sentence:
   abbreviations: ['v.v.', 'v.v', 'No.', 'no.', 'Nos.', 'Rev.', 'e.g.', 'i.e.', 'etc.', 'Fig.', 'Ref.', 'approx.',
                   'Min.', 'Max.', 'min.', 'max.', 'Mr.', 'Ms.', 'Dr.', 'St.', 'Co.', 'Ltd.', 'Inc.', 'vs.', 'Tp.', 'TP.',
@@ -17,7 +17,7 @@ sentence:
     - 'https?://\S+|www\.\S+|\S+@\S+\.\w+'
     - '\b[A-Z]\.(?=[A-Z]\.)'              # U.S.A.
 
-# Nhận diện ngôn ngữ / song ngữ (ingestion/bilingual.py)
+# Nhận diện ngôn ngữ / song ngữ (app/services/ingestion/bilingual.py)
 language:
   bilingual_min_ratio: 0.25     # tỷ lệ khối thuộc ngôn ngữ phụ để coi là song ngữ
   bilingual_min_pages: 0.3      # tỷ lệ trang có cả 2 ngôn ngữ ở 2 cột
@@ -29,7 +29,7 @@ header_footer:
   min_repeat_pages: 3           # trong vùng mép: lặp ≥ N trang → bỏ
   min_repeat_ratio: 0.3         # ngoài vùng mép: lặp ≥ tỷ lệ trang → bỏ
 
-# Metadata (ingestion/metadata.py)
+# Metadata (app/services/ingestion/metadata.py)
 metadata:
   revision_patterns:            # áp dụng cho tên file rồi trang bìa
     - '(?<![A-Za-z])Rev(?:ision)?[.\s_\-]*(?P<rev>\d{1,3}[A-Z]?)(?![0-9])'

@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from query.deps import Deps
-from query.graph import build_graph, postgres_checkpointer, stream_turn, turn_config
-from shared.db import pg_connect
+from app.db.client import pg_connect
+from app.services.query.deps import Deps
+from app.services.query.graph import build_graph, postgres_checkpointer, stream_turn, turn_config
 from tests.query.test_q_golden import values_found
 
 pytestmark = pytest.mark.e2e

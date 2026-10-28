@@ -43,15 +43,25 @@ Python 3.11+, Docling, Embedding qua API (VN: Qwen3-Embedding-8B, EN: gemini-emb
 LLM qua interface chung (không khóa provider),
 LangGraph (query pipeline).
 
-## Cấu trúc thư mục đề xuất
+## Cấu trúc thư mục
 ```
-ingestion/      # parse, metadata, bilingual, parent, child, index
-query/          # (sau)
-shared/         # schema, config, db clients, LLM interface
-config/         # regex heading/reference theo stream, ngưỡng token, alias dự án
-tests/          # test theo tài liệu mẫu
-docs/           # spec từng module
+app/
+  main.py             # FastAPI create_app (uvicorn app.main:app)
+  api/                # deps.py + routes/ (chat SSE, conversations)
+  core/               # config.py (Settings, config/*.yaml, .env)
+  db/                 # client.py (Postgres/Qdrant), migrate.py, migrations/*.sql
+  models/             # document.py (Document/Parent/Child – hợp đồng dữ liệu), query.py, chat.py (API)
+  providers/          # llm, embedding, reranker (+ mock)
+  repositories/       # postgres.py (đọc), qdrant.py (tìm kiếm), index_store.py (ghi khi ingest)
+  services/
+    ingestion/        # parse, structure, bilingual, metadata, chunks, pipeline
+    query/            # LangGraph: graph + router, resolver, retrieval, context, grader, generator
+  utils/              # keys (ID/section_key), sparse (BM25), tokens
+  cli/                # python -m app.cli.migrate | python -m app.cli.ingest
+frontend/             # React + Vite (npm run dev → :5173, proxy sang :8000)
+config/  tests/  docs/
 ```
+(Giai đoạn 1–3 bên dưới viết theo tên cũ: `shared/` → `app/{core,db,models,providers,utils}`, `ingestion/` → `app/services/ingestion`, `query/` → `app/services/query` + `app/api`.)
 
 ## Thứ tự triển khai (song song)
 

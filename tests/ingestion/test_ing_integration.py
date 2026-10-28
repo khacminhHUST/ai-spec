@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 from qdrant_client import models as qm
 
-from ingestion.pipeline import ingest_file, iter_inputs
-from ingestion.store import counts
-from shared.db import pg_connect, qdrant
+from app.db.client import pg_connect, qdrant
+from app.repositories.index_store import counts
+from app.services.ingestion.pipeline import ingest_file, iter_inputs
 
 pytestmark = pytest.mark.integration
 
@@ -25,7 +25,7 @@ WESTIN_CHAPTERS = ["GR1", "GR2", "GR3", "GR4", "1", "2A", "2B", "3", "4A", "4B",
 
 @pytest.fixture(scope="module")
 def ns(settings):
-    from shared.migrate import drop, migrate
+    from app.db.migrate import drop, migrate
 
     s = settings.with_ns(f"t_ing_{uuid.uuid4().hex[:6]}")
     migrate(s)
@@ -169,7 +169,7 @@ def test_payload_qdrant_dung_schema(ns, s5):
 
 @pytest.fixture
 def ns2(settings):
-    from shared.migrate import drop, migrate
+    from app.db.migrate import drop, migrate
 
     s = settings.with_ns(f"t_ingv_{uuid.uuid4().hex[:6]}")
     migrate(s)

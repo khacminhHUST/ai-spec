@@ -1,4 +1,4 @@
-# Mã kỹ thuật giữ nguyên thành 1 token khi tokenize BM25 (shared/sparse.py).
+# Mã kỹ thuật giữ nguyên thành 1 token khi tokenize BM25 (app/utils/sparse.py).
 # Dùng chung cho ingest (vector sparse của child) và query (sparse query + exact_keywords).
 # Thứ tự = ưu tiên khớp. Token được lowercase, bỏ khoảng trắng bên trong, ²→2, ³→3.
 patterns:

@@ -2,8 +2,8 @@
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from query.graph import build_graph, run_turn, stream_turn
-from tests.query.fakes import S5, make_deps, scripted_llm, router_json
+from app.services.query.graph import build_graph, run_turn, stream_turn
+from tests.query.fakes import S5, make_deps, router_json, scripted_llm
 
 pytestmark = pytest.mark.unit
 

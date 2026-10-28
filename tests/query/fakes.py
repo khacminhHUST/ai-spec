@@ -5,15 +5,14 @@ import dataclasses
 import json
 from typing import Any, Callable
 
-from shared.keys import child_seq, make_child_id, make_parent_id, normalize_alias
-from shared.llm import MockChatModel
-from shared.reranker import MockReranker
-from shared.schema import ChildChunk, Document, ParentChunk
-from shared.sparse import tokenize
-
-from query.deps import Deps
-from query.repo import Repo, _std_norm, section_matches
-from query.retriever import HIT_FIELDS, Retriever, discipline_filter
+from app.models.document import ChildChunk, Document, ParentChunk
+from app.providers.llm import MockChatModel
+from app.providers.reranker import MockReranker
+from app.repositories.postgres import Repo, _std_norm, section_matches
+from app.repositories.qdrant import HIT_FIELDS, Retriever, discipline_filter
+from app.services.query.deps import Deps
+from app.utils.keys import child_seq, make_child_id, make_parent_id, normalize_alias
+from app.utils.sparse import tokenize
 from tests.fixtures.query_seed.seed import SeedData, load_seed
 
 S5 = "26DA06"

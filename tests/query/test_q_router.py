@@ -1,10 +1,9 @@
 """Unit N1 – Router (parse JSON, retry, fallback)."""
 import pytest
 
-from shared.llm import MockChatModel
-
-from query.models import RouterOutput
-from query.router import run_router
+from app.models.query import RouterOutput
+from app.providers.llm import MockChatModel
+from app.services.query.router import run_router
 from tests.query.fakes import make_deps, router_json
 
 pytestmark = pytest.mark.unit

@@ -3,16 +3,15 @@ import dataclasses
 
 import pytest
 
-from shared.db import pg_pool
-from shared.keys import normalize_alias
-from shared.reranker import MockReranker
-
-from query.deps import Deps
-from query.graph import build_graph, postgres_checkpointer, run_turn
-from query.repo import PgRepo
-from query.resolver import build_profile
-from query.retrieval import plan_branches
-from query.retriever import QdrantRetriever
+from app.db.client import pg_pool
+from app.providers.reranker import MockReranker
+from app.repositories.postgres import PgRepo
+from app.repositories.qdrant import QdrantRetriever
+from app.services.query.deps import Deps
+from app.services.query.graph import build_graph, postgres_checkpointer, run_turn
+from app.services.query.resolver import build_profile
+from app.services.query.retrieval import plan_branches
+from app.utils.keys import normalize_alias
 from tests.fixtures.query_seed.seed import add_aliases, load_seed, write_seed
 from tests.query.fakes import approx_tokens, fake_project_doc, router_json, scripted_llm
 

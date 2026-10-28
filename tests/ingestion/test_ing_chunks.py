@@ -6,16 +6,23 @@ from datetime import date
 
 import pytest
 
-from ingestion import chunk_llm
-from ingestion.bilingual import attach_captions, merge_page_break_tables
-from ingestion.chunks import (ChildDraft, ParentDraft, Unit, build_children, integrity_check, is_group_row,
-                              table_children)
-from ingestion.metadata import DocMeta, infer_metadata, issue_date_from, revision_from
-from ingestion.parse import Block
-from ingestion.textutil import profile
-from shared.keys import make_parent_id
-from shared.llm import MockChatModel
-from shared.schema import ParentChunk
+from app.models.document import ParentChunk
+from app.providers.llm import MockChatModel
+from app.services.ingestion import chunk_llm
+from app.services.ingestion.bilingual import attach_captions, merge_page_break_tables
+from app.services.ingestion.chunks import (
+    ChildDraft,
+    ParentDraft,
+    Unit,
+    build_children,
+    integrity_check,
+    is_group_row,
+    table_children,
+)
+from app.services.ingestion.metadata import DocMeta, infer_metadata, issue_date_from, revision_from
+from app.services.ingestion.parse import Block
+from app.services.ingestion.textutil import profile
+from app.utils.keys import make_parent_id
 
 pytestmark = pytest.mark.unit
 
@@ -55,7 +62,7 @@ def test_khong_ghep_khi_khac_so_cot():
 def _table_draft(rows, header, caption="Bảng 4.3"):
     p = ParentChunk(parent_id=make_parent_id(META.doc_id, "vi", "table_4_3"), doc_id=META.doc_id,
                     section_key="table_4_3", lang="vi", type="TABLE", content_md="x")
-    from ingestion.chunks import data_row
+    from app.services.ingestion.chunks import data_row
 
     return ParentDraft(p, "e. Thông gió > Bảng 4.3", "\n".join(data_row(r) for r in rows),
                        table={"caption": caption, "name": caption, "header": [header], "rows": rows,

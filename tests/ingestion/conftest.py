@@ -19,14 +19,14 @@ def fixtures_dir() -> Path:
 
 @pytest.fixture(scope="session")
 def mock_llm():
-    from shared.llm import MockChatModel
+    from app.providers.llm import MockChatModel
 
     return MockChatModel(responses=["không phải JSON"])
 
 
 @pytest.fixture(scope="session")
 def s5_root():
-    from shared.config import get_settings
+    from app.core.config import get_settings
 
     s = get_settings()
     root = s.data_root / s.project_list()[0]["buildings"][0]["source_root"]

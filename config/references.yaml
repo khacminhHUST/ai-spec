@@ -1,5 +1,5 @@
 # Regex bắt mã tham chiếu (dùng chung: Ingestion → referenced_ids, Query N6 → phát hiện tham chiếu thiếu).
-# Chuẩn hóa ở shared/keys.py. Bắt buộc có named group: standards → prefix, code; internal → num.
+# Chuẩn hóa ở app/utils/keys.py. Bắt buộc có named group: standards → prefix, code; internal → num.
 
 standards:
   # TCVN 5687:2024 · QCVN 06:2022/BXD · ASHRAE 62.1 · IEC 60331-21 · BS EN 50200 · NFPA 13 · ASTM E84

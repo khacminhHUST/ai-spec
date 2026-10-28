@@ -1,9 +1,9 @@
 """Unit N6 – Grader (regex + LLM), rẽ nhánh D/E/F, Targeted Fetch."""
 import pytest
 
-from query.grader import NONE_MARK, QUERY_PREFIX, grade, regex_missing, route_after_grade, targeted_fetch
-from query.resolver import build_profile
-from tests.query.fakes import S5, make_deps, scripted_llm, router_json
+from app.services.query.grader import NONE_MARK, QUERY_PREFIX, grade, regex_missing, route_after_grade, targeted_fetch
+from app.services.query.resolver import build_profile
+from tests.query.fakes import S5, make_deps, router_json, scripted_llm
 
 pytestmark = pytest.mark.unit
 TM = "doc_11833346273d"

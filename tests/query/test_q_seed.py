@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from shared.keys import child_seq, make_parent_id
+from app.utils.keys import child_seq, make_parent_id
 from tests.fixtures.query_seed.seed import load_seed
 
 pytestmark = pytest.mark.unit

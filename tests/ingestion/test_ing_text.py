@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from ingestion.parse import Block
-from ingestion.sentences import split_sentences
-from ingestion.structure import build_structure, find_candidates
-from ingestion.textutil import profile
-from shared.keys import extract_references
+from app.services.ingestion.parse import Block
+from app.services.ingestion.sentences import split_sentences
+from app.services.ingestion.structure import build_structure, find_candidates
+from app.services.ingestion.textutil import profile
+from app.utils.keys import extract_references
 
 pytestmark = pytest.mark.unit
 

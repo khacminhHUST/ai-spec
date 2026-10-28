@@ -1,7 +1,7 @@
 # Profile cấu trúc theo loại tài liệu (doc_type trong projects.yaml › folder_map) – dùng ở Ingestion bước 3–4.
 #
 # levels: mẫu heading, thứ tự = ưu tiên khớp. Mỗi mẫu bắt buộc có named group `num` (và `title`).
-#   kind   : sec | chap | part | art | appx  (→ shared.keys.section_key)
+#   kind   : sec | chap | part | art | appx  (→ app.utils.keys.section_key)
 #   root   : true → cấp gốc (phần/chương); số mục cấp dưới có thể đánh lại theo từng gốc
 #   letter : true → mục chữ cái (a. b. …) – số mục = <số mục cha>.<chữ>
 #   labels : nhãn Docling được xét (mặc định section_header; thêm text/list_item nếu heading bị nhận nhầm)

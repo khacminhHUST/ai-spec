@@ -1,7 +1,7 @@
 """Seed dữ liệu giả lập cho Query Pipeline (phiên B).
 
 Dữ liệu viết tay trong *.yaml cùng thư mục (nội dung chép nguyên văn từ bộ S5). Module này dựng
-Document / ParentChunk / ChildChunk theo đúng schema `shared.schema` (validate Pydantic) và nạp vào
+Document / ParentChunk / ChildChunk theo đúng schema `app.models.document` (validate Pydantic) và nạp vào
 Postgres + Qdrant của 1 namespace.
 
     python -m tests.fixtures.query_seed.seed              # namespace theo MEP_NS
@@ -18,9 +18,9 @@ from typing import Any, Callable
 
 import yaml
 
-from shared.config import Settings, get_settings
-from shared.keys import extract_references, make_child_id, make_parent_id
-from shared.schema import ChildChunk, Document, ParentChunk
+from app.core.config import Settings, get_settings
+from app.models.document import ChildChunk, Document, ParentChunk
+from app.utils.keys import extract_references, make_child_id, make_parent_id
 
 SEED_DIR = Path(__file__).parent
 SEED_FILES = ("spec_dien.yaml", "thuyet_minh.yaml", "chi_dan_pccc.yaml")
@@ -100,9 +100,9 @@ def write_seed(data: SeedData, settings: Settings, *, embed: bool = True) -> dic
     """Upsert vào Postgres (documents, parent_chunks) + Qdrant (child_chunks_<lang>)."""
     from qdrant_client import models as qm
 
-    from shared.db import pg_connect, qdrant
-    from shared.embedding import get_embedder
-    from shared.sparse import doc_sparse
+    from app.db.client import pg_connect, qdrant
+    from app.providers.embedding import get_embedder
+    from app.utils.sparse import doc_sparse
 
     doc_cols = list(Document.model_fields)
     par_cols = list(ParentChunk.model_fields)
@@ -147,7 +147,7 @@ def write_seed(data: SeedData, settings: Settings, *, embed: bool = True) -> dic
 
 def add_aliases(settings: Settings, rows: list[tuple[str, str, str, str, str]]) -> None:
     """Thêm alias (alias_norm, alias, project_id, building, kind) – dùng cho dự án giả trong test."""
-    from shared.db import pg_connect
+    from app.db.client import pg_connect
 
     with pg_connect(settings, autocommit=True) as conn, conn.cursor() as cur:
         cur.executemany(
@@ -159,16 +159,16 @@ def add_aliases(settings: Settings, rows: list[tuple[str, str, str, str, str]]) 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--ns", default=None)
-    ap.add_argument("--migrate", action="store_true", help="chạy shared.migrate trước")
+    ap.add_argument("--migrate", action="store_true", help="chạy app.db.migrate trước")
     args = ap.parse_args()
     s = get_settings()
     if args.ns is not None:
         s = s.with_ns(args.ns)
     if args.migrate:
-        from shared.migrate import migrate
+        from app.db.migrate import migrate
 
         migrate(s)
-    from shared.tokens import count_tokens
+    from app.utils.tokens import count_tokens
 
     print(write_seed(load_seed(count_tokens=count_tokens), s))
 

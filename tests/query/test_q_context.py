@@ -1,8 +1,8 @@
 """Unit N5 – Context Builder."""
 import pytest
 
-from query.context import build_context
-from query.resolver import build_profile
+from app.services.query.context import build_context
+from app.services.query.resolver import build_profile
 from tests.query.fakes import S5, make_deps
 
 pytestmark = pytest.mark.unit

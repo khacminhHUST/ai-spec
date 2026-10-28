@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from query.deps import Deps
-from query.graph import build_graph, postgres_checkpointer, run_turn
+from app.services.query.deps import Deps
+from app.services.query.graph import build_graph, postgres_checkpointer, run_turn
 from tests.fixtures.query_seed.seed import load_seed, write_seed
 
 pytestmark = pytest.mark.integration
@@ -42,7 +42,7 @@ def section_hit(sec: dict | None, context: list[dict], doc_ids: dict[str, str]) 
 def test_golden_preliminary(test_ns):
     if not test_ns.google_api_key or test_ns.is_mock("google_genai"):
         pytest.skip("Thiếu GOOGLE_API_KEY / Gemini đang mock")
-    from shared.tokens import count_tokens
+    from app.utils.tokens import count_tokens
 
     data = load_seed(count_tokens=count_tokens)
     write_seed(data, test_ns)

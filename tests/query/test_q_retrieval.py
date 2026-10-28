@@ -3,8 +3,8 @@ import time
 
 import pytest
 
-from query.resolver import build_profile
-from query.retrieval import plan_branches, rerank, run_branch
+from app.services.query.resolver import build_profile
+from app.services.query.retrieval import plan_branches, rerank, run_branch
 from tests.fixtures.query_seed.seed import load_seed
 from tests.query.fakes import S5, S6, FakeRetriever, fake_project_doc, make_deps
 

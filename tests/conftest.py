@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import pytest
 
-from shared.config import Settings, get_settings
+from app.core.config import Settings, get_settings
 
 
 @lru_cache(maxsize=1)
@@ -55,7 +55,7 @@ def mock_settings(settings) -> Settings:
 @pytest.fixture
 def test_ns(settings):
     """Namespace tạm đã migrate; tự drop sau test."""
-    from shared.migrate import drop, migrate
+    from app.db.migrate import drop, migrate
 
     s = settings.with_ns(f"t_{uuid.uuid4().hex[:8]}")
     migrate(s)
