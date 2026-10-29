@@ -11,6 +11,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.prompts import load, render
 from app.repositories.postgres import section_matches
 from app.services.query.deps import Deps, message_text, parse_json_object
 from app.services.query.retrieval import rerank, run_branch
@@ -20,12 +21,7 @@ log = logging.getLogger(__name__)
 QUERY_PREFIX = "query:"
 NONE_MARK = "none:"   # LLM grader: context không liên quan (N7 hạ PARTIAL → NOT_FOUND nếu câu trả lời không trích dẫn)
 
-GRADER_SYSTEM = """Bạn kiểm tra xem CONTEXT (trích từ tài liệu dự án) có đủ thông tin để trả lời CÂU HỎI không.
-Chỉ trả về 1 JSON object: {"verdict": "ENOUGH" | "PARTIAL" | "NONE", "missing_query": "<truy vấn tìm phần còn thiếu, rỗng nếu ENOUGH>"}
-- ENOUGH: context chứa thông tin trả lời trực tiếp câu hỏi (kể cả khi tên gọi/đơn vị khác, VD "gym" = "Health club"; ô trống trong bảng không tính là thiếu).
-- PARTIAL: context liên quan nhưng thiếu thông tin CỐT LÕI mà câu hỏi yêu cầu.
-- NONE: context không chứa thông tin để trả lời câu hỏi.
-Ưu tiên ENOUGH khi context đã có giá trị người dùng hỏi."""
+GRADER_SYSTEM = load("query/grader_system")
 
 
 def regex_missing(deps: Deps, context: list[dict[str, Any]]) -> list[str]:
@@ -61,7 +57,8 @@ def llm_check(deps: Deps, question: str, context: list[dict[str, Any]]) -> tuple
     """→ (verdict, missing_query). Lỗi → coi như ENOUGH (không chặn trả lời)."""
     ctx = "\n\n".join(f"[{b['n']}] {b.get('title') or b['section_key']}\n{(b.get('vi') or b.get('en') or '')[:3000]}"
                       for b in context)
-    msgs = [SystemMessage(GRADER_SYSTEM), HumanMessage(f"CÂU HỎI: {question}\n\nCONTEXT:\n{ctx or '(rỗng)'}\n\nJSON:")]
+    msgs = [SystemMessage(GRADER_SYSTEM),
+            HumanMessage(render("query/grader_human", question=question, context=ctx or "(rỗng)"))]
     try:
         obj = parse_json_object(message_text(deps.llm_fast.invoke(msgs)))
         verdict = str(obj.get("verdict", "ENOUGH")).upper()

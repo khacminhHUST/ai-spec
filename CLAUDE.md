@@ -1,7 +1,7 @@
 # MEP Project Assistant – Backend Core
 
 Chatbot hỏi đáp thông tin dự án xây dựng cơ điện (MEP) cho kỹ sư nhà thầu cơ điện.
-Kiến trúc RAG: Ingestion (offline) + Query Pipeline (online, LangGraph).
+Kiến trúc RAG: Ingestion (offline) + Query Pipeline (online, LangGraph) + Agent Harness (yêu cầu linh hoạt: xuất file, nhiều bước, MCP).
 
 ## Quy tắc làm việc
 - Trả lời / báo cáo NGẮN GỌN, đúng trọng tâm, không mở rộng vấn đề ngoài yêu cầu.
@@ -30,6 +30,7 @@ Bộ tài liệu mẫu: `S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/` (dự án Qu�
 ## Kiến trúc tổng
 1. **Ingestion** – spec: `docs/ingestion.md` ✅ đã chốt
 2. **Query Pipeline** – spec: `docs/query-pipeline.md` ✅ đã chốt (sơ đồ: `docs/query-pipeline.png`)
+3. **Agent Harness** – spec: `docs/agent-harness.md` 📝 mới (Gate: lookup → Query Pipeline | agent → Deep Agents + sandbox + MCP + skills)
 
 Lưu trữ dùng chung:
 - PostgreSQL: `documents`, `parent_chunks`, `project_aliases`, `conversations`, checkpoint LangGraph (PostgresSaver)
@@ -51,13 +52,17 @@ app/
   core/               # config.py (Settings, config/*.yaml, .env)
   db/                 # client.py (Postgres/Qdrant), migrate.py, migrations/*.sql
   models/             # document.py (Document/Parent/Child – hợp đồng dữ liệu), query.py, chat.py (API)
+  prompts/            # prompt LLM (.md) theo service: query/, ingestion/ – load()/render()
   providers/          # llm, embedding, reranker (+ mock)
   repositories/       # postgres.py (đọc), qdrant.py (tìm kiếm), index_store.py (ghi khi ingest)
   services/
     ingestion/        # parse, structure, bilingual, metadata, chunks, pipeline
     query/            # LangGraph: graph + router, resolver, retrieval, context, grader, generator
+    agent/            # Agent Harness: gate, assistant graph, tools, sandbox, skills, mcp
   utils/              # keys (ID/section_key), sparse (BM25), tokens
   cli/                # python -m app.cli.migrate | python -m app.cli.ingest
+sandbox/              # Dockerfile + helpers/ + templates/ cho sandbox chạy code
+skills/               # skills/<name>/SKILL.md
 frontend/             # React + Vite (npm run dev → :5173, proxy sang :8000)
 config/  tests/  docs/
 ```
@@ -97,6 +102,7 @@ Dữ liệu giả lập cho phiên B (`tests/fixtures/query_seed/`):
 - Phiên A: "Đọc CLAUDE.md, docs/ingestion.md. Tạo worktree branch feat/ingestion. Làm phiên A Giai đoạn 2. Chạy unit + integration test trên bộ S5."
 - Phiên B: "Đọc CLAUDE.md, docs/query-pipeline.md. Tạo worktree branch feat/query. Làm phiên B Giai đoạn 2: tạo query_seed rồi code query pipeline. Chạy unit test."
 - Giai đoạn 3: "Đọc CLAUDE.md. Làm Giai đoạn 3, báo cáo theo tiêu chí nghiệm thu."
+- Agent Harness: "Đọc CLAUDE.md, docs/agent-harness.md, docs/query-pipeline.md. Tạo worktree branch feat/agent. Làm theo mục 9 từng bước, mỗi bước chạy test và báo kết quả ngắn gọn. Kiểm tra phiên bản deepagents/langgraph và model ID trước."
 
 ## Test
 - pytest, marker: `unit` (không gọi mạng, mock LLM/embedding/reranker), `integration`, `e2e` (gọi API thật).
