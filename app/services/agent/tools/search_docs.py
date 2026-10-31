@@ -41,13 +41,6 @@ Trả về JSON: status (OK | PARTIAL | NOT_FOUND | ASK_CLARIFY), blocks (n, doc
 SUMMARY_BLOCK_CHARS = 400
 
 
-def add_sources(left: list[dict] | None, right: list[dict] | None) -> list[dict]:
-    """Reducer state `sources`: cộng dồn citation (n toàn cục); right = None → reset (đầu lượt)."""
-    if right is None:
-        return []
-    return [*(left or []), *right]
-
-
 def apply_hints(router: dict[str, Any], project_mentions: list[str] | None, disciplines: list[str] | None,
                 streams: list[str] | None) -> dict[str, Any]:
     """Gợi ý của agent ghi đè/bổ sung output N1 (giá trị ngoài enum bị loại bởi RouterOutput)."""
