@@ -1,0 +1,31 @@
+# Bộ kịch bản agent (docs/agent-harness.md mục 10). route = tuyến Gate mong đợi. A3 tạo file mẫu trong test.
+user_id: test_engineer
+
+scenarios:
+  - id: A1
+    question: "Xuất Excel bảng gió tươi S5 (Thuyết minh Bảng 4.3), cột: Khu vực · L/s.người · L/s/m² · Nguồn"
+    route: agent
+  - id: A2
+    question: "Tạo file Word tóm tắt yêu cầu cáp mục 5.7 Spec Điện tòa S5: bán kính uốn, tiết diện tối thiểu, màu pha. Font Times New Roman 13"
+    route: agent
+  - id: A3
+    question: "Điền thời gian bảo hành và bán kính uốn cáp (Spec Điện tòa S5) vào mẫu này"
+    attachment: mau_tong_hop.xlsx
+    route: agent
+  - id: A4
+    question: "So sánh yêu cầu gió tươi của Thuyết minh S5 với Westin, xuất bảng Excel"
+    route: agent
+  - id: A5
+    question: "Xuất Excel giá trị hợp đồng gói thầu cơ điện tòa S5"
+    route: agent
+  - id: A6
+    question: "Bán kính uốn cong tối thiểu của cáp tiết diện lớn hơn 25mm² là bao nhiêu?"
+    route: lookup
+  - id: A7
+    question: "Tạo issue có tiêu đề 'Kiểm tra cáp tòa S5' trên hệ thống quản lý issue ngoài (echo_create_issue)"
+    route: agent
+  - id: A8
+    # lượt 2, cùng hội thoại với A1
+    question: "Thêm cột Ghi chú và tô vàng dòng gym"
+    continues: A1
+    route: agent

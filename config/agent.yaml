@@ -27,6 +27,7 @@ sandbox:
   exec_timeout_s: 60        # mặc định mỗi lần run_code
   max_exec_timeout_s: 120   # trần timeout_s mà agent được xin
   idle_ttl_s: 1800
+  reap_interval_s: 60       # chu kỳ dọn sandbox idle
   max_output_file_mb: 20
   output_max_chars: 4000    # cắt stdout/stderr trả về agent
   read_file_max_chars: 16000  # mỗi lần read_file (đọc tiếp bằng offset)

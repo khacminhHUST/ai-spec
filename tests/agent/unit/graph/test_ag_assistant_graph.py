@@ -169,3 +169,21 @@ def test_new_turn_after_abandoned_confirm_starts_clean(mock_settings):
     cid = d["conversation_id"]
     _, d2 = _turn(graph, "Bán kính uốn cáp?", cid)
     assert d2["route"] == "lookup" and d2["status"] == "OK" and PUSHED == []
+
+
+def test_parallel_write_tools_are_confirmed_one_by_one(mock_settings):
+    from langchain_core.messages import AIMessage
+
+    PUSHED.clear()
+    calls = [{"name": "push_data", "args": {"payload": p}, "id": f"c{p}"} for p in ("A", "B")]
+    graph, _, _, _ = _setup(mock_settings, [AIMessage("", tool_calls=calls), "Xong."])
+    events, done = _turn(graph, "Đẩy 2 mục")
+    cid = done["conversation_id"]
+    first = [e["data"] for e in events if e["event"] == "confirm_required"]
+    assert sorted(c["args"]["payload"] for c in first) == ["A", "B"]
+    by_payload = {c["args"]["payload"]: c["confirm_id"] for c in first}
+    ev2 = list(stream_confirm(graph, cid, by_payload["A"], True))             # B vẫn chờ
+    assert PUSHED == ["A"]
+    assert [e["data"]["args"]["payload"] for e in ev2 if e["event"] == "confirm_required"] == ["B"]
+    ev3 = list(stream_confirm(graph, cid, by_payload["B"], False))
+    assert PUSHED == ["A"] and next(e["data"] for e in ev3 if e["event"] == "done")["status"] == "OK"

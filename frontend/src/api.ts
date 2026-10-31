@@ -1,4 +1,11 @@
-import type { Citation, ConversationDetail, ConversationSummary, DoneEvent } from "./types";
+import type {
+  Citation,
+  ConfirmRequest,
+  ConversationDetail,
+  ConversationSummary,
+  DoneEvent,
+  ResultFile,
+} from "./types";
 
 async function json<T>(r: Response): Promise<T> {
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
@@ -11,20 +18,44 @@ export const listConversations = (userId: string) =>
 export const getConversation = (id: string) =>
   fetch(`/conversations/${encodeURIComponent(id)}`).then((r) => json<ConversationDetail>(r));
 
+export function uploadFile(conversationId: string, userId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const url = `/conversations/${encodeURIComponent(conversationId)}/files?user_id=${encodeURIComponent(userId)}`;
+  return fetch(url, { method: "POST", body: form }).then((r) => json<{ name: string; size: number }>(r));
+}
+
 export interface ChatHandlers {
   onStatus?: (step: string, data: Record<string, unknown>) => void;
   onToken?: (text: string) => void;
   onCitations?: (c: Citation[]) => void;
+  onToolStart?: (d: { tool: string; args_preview?: string }) => void;
+  onToolEnd?: (d: { tool: string; ok: boolean; summary: string }) => void;
+  onFile?: (f: ResultFile) => void;
+  onConfirm?: (c: ConfirmRequest) => void;
   onDone?: (d: DoneEvent) => void;
 }
 
-/** POST /chat rồi đọc SSE (status · token · citations · done · error). */
-export async function streamChat(
-  body: { user_id: string; question: string; conversation_id?: string | null },
+/** POST /chat rồi đọc SSE. */
+export function streamChat(
+  body: { user_id: string; question: string; conversation_id?: string | null; attachments?: string[] },
   h: ChatHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const r = await fetch("/chat", {
+  return postSse("/chat", body, h, signal);
+}
+
+/** POST /chat/confirm: đồng ý / từ chối tool write, đọc tiếp SSE của lượt. */
+export function confirmChat(
+  body: { conversation_id: string; user_id: string; confirm_id: string; approve: boolean },
+  h: ChatHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  return postSse("/chat/confirm", body, h, signal);
+}
+
+async function postSse(url: string, body: unknown, h: ChatHandlers, signal?: AbortSignal): Promise<void> {
+  const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify(body),
@@ -66,6 +97,18 @@ function dispatch(block: string, h: ChatHandlers) {
     }
     case "citations":
       h.onCitations?.(JSON.parse(raw));
+      break;
+    case "tool_start":
+      h.onToolStart?.(JSON.parse(raw));
+      break;
+    case "tool_end":
+      h.onToolEnd?.(JSON.parse(raw));
+      break;
+    case "file":
+      h.onFile?.(JSON.parse(raw));
+      break;
+    case "confirm_required":
+      h.onConfirm?.(JSON.parse(raw));
       break;
     case "done":
       h.onDone?.(JSON.parse(raw));

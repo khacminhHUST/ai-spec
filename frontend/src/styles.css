@@ -350,3 +350,135 @@ textarea {
     display: none;
   }
 }
+
+.composer-wrap {
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.composer-wrap .composer {
+  border-top: 0;
+}
+
+.composer-wrap > .attachments {
+  padding: 10px max(24px, calc((100% - 860px) / 2)) 0;
+}
+
+.composer button.attach {
+  padding: 0 12px;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.msg.user .attachments {
+  margin-top: 6px;
+}
+
+.chip-x {
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tools {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tools li {
+  padding: 1px 0;
+  overflow-wrap: anywhere;
+}
+
+.tool-mark {
+  display: inline-block;
+  width: 16px;
+}
+
+.tools li.ok .tool-mark {
+  color: #1a7f4b;
+}
+
+.tools li.fail .tool-mark {
+  color: var(--err-fg);
+}
+
+.confirm {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warn-fg);
+  border-radius: 8px;
+  background: var(--warn-bg);
+}
+
+.confirm-title {
+  font-weight: 600;
+}
+
+.confirm pre {
+  margin: 8px 0;
+  max-height: 200px;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.confirm-actions button {
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.confirm-actions button.secondary {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.file {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.file:hover {
+  background: var(--user-bg);
+}
+
+.file-size {
+  color: var(--muted);
+  font-size: 12px;
+}

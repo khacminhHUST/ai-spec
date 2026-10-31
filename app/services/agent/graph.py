@@ -77,8 +77,15 @@ def build_assistant_graph(deps: Deps, runtime: AgentRuntime, checkpointer: Any =
         return {k: values.get(k) for k in ("messages", "active_projects", "status", "answer", "citations")}
 
     def agent_prepare_node(state: AssistantState) -> dict:
-        """Tách khỏi node agent: chụp danh sách file đúng 1 lần, không chụp lại khi resume sau xác nhận."""
+        """Tách khỏi node agent: chụp danh sách file đúng 1 lần, không chụp lại khi resume sau xác nhận.
+        Ghi hội thoại ngay từ đây để giữ quyền sở hữu trong lúc chờ xác nhận tool write."""
         emit("status", {"step": "agent"})
+        msgs = state.get("messages") or []
+        try:
+            deps.repo.upsert_conversation(state["conversation_id"], state["user_id"],
+                                          msgs[0]["content"] if msgs else state["question"])
+        except Exception as e:  # noqa: BLE001
+            log.error("save conversation lỗi: %s", e)
         try:
             return {"output_before": output_snapshot(manager, state["conversation_id"])}
         except Exception as e:  # noqa: BLE001
