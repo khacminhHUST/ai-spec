@@ -6,7 +6,7 @@ import json
 
 import pytest
 from langchain.tools import tool
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.services.agent.config import agent_cfg
@@ -71,7 +71,8 @@ def _agent(mock_settings, script, *, cfg_over=None, checkpointer=None, clock=Non
     return agent, model, boxes
 
 
-def _run(agent, question="Yêu cầu", ctx: AgentContext = CTX, thread="t1"):
+def _run(agent, question="Yêu cầu", ctx: AgentContext | None = None, thread="t1"):
+    ctx = ctx or AgentContext(CTX.user_id, CTX.conversation_id)
     return agent.invoke(agent_input(ctx, question), {"configurable": {"thread_id": thread}}, context=ctx)
 
 
@@ -94,6 +95,16 @@ def test_scripted_sequence_runs_in_order_and_stops(mock_settings):
     skill_msg = json.loads(st["messages"][4].content)
     assert skill_msg["ok"] and "mep_helpers" in skill_msg["content"]
     assert "xlsx-export" in str(model.calls[0][0].content)        # system prompt liệt kê skill
+
+
+def test_parallel_searches_get_unique_numbers(mock_settings):
+    q = "Bán kính uốn cáp > 25mm2?"
+    calls = [{"name": "search_project_docs", "args": {"question": q}, "id": f"c{i}"} for i in range(3)]
+    agent, _, _ = _agent(mock_settings, [AIMessage("", tool_calls=calls), "Xong [1]."])
+    st = _run(agent)
+    ns = [s["n"] for s in st["sources"]]
+    assert len(ns) > 3 and sorted(ns) == list(range(1, len(ns) + 1))
+    assert st["active_projects"] == [S5]
 
 
 def test_max_steps_stops_with_message(mock_settings):

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from langchain.tools import ToolRuntime, tool
@@ -98,9 +99,17 @@ class SearchDocs:
         self.deps = deps
         self.saver = InMemorySaver()
         self.graph = build_graph(deps, self.saver)
+        self.pool = ThreadPoolExecutor(thread_name_prefix="agent-search")
 
     def run(self, ctx: AgentContext, question: str, active_projects: list[str], project_mentions=None,
             disciplines=None, streams=None) -> dict[str, Any]:
+        """Chạy ở thread riêng (không kế thừa contextvars): tách khỏi config/stream của graph ngoài, để interrupt
+        của N1–N6 không lan ra vòng lặp agent và sự kiện status/token không rò ra SSE."""
+        return self.pool.submit(self._run, ctx, question, active_projects, project_mentions, disciplines,
+                                streams).result()
+
+    def _run(self, ctx: AgentContext, question: str, active_projects: list[str], project_mentions=None,
+             disciplines=None, streams=None) -> dict[str, Any]:
         tid = f"agent-search-{uuid.uuid4().hex}"
         cfg = {"configurable": {"thread_id": tid}, "recursion_limit": 50}
         inp = {"user_id": ctx.user_id, "question": question, "messages": list(ctx.history),
@@ -133,10 +142,10 @@ def search_impl(search: SearchDocs, manager: SandboxManager, agent_cfg: dict[str
     if status == "ASK_CLARIFY":
         return ok(status=status, message=st.get("answer") or "", clarify_options=st.get("clarify_options") or []
                   ), [], active
-    start = len(state.get("sources") or [])
     context = (st.get("context") or []) if status != "NOT_FOUND" else []
-    blocks = [_block(b, start + i + 1, profiles) for i, b in enumerate(context)]
-    cites = [_citation(b, start + i + 1) for i, b in enumerate(context)]
+    first = ctx.allocate_sources(len(context), len(state.get("sources") or []))
+    blocks = [_block(b, first + i, profiles) for i, b in enumerate(context)]
+    cites = [_citation(b, first + i) for i, b in enumerate(context)]
     payload = {"status": "NOT_FOUND" if not blocks else status,
                "question": (st.get("router") or {}).get("rewritten_question") or question,
                "projects": [p.get("name", pid) for pid, p in profiles.items()], "blocks": blocks, "citations": cites}

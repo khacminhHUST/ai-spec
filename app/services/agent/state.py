@@ -5,6 +5,7 @@ HarnessState: state vòng lặp agent (namespace riêng, không đẩy vào `mes
 """
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import Annotated, Any
 
@@ -20,6 +21,18 @@ class AgentContext:
     conversation_id: str
     active_projects: list[str] = field(default_factory=list)   # đầu lượt (dùng chung với lookup)
     history: list[dict] = field(default_factory=list)           # `messages` hợp nhất trước lượt này (định dạng lookup)
+    next_source_n: int = 1                                      # số [n] kế tiếp trong lượt (tool chạy song song)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+    def allocate_sources(self, count: int, existing: int) -> int:
+        """Cấp `count` số [n] liên tiếp, không trùng kể cả khi nhiều tool chạy song song. → số đầu tiên.
+
+        existing = số nguồn đã có trong state (sau khi resume, context được tạo lại nhưng state vẫn giữ nguồn cũ).
+        """
+        with self._lock:
+            first = max(self.next_source_n, existing + 1)
+            self.next_source_n = first + count
+            return first
 
 
 def runtime_context(runtime: Any) -> AgentContext:
@@ -40,9 +53,14 @@ def add_sources(left: list[dict] | None, right: list[dict] | None) -> list[dict]
     return [*(left or []), *right]
 
 
+def last_value(left: Any, right: Any) -> Any:
+    """Reducer lấy giá trị sau cùng (nhiều tool song song cùng cập nhật không bị lỗi)."""
+    return right
+
+
 class HarnessState(AgentState):
     sources: NotRequired[Annotated[list[dict], add_sources]]     # citation của mọi search trong lượt
-    active_projects: NotRequired[list[str]]
+    active_projects: NotRequired[Annotated[list[str], last_value]]
     step_count: NotRequired[Annotated[int, PrivateStateAttr]]
     started_at: NotRequired[Annotated[float, PrivateStateAttr]]
     stop_reason: NotRequired[str | None]

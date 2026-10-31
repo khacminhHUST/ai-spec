@@ -7,6 +7,7 @@ execute… trùng tên, khác ngữ nghĩa với tool sandbox của spec) và t�
 """
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Callable
 
@@ -14,29 +15,32 @@ from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
 from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.core.config import Settings, get_settings
 from app.prompts import render
+from app.providers.llm import MockChatModel
 from app.services.agent.loop.confirm import ConfirmMiddleware
 from app.services.agent.loop.context import ToolGuardMiddleware, approx_tokens
 from app.services.agent.loop.limits import LimitsMiddleware
 from app.services.agent.sandbox import OUTPUT_DIR, SandboxManager
 from app.services.agent.skills import Skill, skills_prompt
 from app.services.agent.state import AgentContext, HarnessState, history_to_messages
+from app.services.agent.tools.base import clip
 from app.services.agent.tools.registry import ToolSet
 from app.services.query.generator import cited_numbers
 
 FALLBACK_CITATIONS = 5
+SSE_PREVIEW_CHARS = 200
+RECURSION_PER_STEP = 8      # số node LangGraph tối đa cho 1 bước (model + middleware + tools)
+NO_ANSWER = "Tôi chưa tạo được câu trả lời. Vui lòng thử lại hoặc nói rõ hơn yêu cầu."
 
 
 def get_agent_model(cfg: dict[str, Any], settings: Settings | None = None) -> BaseChatModel:
     """cfg = agent.yaml › agent. Provider thiếu key / bị mock → MockChatModel."""
     s = settings or get_settings()
     if s.is_mock(cfg["provider"]):
-        from app.providers.llm import MockChatModel
-
-        return MockChatModel()
+        return _MockAgentModel()
     from langchain.chat_models import init_chat_model
 
     return init_chat_model(cfg["model"], model_provider=cfg["provider"], api_key=s.api_key(cfg["provider"]),
@@ -65,6 +69,13 @@ def build_agent(model: BaseChatModel, toolset: ToolSet, skills: dict[str, Skill]
                         name="agent")
 
 
+class _MockAgentModel(MockChatModel):
+    """Mock không gọi tool (provider bị mock / thiếu key)."""
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+
 # ------------------------------------------------------------------ vào / ra
 
 def agent_input(ctx: AgentContext, question: str, attachments: list[str] | None = None) -> dict[str, Any]:
@@ -73,6 +84,52 @@ def agent_input(ctx: AgentContext, question: str, attachments: list[str] | None 
         text += "\n\n[File đính kèm: " + ", ".join(f"/workspace/input/{a}" for a in attachments) + "]"
     return {"messages": [*history_to_messages(ctx.history), HumanMessage(text)],
             "active_projects": list(ctx.active_projects)}
+
+
+def tool_summary(content: Any) -> tuple[bool, str]:
+    """ToolMessage.content → (ok, tóm tắt ngắn cho SSE tool_end)."""
+    text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False, default=str)
+    try:
+        obj = json.loads(text)
+    except ValueError:
+        return True, clip(text, SSE_PREVIEW_CHARS)
+    if not isinstance(obj, dict):
+        return True, clip(text, SSE_PREVIEW_CHARS)
+    success = obj.get("ok") is not False
+    if not success:
+        return False, clip(str(obj.get("error") or "lỗi"), SSE_PREVIEW_CHARS)
+    if "status" in obj:
+        return True, f"{obj['status']}: {len(obj.get('blocks') or [])} mục"
+    if obj.get("new_files"):
+        return True, "file: " + ", ".join(f["path"] for f in obj["new_files"])
+    return True, "xong"
+
+
+def stream_agent(agent: Any, ctx: AgentContext, question: str, attachments: list[str] | None, max_steps: int,
+                 emit: Callable[[str, Any], None]) -> dict[str, Any]:
+    """Chạy vòng lặp trong node của assistant graph, phát tool_start / tool_end. → state cuối.
+
+    Khi resume sau xác nhận, LangGraph bỏ qua input và chạy tiếp từ checkpoint của namespace con.
+    Interrupt (tool write) lan ra assistant graph dưới dạng GraphInterrupt.
+    """
+    final: dict[str, Any] = {}
+    config = {"recursion_limit": max_steps * RECURSION_PER_STEP + 20}
+    for mode, chunk in agent.stream(agent_input(ctx, question, attachments), config, context=ctx,
+                                    stream_mode=["updates", "values"]):
+        if mode == "values":
+            final = chunk
+            continue
+        for update in chunk.values():
+            for item in update if isinstance(update, list) else [update]:
+                for m in (item or {}).get("messages") or [] if isinstance(item, dict) else []:
+                    if isinstance(m, AIMessage):
+                        for c in m.tool_calls:
+                            preview = json.dumps(c.get("args") or {}, ensure_ascii=False, default=str)
+                            emit("tool_start", {"tool": c["name"], "args_preview": clip(preview, SSE_PREVIEW_CHARS)})
+                    elif isinstance(m, ToolMessage):
+                        success, summary = tool_summary(m.content)
+                        emit("tool_end", {"tool": m.name, "ok": success, "summary": summary})
+    return final
 
 
 def final_answer(messages: list) -> str:
@@ -101,7 +158,7 @@ def answer_citations(answer: str, sources: list[dict]) -> list[dict]:
 
 def agent_result(state: dict[str, Any]) -> dict[str, Any]:
     msgs = state.get("messages") or []
-    answer = final_answer(msgs)
+    answer = final_answer(msgs) or NO_ANSWER
     return {"answer": answer, "citations": answer_citations(answer, state.get("sources") or []),
             "active_projects": list(state.get("active_projects") or []), "stop_reason": state.get("stop_reason")}
 

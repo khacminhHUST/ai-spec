@@ -60,7 +60,8 @@ def tool_call(tool_name: str, call_id: str | None = None, **args: Any) -> AIMess
                                       "id": call_id or f"call_{tool_name}_{uuid.uuid4().hex[:6]}"}])
 
 
-def call_cmd(tool, ctx: AgentContext = CTX, state: dict | None = None, **args: Any):
+def call_cmd(tool, ctx: AgentContext | None = None, state: dict | None = None, **args: Any):
     """Tool trả Command (VD search_project_docs) → (dict JSON của ToolMessage, Command.update)."""
+    ctx = ctx or AgentContext(user_id=CTX.user_id, conversation_id=CTX.conversation_id)
     cmd = tool.invoke({**args, "runtime": runtime(ctx, state)})
     return json.loads(cmd.update["messages"][0].content), cmd.update
