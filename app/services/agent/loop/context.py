@@ -48,8 +48,9 @@ def fit_or_offload(manager: SandboxManager, conversation_id: str, prefix: str, p
     path = offload_json(manager, conversation_id, prefix, payload)
     short = summarize(payload)
     short["full_result_file"] = path
-    short["note"] = (f"Kết quả đầy đủ quá dài nên đã ghi vào /workspace/{path}. Đọc bằng read_file (đọc tiếp bằng "
-                     f"offset) hoặc json.load trong run_code để lấy đủ số liệu.")
+    short["note"] = (f"Khối có truncated=true bị CẮT bớt nội dung; bản đầy đủ ở /workspace/{path}. Đọc bằng read_file "
+                     f"(đọc tiếp bằng offset) hoặc json.load trong run_code để lấy đủ số liệu, KHÔNG kết luận thiếu "
+                     f"khi chưa đọc file.")
     return short, path
 
 

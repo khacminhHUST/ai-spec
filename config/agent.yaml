@@ -11,10 +11,12 @@ agent:
   provider: google_genai
   model: gemini-3.8-flash   # nâng model nếu tỉ lệ code lỗi cao
   temperature: 0.1
+  thinking_level: low       # mỗi bước nhanh hơn; nâng nếu tỉ lệ code lỗi cao
   max_steps: 25
   max_consecutive_tool_errors: 3
   max_wall_time_s: 300
   tool_result_max_tokens: 4000
+  sibling_tables_max: 20    # search_project_docs nạp kèm tối đa N bảng table_A_B_* của mục sec_A_B đã trúng
   summarize_above_tokens: 60000
 sandbox:
   backend: docker           # docker | mock

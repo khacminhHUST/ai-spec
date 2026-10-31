@@ -107,6 +107,17 @@ def test_parallel_searches_get_unique_numbers(mock_settings):
     assert st["active_projects"] == [S5]
 
 
+def test_answer_without_citation_has_no_sources(mock_settings):
+    script = [tool_call("search_project_docs", question="Bán kính uốn cáp > 25mm2?"), "Không có trong tài liệu dự án."]
+    agent, _, _ = _agent(mock_settings, script)
+    assert agent_result(_run(agent))["citations"] == []
+
+
+def test_final_answer_strips_copied_files_note(mock_settings):
+    agent, _, _ = _agent(mock_settings, ["Đã sửa file.\n\n[File đã tạo: output/a_v2.xlsx]"])
+    assert agent_result(_run(agent))["answer"] == "Đã sửa file."
+
+
 def test_max_steps_stops_with_message(mock_settings):
     agent, model, _ = _agent(mock_settings, [tool_call("list_files")], cfg_over={"max_steps": 3})
     res = agent_result(_run(agent))

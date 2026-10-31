@@ -6,6 +6,7 @@ Báo cáo: artifacts/agent_e2e_report.json.
 import io
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -14,7 +15,6 @@ from pathlib import Path
 import pytest
 import yaml
 from docx import Document
-from langgraph.checkpoint.memory import InMemorySaver
 from openpyxl import Workbook, load_workbook
 
 from app.services.agent.config import agent_cfg
@@ -24,6 +24,8 @@ from app.services.agent.mcp import load_mcp_tools
 from app.services.agent.runtime import build_runtime
 from app.services.agent.sandbox import INPUT_DIR, OUTPUT_DIR
 from app.services.query.deps import Deps
+from app.services.query.graph import postgres_checkpointer
+from tests.query.test_q_golden import values_found
 
 pytestmark = pytest.mark.e2e
 
@@ -93,8 +95,9 @@ def docx_text(doc) -> str:
     return "\n".join([p.text for p in doc.paragraphs] + [c.text for t in doc.tables for r in t.rows for c in r.cells])
 
 
-GYM = ("gym", "health club", "phòng tập", "tập thể")
-BEDROOM = ("phòng ngủ", "guest room", "bedroom")
+GYM = ("gym", "health club", "phòng tập", "tập thể", "sức khỏe")
+LOUNGE = ("lounge", "phòng chờ")
+BEDROOM = ("phòng ngủ", "guest", "bedroom", "phòng khách sạn")
 
 
 def check_a1(out, sbx):
@@ -107,9 +110,11 @@ def check_a1(out, sbx):
     src_col = next((i for i, h in enumerate(head) if "nguồn" in h), None)
     body = list(wb.worksheets[0].iter_rows(min_row=2, values_only=True))
     gym = next((r for r in body if any(k in norm(c) for c in r for k in GYM)), None)
-    return {"file": True, "bedroom_2.5_0.3": has_row(rows, BEDROOM, 2.5, 0.3), "gym_3.8_0.9": has_row(rows, GYM, 3.8, 0.9),
-            "source_column": src_col is not None and gym is not None and "thuyết minh" in norm(gym[src_col])
-            or (src_col is not None and gym is not None and bool(gym[src_col]))}
+    src = norm(gym[src_col]) if src_col is not None and gym is not None else ""
+    return {"file": True, "bedroom_2.5_0.3": has_row(rows, BEDROOM, 2.5, 0.3), "gym_10_0.3": has_row(rows, GYM, 10, 0.3),
+            "lounge_3.8_0.9": has_row(rows, LOUNGE, 3.8, 0.9),
+            "nguon_dung_tai_lieu_trang": any(k in src for k in ("thiết kế cơ sở", "thuyết minh", "design report"))
+            and bool(re.search(r"\b1[01]\b", src))}
 
 
 def check_a2(out, sbx):
@@ -144,8 +149,9 @@ def check_a4(out, sbx):
     _, rows = xlsx_rows(data)
     text = norm(" ".join(str(c) for r in rows for c in r if c is not None))
     return {"file": True, "nhieu_lan_search": out["tools"].count("search_project_docs") >= 2,
-            "nguon_thuyet_minh": "thuyết minh" in text, "nguon_westin": "westin" in text,
-            "co_so_lieu_tm": has_row(rows, BEDROOM, 2.5) or has_row(rows, GYM, 3.8)}
+            "nguon_thuyet_minh": "thuyết minh" in text or "thiết kế cơ sở" in text, "nguon_westin": "westin" in text,
+            # số liệu Thuyết minh có thể ở dạng số hoặc chuỗi kèm đơn vị ("10 L/s.người + 0.3 L/s/m²")
+            "co_so_lieu_tm": has_row(rows, GYM, 10) or "10 l/s.người" in text or "10 l/s.person" in text}
 
 
 def check_a5(out, sbx):
@@ -176,7 +182,8 @@ def check_a8(out, sbx):
             colors = {str(c.fill.fgColor.rgb).upper() for c in row if c.fill and c.fill.fill_type == "solid"}
             yellow = yellow or any(x.endswith("FFFF00") for x in colors)
     return {"file": True, "cot_ghi_chu": "ghi chú" in head, "to_vang_gym": yellow,
-            "giu_du_lieu": has_row(rows, BEDROOM, 2.5, 0.3) and has_row(rows, GYM, 3.8, 0.9)}
+            "giu_du_lieu": has_row(rows, BEDROOM, 2.5, 0.3) and has_row(rows, GYM, 10, 0.3)
+            and has_row(rows, LOUNGE, 3.8, 0.9)}
 
 
 CHECKS = {"A1": check_a1, "A2": check_a2, "A3": check_a3, "A4": check_a4, "A5": check_a5, "A6": check_a6, "A8": check_a8}
@@ -209,8 +216,8 @@ def harness(settings, tmp_path_factory):
         "transport": "stdio", "command": sys.executable, "args": [ECHO_SERVER], "env": {"MCP_ECHO_LOG": str(log)},
         "access": "read", "tools": {"create_issue": {"access": "write"}}}}})
     rt = build_runtime(deps, mcp_tools=mcp)
-    graph = build_assistant_graph(deps, rt, InMemorySaver())
-    yield graph, rt, deps, log
+    with postgres_checkpointer(s) as cp:      # checkpointer thật như production
+        yield build_assistant_graph(deps, rt, cp), rt, deps, log
     rt.manager.close_all()
 
 
@@ -236,6 +243,29 @@ def test_gate_accuracy(harness):
     acc = 1 - len(wrong) / len(cases)
     print(json.dumps({"gate_accuracy": acc, "n": len(cases), "wrong": wrong}, ensure_ascii=False))
     assert acc >= 0.95, wrong
+
+
+def test_golden_through_assistant(harness):
+    """Bộ câu hỏi vàng đi qua Gate: đúng tuyến lookup, giữ điểm giá trị, TTFT (điểm retrieval: tests/e2e/test_golden_e2e.py)."""
+    graph, _, _, _ = harness
+    rows = []
+    for q in GOLDEN["questions"]:
+        cid, last = None, None
+        for t in q.get("turns") or [{"question": q["question"], "expected_values": q["expected_values"]}]:
+            last = _turn(graph, t["question"], cid)
+            cid = last["conversation_id"]
+            rows.append({"id": q["id"], "route": last["route"], "ttft": last["ttft"], "tools": last["tools"]})
+        rows[-1].update(status=last["status"], expected=q["expected_status"],
+                        values=values_found(last["answer"], t["expected_values"]))
+    final = [r for r in rows if "status" in r]
+    with_values = [r for r in final if r["values"]]
+    values_rate = sum(all(r["values"]) for r in with_values) / len(with_values)
+    ttfts = [r["ttft"] for r in rows if r["ttft"]]
+    summary = {"lookup_rate": sum(r["route"] == "lookup" for r in rows) / len(rows), "values_rate": values_rate,
+               "status_ok": sum(r["status"] == r["expected"] for r in final) / len(final),
+               "ttft_p50": statistics.median(ttfts)}
+    print(json.dumps(summary, ensure_ascii=False), [r for r in final if not r["values"] or not all(r["values"])])
+    assert summary["lookup_rate"] >= 0.95 and values_rate >= 0.85 and summary["ttft_p50"] < 10
 
 
 def test_scenarios(harness):

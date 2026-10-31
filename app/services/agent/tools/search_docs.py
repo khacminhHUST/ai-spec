@@ -8,6 +8,7 @@ Mỗi khối context được đánh số toàn cục trong lượt agent (state
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -40,6 +41,8 @@ Trả về JSON: status (OK | PARTIAL | NOT_FOUND | ASK_CLARIFY), blocks (n, doc
 - Kết quả dài → full_result_file (JSON trong /workspace/input) để đọc đủ số liệu."""
 
 SUMMARY_BLOCK_CHARS = 400
+SUMMARY_TABLE_CHARS = 1500     # bảng ngắn giữ nguyên trong bản tóm tắt
+_SECTION_RE = re.compile(r"^(?P<scope>.*__)?sec_(?P<num>\d+_\d+)$")
 
 
 def apply_hints(router: dict[str, Any], project_mentions: list[str] | None, disciplines: list[str] | None,
@@ -55,6 +58,41 @@ def apply_hints(router: dict[str, Any], project_mentions: list[str] | None, disc
     if streams:
         r["streams"] = streams
     return RouterOutput(**r).model_dump()
+
+
+def expand_sibling_tables(deps: Deps, context: list[dict[str, Any]], max_tables: int) -> list[dict[str, Any]]:
+    """Nạp kèm bảng của mục đã trúng (sec_5_7 → table_5_7_1, table_5_7_2…), đặt ngay sau khối mục.
+
+    Bảng tách thành khối riêng có thể không có hàng tiêu đề (chữ mô tả nằm ở khối mục) nên tìm theo nội dung không
+    trúng, trong khi khối mục chỉ còn đầu mục "…:" không số liệu → agent dễ kết luận sai là "không có trong tài liệu".
+    """
+    wanted: dict[tuple[str, str], tuple[dict[str, Any], str]] = {}
+    for b in context:
+        m = _SECTION_RE.match(b["section_key"])
+        if m and not b.get("is_reference"):
+            for i in range(1, max_tables + 1):
+                wanted.setdefault((b["doc_id"], f"{m['scope'] or ''}table_{m['num']}_{i}"), (b, f"table_{m['num']}_{i}"))
+    loaded = {(b["doc_id"], b["section_key"]) for b in context}
+    missing = {k: v for k, v in wanted.items() if k not in loaded}
+    if not missing:
+        return context
+    rows = deps.repo.find_sections(sorted({d for d, _ in missing}), sorted({ref for _, ref in missing.values()}))
+    tables: dict[tuple[str, str], dict[str, Any]] = {}
+    for r in rows:
+        key = (r["doc_id"], r["section_key"])
+        if key in missing:
+            parent = missing[key][0]
+            t = tables.setdefault(key, {
+                **{k: parent.get(k) for k in ("project_id", "stream", "priority", "doc_id", "doc_title", "revision")},
+                "section_key": r["section_key"], "number": r.get("number"), "title": r.get("title"),
+                "page_start": r.get("page_start"), "page_end": r.get("page_end"), "is_reference": True,
+                "referenced_by": parent["section_key"]})
+            t[r["lang"]] = r["content_md"]
+    out: list[dict[str, Any]] = []
+    for b in context:
+        out.append(b)
+        out += [t for k, t in sorted(tables.items()) if t["referenced_by"] == b["section_key"] and k[0] == b["doc_id"]]
+    return out
 
 
 def _pages(b: dict[str, Any]) -> str:
@@ -84,11 +122,21 @@ def _citation(b: dict[str, Any], n: int) -> dict[str, Any]:
                     lang=[lang for lang in ("vi", "en") if b.get(lang)]).model_dump()
 
 
+def _summary_block(b: dict[str, Any]) -> dict[str, Any]:
+    short = {k: v for k, v in b.items() if k not in ("vi", "en")}
+    for lang in ("vi", "en"):
+        text = b.get(lang)
+        if text:
+            limit = SUMMARY_TABLE_CHARS if text.lstrip().startswith("|") else SUMMARY_BLOCK_CHARS
+            short[lang] = clip(text, limit)
+            if len(text) > limit:
+                short["truncated"] = True
+    return short
+
+
 def _summarize(payload: dict[str, Any]) -> dict[str, Any]:
     short = {k: v for k, v in payload.items() if k not in ("blocks", "citations")}
-    short["blocks"] = [{**{k: v for k, v in b.items() if k not in ("vi", "en")},
-                        **{lang: clip(b[lang], SUMMARY_BLOCK_CHARS) for lang in ("vi", "en") if b.get(lang)}}
-                       for b in payload.get("blocks", [])]
+    short["blocks"] = [_summary_block(b) for b in payload.get("blocks", [])]
     return short
 
 
@@ -143,6 +191,10 @@ def search_impl(search: SearchDocs, manager: SandboxManager, agent_cfg: dict[str
         return ok(status=status, message=st.get("answer") or "", clarify_options=st.get("clarify_options") or []
                   ), [], active
     context = (st.get("context") or []) if status != "NOT_FOUND" else []
+    try:
+        context = expand_sibling_tables(search.deps, context, int(agent_cfg.get("sibling_tables_max", 0)))
+    except Exception as e:  # noqa: BLE001 – phần bổ sung: lỗi thì vẫn trả kết quả chính
+        log.warning("nạp bảng của mục lỗi: %s", e)
     first = ctx.allocate_sources(len(context), len(state.get("sources") or []))
     blocks = [_block(b, first + i, profiles) for i, b in enumerate(context)]
     cites = [_citation(b, first + i) for i, b in enumerate(context)]

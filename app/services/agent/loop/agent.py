@@ -25,12 +25,11 @@ from app.services.agent.loop.context import ToolGuardMiddleware, approx_tokens
 from app.services.agent.loop.limits import LimitsMiddleware
 from app.services.agent.sandbox import OUTPUT_DIR, SandboxManager
 from app.services.agent.skills import Skill, skills_prompt
-from app.services.agent.state import AgentContext, HarnessState, history_to_messages
+from app.services.agent.state import AgentContext, HarnessState, history_to_messages, strip_files_note
 from app.services.agent.tools.base import clip
 from app.services.agent.tools.registry import ToolSet
 from app.services.query.generator import cited_numbers
 
-FALLBACK_CITATIONS = 5
 SSE_PREVIEW_CHARS = 200
 RECURSION_PER_STEP = 8      # số node LangGraph tối đa cho 1 bước (model + middleware + tools)
 NO_ANSWER = "Tôi chưa tạo được câu trả lời. Vui lòng thử lại hoặc nói rõ hơn yêu cầu."
@@ -43,8 +42,11 @@ def get_agent_model(cfg: dict[str, Any], settings: Settings | None = None) -> Ba
         return _MockAgentModel()
     from langchain.chat_models import init_chat_model
 
+    kwargs: dict[str, Any] = {}
+    if cfg["provider"] == "google_genai" and cfg.get("thinking_level"):
+        kwargs["thinking_config"] = {"thinking_level": cfg["thinking_level"]}
     return init_chat_model(cfg["model"], model_provider=cfg["provider"], api_key=s.api_key(cfg["provider"]),
-                           temperature=float(cfg.get("temperature", 0.1)))
+                           temperature=float(cfg.get("temperature", 0.1)), **kwargs)
 
 
 def system_prompt(skills: dict[str, Skill]) -> str:
@@ -133,27 +135,17 @@ def stream_agent(agent: Any, ctx: AgentContext, question: str, attachments: list
 
 
 def final_answer(messages: list) -> str:
+    """Text cuối của agent (bỏ ghi chú file nội bộ nếu LLM chép lại từ lịch sử – file đã có sự kiện riêng)."""
     for m in reversed(messages):
         if isinstance(m, AIMessage) and not m.tool_calls:
-            return m.text.strip()
+            return strip_files_note(m.text).strip()
     return ""
 
 
 def answer_citations(answer: str, sources: list[dict]) -> list[dict]:
-    """Nguồn được trích [n] trong câu trả lời; không trích → các nguồn đã dùng (khử trùng, tối đa 5)."""
-    if not sources:
-        return []
+    """Chỉ nguồn được trích [n] trong câu trả lời (không tự gắn: câu trả lời "không có trong tài liệu" không có nguồn)."""
     by_n = {s["n"]: s for s in sources}
-    ns = cited_numbers(answer, sources)
-    if ns:
-        return [by_n[n] for n in ns]
-    seen, out = set(), []
-    for s in sources:
-        key = (s["doc_id"], s["section_key"])
-        if key not in seen:
-            seen.add(key)
-            out.append(s)
-    return out[:FALLBACK_CITATIONS]
+    return [by_n[n] for n in cited_numbers(answer, sources)]
 
 
 def agent_result(state: dict[str, Any]) -> dict[str, Any]:

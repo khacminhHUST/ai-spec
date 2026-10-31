@@ -5,6 +5,7 @@ HarnessState: state vòng lặp agent (namespace riêng, không đẩy vào `mes
 """
 from __future__ import annotations
 
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import Annotated, Any
@@ -68,8 +69,15 @@ class HarnessState(AgentState):
 
 # ------------------------------------------------------------------ messages lookup ⇄ agent
 
+_FILES_NOTE_RE = re.compile(r"\s*\[File đã tạo:[^\]]*\]")
+
+
 def files_note(files: list[dict]) -> str:
     return "\n[File đã tạo: " + ", ".join(f"output/{f['name']}" for f in files) + "]" if files else ""
+
+
+def strip_files_note(text: str) -> str:
+    return _FILES_NOTE_RE.sub("", text)
 
 
 def history_to_messages(history: list[dict]) -> list[BaseMessage]:

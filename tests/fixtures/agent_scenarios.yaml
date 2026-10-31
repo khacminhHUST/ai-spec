@@ -1,4 +1,6 @@
 # Bộ kịch bản agent (docs/agent-harness.md mục 10). route = tuyến Gate mong đợi. A3 tạo file mẫu trong test.
+# Lưu ý A1/A8: spec ghi "gym 3.8 / 0.9" nhưng PDF Thuyết minh trang 11 (Bảng 4.3): Health club 10 / 0.3, Lounges 3.8 / 0.9
+# (khớp bộ câu hỏi vàng #13) → test kiểm tra theo PDF.
 user_id: test_engineer
 
 scenarios:

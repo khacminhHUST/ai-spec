@@ -7,7 +7,7 @@ from app.services.agent.config import agent_cfg
 from app.services.agent.sandbox import SandboxManager
 from app.services.agent.sandbox.mock_backend import MockSandbox
 from app.services.agent.state import AgentContext
-from app.services.agent.tools.search_docs import SearchDocs, apply_hints, make_search_tool
+from app.services.agent.tools.search_docs import SearchDocs, apply_hints, expand_sibling_tables, make_search_tool
 from tests.agent.fakes import call_cmd
 from tests.query.fakes import S5, S6, InMemoryRepo, make_deps, router_json, scripted_llm
 
@@ -88,7 +88,8 @@ def test_large_result_goes_to_sandbox_file(mock_settings):
     full = json.loads(boxes["conv-1"].get_file(path))
     assert full["blocks"][0]["vi"] and len(full["blocks"]) == len(out["blocks"])
     assert len(json.dumps(out, ensure_ascii=False)) < len(json.dumps(full, ensure_ascii=False))
-    assert all(len(b.get("vi", "")) <= 450 for b in out["blocks"])
+    assert all(len(b.get("vi", "")) <= 1550 for b in out["blocks"])
+    assert any(b.get("truncated") for b in out["blocks"])
     assert len(upd["sources"]) == len(full["citations"])
 
 
@@ -97,6 +98,52 @@ def test_not_found_has_no_blocks(mock_settings):
     out, upd = call_cmd(tool, question="Giá trị hợp đồng gói thầu cơ điện?")
     assert out["status"] == "NOT_FOUND" and out["blocks"] == [] and "không được tự điền" in out["message"]
     assert upd["sources"] == []
+
+
+class _TableRepo:
+    def __init__(self, rows):
+        self.rows = rows
+        self.calls = []
+
+    def find_sections(self, doc_ids, refs):
+        self.calls.append(refs)
+        return [r for r in self.rows if r["doc_id"] in doc_ids]
+
+
+def _sec(key, **kw):
+    return {"doc_id": "d1", "section_key": key, "doc_title": "Spec", "revision": "00", "stream": "DESIGN_CONSULTANT",
+            "project_id": S5, "priority": 2, "vi": "Tiết diện tối thiểu:", **kw}
+
+
+def _row(key, lang="vi", text="| Chiếu sáng | 1.5mm2 |", doc="d1"):
+    return {"doc_id": doc, "section_key": key, "lang": lang, "content_md": text, "page_start": 22, "page_end": 22}
+
+
+def test_sibling_tables_are_added_after_section():
+    from types import SimpleNamespace
+
+    rows = [_row("table_5_7_2"), _row("table_5_7_2", "en", "| Lighting | 1.5mm2 |"), _row("table_5_7_1"),
+            _row("table_9_9_1"), _row("part_x__table_5_7_2")]
+    deps = SimpleNamespace(repo=_TableRepo(rows))
+    ctx = [_sec("sec_5_7"), _sec("sec_4_2")]
+    out = expand_sibling_tables(deps, ctx, 3)
+    assert [b["section_key"] for b in out] == ["sec_5_7", "table_5_7_1", "table_5_7_2", "sec_4_2"]
+    t = out[2]
+    assert t["vi"] == "| Chiếu sáng | 1.5mm2 |" and t["en"] == "| Lighting | 1.5mm2 |"
+    assert t["is_reference"] and t["referenced_by"] == "sec_5_7" and t["doc_title"] == "Spec" and t["page_start"] == 22
+    assert "table_5_7_3" in deps.repo.calls[0]                                  # theo sibling_tables_max
+
+
+def test_sibling_tables_skip_loaded_reference_and_scope():
+    from types import SimpleNamespace
+
+    deps = SimpleNamespace(repo=_TableRepo([_row("table_5_7_1"), _row("part_i__table_5_7_1")]))
+    loaded = [_sec("sec_5_7"), _sec("table_5_7_1")]
+    assert expand_sibling_tables(deps, loaded, 1) == loaded                     # đã có → không gọi DB
+    assert deps.repo.calls == []
+    assert expand_sibling_tables(deps, [_sec("sec_5_7", is_reference=True)], 1)[0]["section_key"] == "sec_5_7"
+    scoped = expand_sibling_tables(deps, [_sec("part_i__sec_5_7")], 1)
+    assert [b["section_key"] for b in scoped] == ["part_i__sec_5_7", "part_i__table_5_7_1"]
 
 
 def test_apply_hints():
