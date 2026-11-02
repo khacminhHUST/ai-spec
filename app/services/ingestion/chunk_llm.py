@@ -14,20 +14,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import ROOT
+from app.prompts import render
 
 log = logging.getLogger(__name__)
 CACHE_DIR = ROOT / "artifacts" / "_cache" / "llm"
 PROMPT_VERSION = "v1"
-
-SYSTEM = (
-    "You split one section of a construction/MEP technical document into retrieval chunks. "
-    "You NEVER rewrite text: you only choose cut positions. Input: numbered units (sentences or paragraphs) with "
-    "their token counts; '¶' marks a unit that starts a new paragraph. Output: ONLY a JSON array of contiguous groups "
-    "covering every unit exactly once, in order: [{\"start\": 1, \"end\": 4, \"topic\": \"...\"}, ...]. "
-    "Rules: each group is one coherent sub-topic; the sum of tokens in a group MUST be <= {max_tokens}; "
-    "prefer groups >= {min_tokens} tokens; never separate a sentence introducing a list/table from its items; "
-    "topic = short label (max 8 words) in the same language as the text."
-)
 
 
 @dataclass
@@ -102,8 +93,8 @@ def _parse_json(text: str):
 
 def build_prompt(units: list[str], unit_tokens: list[int], para_start: list[bool], max_tokens: int, min_tokens: int):
     lines = [f"[{i + 1}] ({unit_tokens[i]} tok) {'¶ ' if para_start[i] else ''}{u.strip()}" for i, u in enumerate(units)]
-    system = SYSTEM.replace("{max_tokens}", str(max_tokens)).replace("{min_tokens}", str(min_tokens))
-    human = f"Units ({len(units)}):\n" + "\n".join(lines) + "\n\nJSON:"
+    system = render("ingestion/chunking_system", max_tokens=max_tokens, min_tokens=min_tokens)
+    human = render("ingestion/chunking_human", count=len(units), units="\n".join(lines))
     return system, human
 
 
