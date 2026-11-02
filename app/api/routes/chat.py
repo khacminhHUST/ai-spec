@@ -1,33 +1,33 @@
-"""POST /chat (SSE): status · token · citations · done (lỗi → error)."""
+"""POST /chat (SSE): route · status · token · tool_start · tool_end · citations · file · confirm_required · done (lỗi → error)."""
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Depends, HTTPException
-from sse_starlette.sse import EventSourceResponse
-from starlette.concurrency import iterate_in_threadpool
 
-from app.api.deps import get_deps, get_graph
+from app.api.deps import check_owner, get_deps, get_graph, get_runtime, sse_response
 from app.models.chat import ChatRequest
+from app.services.agent.graph import stream_assistant_turn
+from app.services.agent.runtime import AgentRuntime
+from app.services.agent.sandbox import INPUT_DIR
 from app.services.query.deps import Deps
-from app.services.query.graph import stream_turn
 
 router = APIRouter(tags=["chat"])
 
 
+def _check_attachments(runtime: AgentRuntime, req: ChatRequest) -> None:
+    if not req.attachments:
+        return
+    sbx = runtime.manager.peek(req.conversation_id) if req.conversation_id else None
+    have = {f.path.rsplit("/", 1)[-1] for f in sbx.list(INPUT_DIR)} if sbx else set()
+    missing = [a for a in req.attachments if a not in have]
+    if missing:
+        raise HTTPException(400, f"file đính kèm không còn trong sandbox: {', '.join(missing)}")
+
+
 @router.post("/chat")
-async def chat(req: ChatRequest, deps: Deps = Depends(get_deps), graph=Depends(get_graph)):
+def chat(req: ChatRequest, deps: Deps = Depends(get_deps), graph=Depends(get_graph),
+         runtime: AgentRuntime = Depends(get_runtime)):
     if req.conversation_id:
-        conv = deps.repo.get_conversation(req.conversation_id)
-        if conv and conv["user_id"] != req.user_id:
-            raise HTTPException(403, "conversation thuộc user khác")
-
-    def events():
-        try:
-            for ev in stream_turn(graph, req.user_id, req.question, req.conversation_id):
-                data = ev["data"]
-                yield {"event": ev["event"], "data": data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, default=str)}
-        except Exception as e:  # noqa: BLE001
-            yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
-
-    return EventSourceResponse(iterate_in_threadpool(events()))
+        check_owner(deps, req.conversation_id, req.user_id)
+    _check_attachments(runtime, req)
+    return sse_response(stream_assistant_turn(graph, req.user_id, req.question, req.conversation_id,
+                                              req.attachments, req.force_route))

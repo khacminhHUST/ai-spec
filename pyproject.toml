@@ -29,6 +29,11 @@ dependencies = [
     "fastapi>=0.110",
     "sse-starlette>=2",
     "uvicorn>=0.30",
+    # agent harness (phiên bản đã chốt: config/agent.yaml)
+    "deepagents>=0.7.32,<0.8",
+    "langchain-mcp-adapters>=0.3.2,<0.4",
+    "docker>=7.2",
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]

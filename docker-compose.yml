@@ -16,6 +16,12 @@ services:
     image: qdrant/qdrant:v1.20.0
     ports: ["6333:6333", "6334:6334"]
     volumes: [qdrantdata:/qdrant/storage]
+  sandbox-image:            # chỉ để build image sandbox: docker compose --profile sandbox build sandbox-image
+    profiles: ["sandbox"]
+    image: mep-sandbox:latest
+    build:
+      context: ./sandbox
+      dockerfile: image/Dockerfile
 volumes:
   pgdata:
   qdrantdata:

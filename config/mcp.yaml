@@ -1,0 +1,20 @@
+# MCP server cho Agent Harness (docs/agent-harness.md mục 3, 6) – nạp qua langchain-mcp-adapters.
+# access: read (agent tự gọi) | write (ghi/đẩy dữ liệu ra ngoài → cần người dùng xác nhận).
+# Thứ tự: tools.<tên>.access > access của server > mặc định write.
+# Secret lấy từ .env: viết ${TEN_BIEN} trong url/headers/env/args.
+#
+# Ví dụ:
+# servers:
+#   trimble:
+#     transport: streamable_http          # stdio | sse | streamable_http | websocket
+#     url: https://mcp.example.com/mcp
+#     headers: {Authorization: "Bearer ${TRIMBLE_TOKEN}"}
+#     access: read
+#     tools:
+#       create_issue: {access: write}
+#   local_tool:
+#     transport: stdio
+#     command: python
+#     args: [path/to/server.py]
+servers: {}
+tool_name_prefix: true      # tên tool = <server>_<tool>, tránh trùng

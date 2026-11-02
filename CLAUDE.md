@@ -30,7 +30,7 @@ Bộ tài liệu mẫu: `S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/` (dự án Qu�
 ## Kiến trúc tổng
 1. **Ingestion** – spec: `docs/ingestion.md` ✅ đã chốt
 2. **Query Pipeline** – spec: `docs/query-pipeline.md` ✅ đã chốt (sơ đồ: `docs/query-pipeline.png`)
-3. **Agent Harness** – spec: `docs/agent-harness.md` 📝 mới (Gate: lookup → Query Pipeline | agent → Deep Agents + sandbox + MCP + skills)
+3. **Agent Harness** – spec: `docs/agent-harness.md` ✅ đã làm (Gate: lookup → Query Pipeline | agent → `create_agent` + middleware + sandbox Docker + MCP + skills)
 
 Lưu trữ dùng chung:
 - PostgreSQL: `documents`, `parent_chunks`, `project_aliases`, `conversations`, checkpoint LangGraph (PostgresSaver)
@@ -38,37 +38,84 @@ Lưu trữ dùng chung:
 - Tham số query: `config/pipeline.yaml`
 - Dự án, alias, ưu tiên nguồn, map thư mục: `config/projects.yaml`
 - Model: `config/models.yaml` (ingest và query bắt buộc dùng cùng model theo ngôn ngữ)
+- Agent: `config/agent.yaml` (model, giới hạn vòng lặp, sandbox), `config/mcp.yaml` (MCP server – hiện rỗng)
+- Namespace `MEP_NS` → schema Postgres + tiền tố collection Qdrant. Dữ liệu S5 thật nằm ở `MEP_NS=ingest`.
 
 ## Tech stack
 Python 3.11+, Docling, Embedding qua API (VN: Qwen3-Embedding-8B, EN: gemini-embedding-2), Reranker Qwen3-Reranker-8B, LLM Gemini (3.5-flash-lite / 3.8-flash), Qdrant, PostgreSQL, underthesea, lingua,
 LLM qua interface chung (không khóa provider),
-LangGraph (query pipeline).
+LangGraph (query pipeline + assistant graph).
+Agent (chốt 2026-10-29): langgraph 1.2.18 · langchain 1.4.7 · langchain-core 1.7.0 · deepagents 0.7.32 (chỉ dùng
+PatchToolCallsMiddleware – `create_deep_agent` ép tool filesystem + subagent `task` nên không dùng) ·
+langchain-mcp-adapters 0.3.2 · docker SDK 7.2.0 / Engine 29.0.1. Agent: gemini-3.8-flash (`thinking_level: low`); Gate: gemini-3.5-flash-lite.
 
 ## Cấu trúc thư mục
 ```
 app/
   main.py             # FastAPI create_app (uvicorn app.main:app)
-  api/                # deps.py + routes/ (chat SSE, conversations)
+  api/                # deps.py + routes/ (chat SSE, confirm, conversations, files upload/tải)
   core/               # config.py (Settings, config/*.yaml, .env)
   db/                 # client.py (Postgres/Qdrant), migrate.py, migrations/*.sql
-  models/             # document.py (Document/Parent/Child – hợp đồng dữ liệu), query.py, chat.py (API)
-  prompts/            # prompt LLM (.md) theo service: query/, ingestion/ – load()/render()
+  models/             # document.py (Document/Parent/Child – hợp đồng dữ liệu), query.py, chat.py, agent.py (API)
+  prompts/            # prompt LLM (.md) theo service: query/, ingestion/, agent/ – load()/render()
   providers/          # llm, embedding, reranker (+ mock)
   repositories/       # postgres.py (đọc), qdrant.py (tìm kiếm), index_store.py (ghi khi ingest)
   services/
     ingestion/        # parse, structure, bilingual, metadata, chunks, pipeline
     query/            # LangGraph: graph + router, resolver, retrieval, context, grader, generator
-    agent/            # Agent Harness: gate, assistant graph, tools, sandbox, skills, mcp
+    agent/            # Agent Harness: graph (gate → lookup | agent → save), gate/, loop/ (agent, limits,
+                      #   confirm, context), tools/ (search_docs, sandbox_tools, skill_tool, registry), sandbox/, skills/, mcp/
   utils/              # keys (ID/section_key), sparse (BM25), tokens
   cli/                # python -m app.cli.migrate | python -m app.cli.ingest
-sandbox/              # Dockerfile + helpers/ + templates/ cho sandbox chạy code
-skills/               # skills/<name>/SKILL.md
+sandbox/              # image/Dockerfile + helpers/ (mep_helpers) + templates/ + build.ps1 → image mep-sandbox:latest
+skills/               # xlsx-export, docx-export, file-check (<name>/SKILL.md)
 frontend/             # React + Vite (npm run dev → :5173, proxy sang :8000)
 config/  tests/  docs/
 ```
 (Giai đoạn 1–3 bên dưới viết theo tên cũ: `shared/` → `app/{core,db,models,providers,utils}`, `ingestion/` → `app/services/ingestion`, `query/` → `app/services/query` + `app/api`.)
 
-## Thứ tự triển khai (song song)
+## Trạng thái (2026-11-02): TẠM DỪNG PHÁT TRIỂN
+Đã xong cả 3 module; tất cả đã gộp vào `main`. Bản này đủ cho demo hoặc pilot nội bộ có giám sát, **chưa đủ cho production**.
+
+Kết quả kiểm thử lần cuối:
+- 276 unit + integration pass.
+- Agent E2E: A1–A8 8/8; Gate 22/22; xuất file p50 33.7s.
+- Câu hỏi vàng 100%: TTFT p50 5.73s, qua Gate 6.6s.
+- Số lần chạy E2E còn ít; UI chưa được test bằng click tay.
+
+Việc còn mở:
+- Spec `docs/agent-harness.md` mục 10 A1 ghi "gym 3.8 / 0.9", lệch với PDF Thuyết minh tr.11 (Health club 10 / 0.3;
+  Lounges 3.8 / 0.9). Test đang theo PDF; spec chờ người dùng xác nhận để sửa.
+- Ingest nên gắn caption vào chunk bảng (thay cho cách vá ở agent: nạp kèm `table_A_B_*` theo mục). Việc này cần đổi ingest nên phải được duyệt trước.
+- Luồng `CONTRACT` chưa có dữ liệu mẫu; chưa nối MCP server thật.
+
+Còn thiếu so với production (ưu tiên trên xuống):
+1. Xác thực: `user_id` hiện do client tự gửi, nên ai cũng mạo danh được.
+2. Lưu file output bền vững (object storage): hiện file chỉ nằm trong sandbox, mất sau 30 phút idle hoặc khi restart app.
+3. Rate limit, quota, trần số sandbox, theo dõi chi phí token.
+4. Sandbox chạy `runsc` (gVisor) thay `runc`.
+5. Trace/log theo request, metrics, cảnh báo.
+6. Scale ngang: hiện chỉ chạy được 1 worker vì SandboxManager nằm trong tiến trình. Cần tách thành dịch vụ riêng + hàng đợi.
+7. Retry / model dự phòng cho LLM.
+8. CI/CD + image cho app; eval chạy tự động.
+9. Phòng thủ prompt injection từ tài liệu hoặc file tải lên.
+
+## Chạy
+```
+docker compose up -d                          # Postgres + Qdrant
+python -m app.cli.migrate --ns ingest
+python -m app.cli.ingest "<thư mục S5>" --ns ingest   # đã ingest sẵn ở ns ingest
+.\sandbox\build.ps1                           # image mep-sandbox:latest (1 lần)
+$env:MEP_NS="ingest"; uvicorn app.main:app --port 8000
+cd frontend; npm run dev                      # http://localhost:5173
+```
+Sandbox: mỗi hội thoại có 1 container + 1 volume (label `mep.sandbox`, không có mạng, rootfs chỉ đọc, uid 1000). App tự dọn khi
+khởi động và khi idle quá `idle_ttl_s`. Theo dõi: `docker events --filter label=mep.sandbox`.
+
+## Lịch sử triển khai (đã xong)
+Giai đoạn 1 `shared-v1` → Giai đoạn 2 `feat/ingestion` + `feat/query` → Giai đoạn 3 ghép + nghiệm thu →
+tái cấu trúc `app/` + UI (`refactor/app-structure`) → Agent Harness (`feat/agent`, 6 bước theo `docs/agent-harness.md` mục 9).
+Phần dưới giữ lại để tham khảo quy trình.
 
 ### Giai đoạn 1 – `shared/` (1 phiên, làm trước)
 - Schema Document / Parent / Child (theo `docs/ingestion.md`), bảng Postgres, collection Qdrant, migration.
@@ -110,3 +157,5 @@ Dữ liệu giả lập cho phiên B (`tests/fixtures/query_seed/`):
 - Dữ liệu test: thư mục tài liệu mẫu S5 (chỉ đọc). Fixture câu hỏi vàng: `tests/fixtures/s5_golden.yaml` (lập từ bảng trong `docs/query-pipeline.md`).
 - API key qua `.env` (không commit). Thiếu key → test `integration/e2e` skip, không fail.
 - Báo cáo kết quả test ngắn gọn: pass/fail + lý do fail.
+- Agent: `tests/agent/` (unit, integration/sandbox cần Docker + image), kịch bản E2E `tests/fixtures/agent_scenarios.yaml`
+  → `tests/agent/e2e/test_ag_scenarios.py` (chạy với `MEP_NS=ingest`).

@@ -1,0 +1,36 @@
+# Tham số Agent Harness (docs/agent-harness.md mục 6) – giá trị khởi điểm, chỉnh khi đo.
+# Phiên bản đã chốt (kiểm tra 2026-10-29): deepagents 0.7.32 · langgraph 1.2.18 · langchain 1.4.7
+#   langchain-core 1.7.0 · langchain-mcp-adapters 0.3.2 · docker (SDK) 7.2.0 · Docker Engine 29.0.1
+# Model ID kiểm tra bằng ListModels 2026-10-29: gemini-3.8-flash, gemini-3.5-flash-lite có sẵn.
+
+gate:
+  llm: fast                 # dùng cấu hình llm.fast trong pipeline.yaml
+  history_turns: 6
+  json_retry: 1
+agent:
+  provider: google_genai
+  model: gemini-3.8-flash   # nâng model nếu tỉ lệ code lỗi cao
+  temperature: 0.1
+  thinking_level: low       # mỗi bước nhanh hơn; nâng nếu tỉ lệ code lỗi cao
+  max_steps: 25
+  max_consecutive_tool_errors: 3
+  max_wall_time_s: 300
+  tool_result_max_tokens: 4000
+  sibling_tables_max: 20    # search_project_docs nạp kèm tối đa N bảng table_A_B_* của mục sec_A_B đã trúng
+  summarize_above_tokens: 60000
+sandbox:
+  backend: docker           # docker | mock
+  image: mep-sandbox:latest
+  runtime: runc             # runsc khi production
+  cpus: 1
+  memory: 1g
+  pids_limit: 128
+  tmp_size: 256m            # tmpfs /tmp
+  exec_timeout_s: 60        # mặc định mỗi lần run_code
+  max_exec_timeout_s: 120   # trần timeout_s mà agent được xin
+  idle_ttl_s: 1800
+  reap_interval_s: 60       # chu kỳ dọn sandbox idle
+  max_output_file_mb: 20
+  output_max_chars: 4000    # cắt stdout/stderr trả về agent
+  read_file_max_chars: 16000  # mỗi lần read_file (đọc tiếp bằng offset)
+skills_dir: skills
