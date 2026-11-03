@@ -17,9 +17,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import chat, confirm, conversations, files
+from app.api.routes import chat, confirm, conversations, files, knowledge, projects
 from app.services.agent.graph import build_assistant_graph
 from app.services.agent.runtime import AgentRuntime, build_runtime
+from app.services.knowledge.cache import attach_store_version
 from app.services.query.deps import Deps
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
         rt = runtime or build_runtime(d)
         if deps is None:
             await asyncio.to_thread(_destroy_orphan_sandboxes, rt.cfg["sandbox"].get("backend", "docker"))
+            attach_store_version(d)  # tài liệu do worker phát hành → làm mới cache hồ sơ dự án
         app.state.deps = d
         app.state.runtime = rt
         app.state.graph = build_assistant_graph(d, rt, cp)
@@ -81,6 +83,8 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
     app.include_router(confirm.router)
     app.include_router(conversations.router)
     app.include_router(files.router)
+    app.include_router(projects.router)
+    app.include_router(knowledge.router)
     return app
 
 
