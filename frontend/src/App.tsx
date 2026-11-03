@@ -3,6 +3,7 @@ import { confirmChat, getConversation, listConversations, streamChat, uploadFile
 import ChatView from "./components/ChatView";
 import Composer from "./components/Composer";
 import Sidebar from "./components/Sidebar";
+import ConnectorsView from "./components/connectors/ConnectorsView";
 import type { ConversationSummary, Message } from "./types";
 
 const USER_KEY = "mep.user_id";
@@ -22,6 +23,7 @@ function loadUser(): string {
 
 export default function App() {
   const [userId, setUserId] = useState(loadUser);
+  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get("view") === "connectors" ? "connectors" : "chat"));
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -179,6 +181,10 @@ export default function App() {
       <main className="main">
         <header className="topbar">
           <span className="topbar-title">MEP Project Assistant</span>
+          <nav className="app-tabs">
+            <button className={view === "chat" ? "active" : ""} onClick={() => setView("chat")}>Hội thoại</button>
+            <button className={view === "connectors" ? "active" : ""} onClick={() => setView("connectors")}>Kết nối</button>
+          </nav>
           {projects.length > 0 && (
             <span className="projects">
               Dự án:
@@ -191,6 +197,8 @@ export default function App() {
           )}
         </header>
         {error && <div className="banner-error">{error}</div>}
+        {view === "connectors" && <ConnectorsView userId={userId} />}
+        {view === "chat" && (<>
         <ChatView messages={messages} onExample={send} onConfirm={confirm} />
         <Composer
           disabled={busy}
@@ -200,6 +208,7 @@ export default function App() {
           onAttach={attach}
           onRemoveAttachment={(name) => setAttachments((a) => a.filter((x) => x !== name))}
         />
+        </>)}
       </main>
     </div>
   );
