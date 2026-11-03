@@ -231,3 +231,20 @@ Không sửa: `app/services/query/`, `app/services/ingestion/`, `app/services/kn
 - Token mã hóa khi lưu, không xuất hiện trong log, đúng user.
 - Hai refresh đồng thời không làm A thu hồi phiên.
 - Toàn bộ test cũ pass; luồng lookup không đổi.
+
+---
+
+## 10. Ghi chú triển khai (lệch / bổ sung so với spec, branch `feat/mcp-connectors`)
+- **So khớp issuer**: so chuỗi tuyệt đối theo `mcp.client.auth.utils.issuers_match`, chỉ coi `https://host` ≡ `https://host/`
+  (RFC 3986 §6.2.3). Lý do: SDK `mcp` chính thức ghi PRM gốc dạng `authorization_servers: ["https://host/"]` (pydantic
+  `AnyHttpUrl`), trong khi A khai `issuer` không có `/`. Thừa `/` ở issuer có path, sai scheme, thêm cổng → vẫn từ chối.
+- **Gắn trình duyệt với callback**: `/connect` đặt cookie `mep_oauth_uid` (HttpOnly, SameSite=Lax, path `/mcp/oauth`,
+  sống `state_ttl_s`); callback có cookie mà khác `user_id` của state → từ chối. Không có cookie → vẫn chấp nhận theo state.
+- **403 `insufficient_scope` khi gọi tool** (không chỉ lúc callback) cũng đặt `status=forbidden`; bấm "Thử"/"Kết nối lại"
+  để kiểm tra lại.
+- **Callback**: đổi token xong mà `initialize`/`tools/list` lỗi mạng tạm thời → vẫn `connected`, kèm cảnh báo.
+- **Resume sau xác nhận** khi tool không còn trong bộ tool của lượt: `ConfirmMiddleware` trả lỗi có cấu trúc
+  (`unavailable: true`), không thực thi.
+- Thêm `state_ttl_s` (600) vào `config/mcp.yaml`. `MEP_SECRET_KEY` là chuỗi bất kỳ → SHA-256 → khóa Fernet.
+- `GET /mcp/connectors/{id}/tools` của connector OAuth khi user chưa kết nối → 409.
+- Rủi ro "biết `user_id` của người khác thì dùng được kết nối OAuth" ghi ở đầu tab "Kết nối".
