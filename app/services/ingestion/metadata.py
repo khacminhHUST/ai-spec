@@ -3,6 +3,9 @@
 Trường không suy ra được → None + warning (không đoán).
 doc_id   = "doc_" + sha256(file)[:12]
 doc_code = f"{project_id}_{building}_{stream}_{primary_discipline}_{doc_type}"
+
+Ghi đè (upload qua giao diện – docs/knowledge-admin.md): `overrides` thay giá trị suy luận cho các trường trong
+OVERRIDE_FIELDS; trường để trống vẫn tự suy như cũ. `doc_code` ghi đè = mã bộ tài liệu (revision mới của bộ).
 """
 from __future__ import annotations
 
@@ -35,9 +38,12 @@ class DocMeta:
     issue_date: date | None = None
     stage: str | None = None
     warnings: list[str] = field(default_factory=list)
+    doc_code_override: str | None = None
 
     @property
     def doc_code(self) -> str | None:
+        if self.doc_code_override:
+            return self.doc_code_override
         parts = [self.project_id, self.building, self.stream, self.disciplines[0] if self.disciplines else None,
                  self.doc_type]
         return "_".join(parts) if all(parts) else None
@@ -49,6 +55,22 @@ class DocMeta:
 
 def make_doc_id(file_hash: str) -> str:
     return "doc_" + file_hash[:12]
+
+
+OVERRIDE_FIELDS = ("project_id", "project_name", "building", "stream", "doc_type", "disciplines", "title", "issuer",
+                   "revision", "issue_date", "stage", "doc_code")
+
+
+def clean_overrides(overrides: dict[str, Any] | None) -> dict[str, Any]:
+    """Bỏ trường trống; issue_date dạng chuỗi ISO → date. Trường lạ → ValueError."""
+    ov = {k: v for k, v in (overrides or {}).items() if v not in (None, "", [])}
+    if bad := set(ov) - set(OVERRIDE_FIELDS):
+        raise ValueError(f"trường ghi đè không hỗ trợ: {sorted(bad)}")
+    if isinstance(ov.get("issue_date"), str):
+        ov["issue_date"] = date.fromisoformat(ov["issue_date"])
+    if "disciplines" in ov:
+        ov["disciplines"] = list(ov["disciplines"])
+    return ov
 
 
 # ---------------------------------------------------------------- dự án / thư mục
@@ -197,10 +219,13 @@ def title_from(blocks: list[Block], filename: str) -> str:
 # ---------------------------------------------------------------- tổng hợp
 
 def infer_metadata(path: str | Path, file_hash: str, blocks: list[Block], *, project: str | None = None,
-                   building: str | None = None, settings: Settings | None = None) -> DocMeta:
+                   building: str | None = None, settings: Settings | None = None,
+                   overrides: dict[str, Any] | None = None) -> DocMeta:
     s = settings or get_settings()
     path = Path(path)
-    meta = DocMeta(make_doc_id(file_hash), file_hash, str(path.resolve()))
+    ov = clean_overrides(overrides)
+    project, building = ov.get("project_id") or project, ov.get("building") or building
+    meta = DocMeta(make_doc_id(file_hash), file_hash, str(path.resolve()), doc_code_override=ov.get("doc_code"))
     w = meta.warnings
     cover_blocks = [b for b in blocks if b.page <= 3]
     cover_text = "\n".join(b.text for b in cover_blocks if b.kind != "table") + "\n" + "\n".join(
@@ -216,32 +241,37 @@ def infer_metadata(path: str | Path, file_hash: str, blocks: list[Block], *, pro
         meta.project_name = (pinfo.get("aliases") or [pinfo["name"]])[0]
         if fm is None:
             fm = next((v for k, v in pinfo.get("folder_map", {}).items() if k in path.resolve().parts), None)
+    meta.project_name = ov.get("project_name") or meta.project_name
     if not meta.project_id:
         w.append("metadata: không suy ra được project_id (path/tên file/bìa) → null")
     if not meta.building:
         w.append("metadata: không suy ra được building → null")
     if fm:
         meta.stream, meta.doc_type, meta.disciplines = fm.get("stream"), fm.get("doc_type"), list(fm.get("disciplines", []))
-    else:
+    elif not {"stream", "doc_type", "disciplines"} <= ov.keys():
         w.append("metadata: thư mục không có trong folder_map → stream/doc_type/disciplines null")
+    for k in ("stream", "doc_type", "disciplines"):
+        if k in ov:
+            setattr(meta, k, ov[k])
 
-    meta.title = title_from(blocks, path.name)
-    meta.issuer = issuer_from(cover_text)
+    meta.title = ov.get("title") or title_from(blocks, path.name)
+    meta.issuer = ov.get("issuer") or issuer_from(cover_text)
     if not meta.issuer:
         w.append("metadata: không suy ra được issuer (đơn vị ban hành) → null")
-    meta.revision, _src = revision_from(path.name, cover_text, cover_tables)
+    meta.revision = ov.get("revision") or revision_from(path.name, cover_text, cover_tables)[0]
     if not meta.revision:
         w.append("metadata: không suy ra được revision → null")
-    meta.issue_date, note = issue_date_from(path.name, cover_text)
+    meta.issue_date, note = (ov["issue_date"], None) if "issue_date" in ov else issue_date_from(path.name, cover_text)
     if note:
         w.append("metadata: " + note)
     if not meta.issue_date:
         w.append("metadata: không suy ra được issue_date → null")
-    meta.stage = stage_from(path.name + "\n" + cover_text) or stage_from(str(path.resolve()))
+    meta.stage = ov.get("stage") or stage_from(path.name + "\n" + cover_text) or stage_from(str(path.resolve()))
     if not meta.stage:
         w.append("metadata: không suy ra được stage → null")
     return meta
 
 
 def meta_summary(meta: DocMeta) -> dict[str, Any]:
-    return {k: (str(v) if isinstance(v, date) else v) for k, v in meta.__dict__.items()} | {"doc_code": meta.doc_code}
+    return {k: (str(v) if isinstance(v, date) else v) for k, v in meta.__dict__.items()
+            if k != "doc_code_override"} | {"doc_code": meta.doc_code}

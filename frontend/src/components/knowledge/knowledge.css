@@ -1,0 +1,341 @@
+/* Tab "Kho tri thức" – dùng biến màu của styles.css */
+.kn .kn-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.kn-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.kn-tabs button,
+.kn-link {
+  border: none;
+  background: transparent;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.kn-tabs button.active {
+  background: var(--user-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.kn-link:hover,
+.kn-tabs button:hover {
+  color: var(--accent);
+}
+
+.topbar-link {
+  margin-left: 12px;
+}
+
+.kn-split {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.kn-tree {
+  width: 340px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+}
+
+.kn-tree summary {
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.kn-indent {
+  margin-left: 14px;
+}
+
+.kn-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kn-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.kn-card h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.kn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.kn-series,
+.kn-section {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 14px;
+  max-width: calc(100% - 14px);
+}
+
+.kn-section {
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 6px;
+  margin-left: 0;
+  max-width: 100%;
+}
+
+.kn-section.table {
+  padding-left: 22px;
+}
+
+.kn-series:hover,
+.kn-section:hover,
+.kn-click:hover {
+  background: var(--bg);
+}
+
+.kn-series.active,
+.kn-section.active {
+  background: var(--user-bg);
+}
+
+.kn-series-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kn-code {
+  font-family: Consolas, monospace;
+  font-size: 13px;
+}
+
+.kn-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.kn-tag.ok {
+  background: #e3f6e8;
+  color: #1d6b34;
+}
+
+.kn-tag.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.kn-btn {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.kn-btn.small {
+  padding: 2px 8px;
+  font-size: 13px;
+}
+
+.kn-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.kn-btn.danger {
+  color: var(--err-fg);
+}
+
+.kn-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.kn-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.kn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.kn-table th,
+.kn-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.kn-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.kn-latest {
+  background: #f3faf5;
+}
+
+.kn-click {
+  cursor: pointer;
+}
+
+.kn-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.kn-form {
+  max-width: 900px;
+}
+
+.kn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.kn-field > span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kn-field input,
+.kn-field select,
+.kn-building input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.kn-building input {
+  flex: 1;
+}
+
+.kn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 12px;
+}
+
+.kn-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.kn-status {
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--bg);
+}
+
+.kn-status.draft {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.kn-status.published {
+  background: #e3f6e8;
+  color: #1d6b34;
+}
+
+.kn-status.failed {
+  background: var(--err-bg);
+  color: var(--err-fg);
+}
+
+.kn-status.processing,
+.kn-status.publishing,
+.kn-status.queued {
+  background: var(--user-bg);
+  color: var(--accent);
+}
+
+.kn-err {
+  color: var(--err-fg);
+}
+
+.kn-review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kn-meta {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.kn-meta dt {
+  color: var(--muted);
+}
+
+.kn-meta dd {
+  margin: 0;
+}
+
+.kn-warnings {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.kn-child {
+  border-top: 1px solid var(--border);
+  padding: 6px 0;
+}
+
+.kn-child pre {
+  white-space: pre-wrap;
+  margin: 4px 0 0;
+  font-family: inherit;
+  font-size: 14px;
+}

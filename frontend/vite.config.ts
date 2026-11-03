@@ -12,6 +12,8 @@ export default defineConfig({
       "/chat": API,
       "/conversations": API,
       "/mcp": API,
+      "/knowledge": API,
+      "/projects": API,
     },
   },
 });
