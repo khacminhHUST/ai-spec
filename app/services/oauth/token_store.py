@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 import httpx
 
-from app.services.oauth.client_registry import ClientRegistry
+from app.services.oauth.client_registry import ClientInfo, ClientRegistry
 from app.services.oauth.crypto import SecretBox
 from app.services.oauth.errors import OAuthError, ReauthRequired
 from app.services.oauth.flow import TokenSet, refresh_grant
@@ -74,6 +74,7 @@ class TokenStore:
     def refresh(self, user_id: str, connector: dict[str, Any], *, rejected: str | None = None) -> str:
         """rejected = access token vừa bị server trả 401 → refresh dù chưa tới hạn, trừ khi luồng khác đã thay token."""
         b = self.box()
+        client = self.clients.get(connector["issuer"], self.redirect_uri)   # đọc trước khi giữ khóa (không lồng kết nối DB)
         outcome: Exception
         with self.store.lock_token(user_id, connector["connector_id"]) as (row, update):
             if row is None or row["status"] == NEEDS_REAUTH:
@@ -84,7 +85,7 @@ class TokenStore:
                     return current                       # luồng khác vừa refresh xong
                 if rejected is not None and current != rejected:
                     return current
-                result = self._do_refresh(b, row, connector)
+                result = self._do_refresh(b, row, connector, client)
                 if isinstance(result, TokenSet):
                     update(access_token_enc=b.encrypt(result.access_token),
                            refresh_token_enc=(b.encrypt(result.refresh_token) if result.refresh_token
@@ -97,10 +98,10 @@ class TokenStore:
                 outcome = result
         raise outcome
 
-    def _do_refresh(self, b: SecretBox, row: dict[str, Any], connector: dict[str, Any]) -> TokenSet | OAuthError:
+    def _do_refresh(self, b: SecretBox, row: dict[str, Any], connector: dict[str, Any],
+                    client: ClientInfo | None) -> TokenSet | OAuthError:
         if not row.get("refresh_token_enc"):
             return ReauthRequired("Không có refresh token – cần kết nối lại")
-        client = self.clients.get(connector["issuer"], self.redirect_uri)
         if client is None:
             return ReauthRequired("Chưa có client OAuth cho Authorization Server – cần kết nối lại")
         try:
