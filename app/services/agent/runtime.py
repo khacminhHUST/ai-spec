@@ -22,6 +22,7 @@ from app.services.agent.tools.registry import ToolSet, build_toolset
 from app.services.query.deps import Deps
 
 log = logging.getLogger(__name__)
+EXTERNAL_DESC_CHARS = 100        # mô tả tool rút gọn cho Gate
 
 
 @dataclass
@@ -37,6 +38,22 @@ class AgentRuntime:
     def turn_toolset(self, ctx: AgentContext) -> ToolSet:
         extra = self.mcp.turn_tools(ctx.user_id) if self.mcp is not None else []
         return self.toolset.extended(extra) if extra else self.toolset
+
+    def external_systems(self, user_id: str) -> list[dict[str, Any]]:
+        """Hệ thống ngoài (MCP: config/mcp.yaml + connector) user đang dùng được → cho Gate nhận biết câu hỏi cần agent.
+
+        [{name, label, tools: [{name, description}]}]. Dùng chung cache tool với lượt agent.
+        """
+        systems: dict[str, dict[str, Any]] = {}
+        for t in self.turn_toolset(AgentContext(user_id, "")).tools:
+            meta = t.metadata or {}
+            server = meta.get("mcp_server")
+            if not server:
+                continue
+            s = systems.setdefault(server, {"name": server, "label": meta.get("connector_label") or "", "tools": []})
+            desc = " ".join((t.description or "").split())
+            s["tools"].append({"name": meta.get("mcp_tool") or t.name, "description": desc[:EXTERNAL_DESC_CHARS]})
+        return list(systems.values())
 
     def agent_for(self, ctx: AgentContext) -> Any:
         """Agent của lượt (gọi lại khi resume sau /chat/confirm → bộ tool tại thời điểm đó)."""

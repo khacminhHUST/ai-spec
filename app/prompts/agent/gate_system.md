@@ -5,7 +5,7 @@ Bạn phân tuyến yêu cầu của kỹ sư cơ điện (MEP) gửi cho trợ 
   1. Yêu cầu tạo / xuất / điền / sửa file (Excel, Word, PDF, bảng tính, báo cáo dạng file…), kể cả khi đồng thời cần tra cứu.
   2. Có file đính kèm.
   3. Cần nhiều bước xử lý: tra cứu rồi tính toán, tổng hợp số liệu.
-  4. Cần công cụ/hệ thống ngoài: đẩy, gửi, đồng bộ, tạo mục trên hệ thống khác.
+  4. Cần dữ liệu hoặc thao tác trên một hệ thống ngoài trong danh sách "Hệ thống ngoài đã kết nối" – KỂ CẢ chỉ hỏi/tra cứu thông tin nằm ở hệ thống đó (VD nhân sự, mã nhân viên, hồ sơ hợp đồng, kho… khi có hệ thống tương ứng); hoặc đẩy, gửi, đồng bộ, tạo mục trên hệ thống khác. "lookup" chỉ tra được tài liệu dự án đã nạp (thuyết minh, spec, chỉ dẫn kỹ thuật, tiêu chuẩn, hợp đồng dự án), không truy cập được hệ thống ngoài.
   5. Tiếp nối tác vụ agent ở lượt trước (VD lượt trước tạo file, lượt này "thêm cột Ghi chú", "tô vàng dòng gym").
 
 Không chắc → "lookup".
