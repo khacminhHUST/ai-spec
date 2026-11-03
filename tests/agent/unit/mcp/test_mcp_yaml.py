@@ -1,11 +1,13 @@
-"""Unit – MCP loader (server stdio cục bộ, không gọi mạng) + phân loại read/write + registry."""
+"""Unit – server MCP trong config/mcp.yaml (stdio cục bộ, không gọi mạng): nạp tool, phân loại read/write, bộ tool,
+mỗi server là 1 nguồn trong danh mục nguồn."""
 import sys
 from pathlib import Path
 
 import pytest
 
 from app.services.agent.config import agent_cfg
-from app.services.agent.mcp.client import load_mcp_tools, server_connections, tool_access
+from app.services.agent.mcp.catalog import SourceCatalog, SourceUnavailable
+from app.services.agent.mcp.yaml_servers import load_mcp_tools, server_connections, tool_access
 from app.services.agent.sandbox import build_manager
 from app.services.agent.skills import load_skills
 from app.services.agent.tools.registry import access_of, build_toolset
@@ -34,7 +36,8 @@ def test_server_connections_env_and_strip(monkeypatch):
     monkeypatch.setenv("T_TOKEN", "s3cret")
     conns = server_connections({"servers": {"x": {"transport": "streamable_http", "url": "https://h/mcp",
                                                   "headers": {"Authorization": "Bearer ${T_TOKEN}"},
-                                                  "access": "read", "tools": {"a": {"access": "write"}}}}})
+                                                  "access": "read", "tools": {"a": {"access": "write"}},
+                                                  "description": "Hệ thống X"}}})
     assert conns == {"x": {"transport": "streamable_http", "url": "https://h/mcp",
                            "headers": {"Authorization": "Bearer s3cret"}}}
 
@@ -60,3 +63,13 @@ def test_registry_labels(mock_settings, tmp_path):
     assert ts.names[:6] == ["search_project_docs", "run_code", "read_file", "write_file", "list_files", "load_skill"]
     assert ts.write_tools == {"echo_lookup_issue", "echo_create_issue"}
     assert access_of(ts.get("search_project_docs")) == "read" and access_of(ts.get("run_code")) == "sandbox"
+
+
+def test_yaml_server_is_a_source():
+    cfg = _cfg(access="read", description="Quản lý issue công trường")
+    catalog = SourceCatalog(load_mcp_tools(cfg), cfg)
+    assert catalog.entries("u1") == [{"name": "echo", "label": "echo", "description": "Quản lý issue công trường",
+                                      "status": "ready"}]
+    assert {t.name for t in catalog.tools("u1", "echo")} == {"echo_lookup_issue", "echo_create_issue"}
+    with pytest.raises(SourceUnavailable):
+        catalog.tools("u1", "khac")

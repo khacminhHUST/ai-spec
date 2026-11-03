@@ -64,6 +64,5 @@ export interface ConversationDetail extends ConversationSummary {
 export interface DoneEvent {
   conversation_id: string;
   status: Status | null;
-  route?: string | null;
   active_projects: string[];
 }

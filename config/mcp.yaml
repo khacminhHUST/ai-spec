@@ -18,3 +18,14 @@
 #     args: [path/to/server.py]
 servers: {}
 tool_name_prefix: true      # tên tool = <server>_<tool>, tránh trùng
+
+# ---- Connector khai qua giao diện (docs/mcp-connectors.md) – lưu DB, không khai ở đây ----
+# Server ở trên (servers) vẫn chạy như cũ, hiển thị ở tab "Kết nối" chế độ chỉ đọc.
+# Secret: MEP_SECRET_KEY trong .env (mã hóa token OAuth, header tĩnh). Thiếu → OAuth/header báo lỗi, `none` vẫn chạy.
+public_base_url: http://localhost:5173   # origin frontend; redirect_uri = <public_base_url>/mcp/oauth/callback
+client_name: MEP Project Assistant       # tên client khi đăng ký động (DCR) với Authorization Server
+tool_cache_ttl_s: 600                    # cache tools/list theo (connector, user)
+refresh_skew_s: 60                       # access token còn dưới ngưỡng này → refresh trước khi gọi
+http_timeout_s: 20                       # timeout gọi MCP server / Authorization Server
+allow_http_localhost: true               # cho phép http://localhost | 127.0.0.1 (dev); còn lại bắt buộc https
+state_ttl_s: 600                         # state OAuth sống 10 phút, dùng 1 lần

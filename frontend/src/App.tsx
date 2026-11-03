@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { confirmChat, getConversation, listConversations, streamChat, uploadFile, type ChatHandlers } from "./api";
 import ChatView from "./components/ChatView";
 import Composer from "./components/Composer";
+import KnowledgePage from "./components/knowledge/KnowledgePage";
 import Sidebar from "./components/Sidebar";
+import ConnectorsView from "./components/connectors/ConnectorsView";
 import type { ConversationSummary, Message } from "./types";
 
 const USER_KEY = "mep.user_id";
@@ -22,6 +24,7 @@ function loadUser(): string {
 
 export default function App() {
   const [userId, setUserId] = useState(loadUser);
+  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get("view") === "connectors" ? "connectors" : "chat"));
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,6 +33,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [tab, setTab] = useState<"chat" | "knowledge">("chat");
   // id cấp trước cho hội thoại mới có file đính kèm (phải upload trước khi gửi câu hỏi đầu tiên)
   const draftIdRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -82,6 +86,7 @@ export default function App() {
   const handlers: ChatHandlers = {
     onStatus: (step) => patchLast((m) => ({ ...m, step })),
     onToken: (t) => patchLast((m) => ({ ...m, content: m.content + t })),
+    onTokenReset: () => patchLast((m) => ({ ...m, content: "" })),
     onCitations: (citations) => patchLast((m) => ({ ...m, citations })),
     onToolStart: (d) =>
       patchLast((m) => ({ ...m, tools: [...(m.tools ?? []), { tool: d.tool, args_preview: d.args_preview, done: false }] })),
@@ -176,9 +181,19 @@ export default function App() {
         onSelect={openConversation}
         onNew={newConversation}
       />
+      {tab === "knowledge" ? (
+        <KnowledgePage userId={userId} onClose={() => setTab("chat")} />
+      ) : (
       <main className="main">
         <header className="topbar">
           <span className="topbar-title">MEP Project Assistant</span>
+          <nav className="app-tabs">
+            <button className={view === "chat" ? "active" : ""} onClick={() => setView("chat")}>Hội thoại</button>
+            <button className={view === "connectors" ? "active" : ""} onClick={() => setView("connectors")}>Kết nối</button>
+          </nav>
+          <button className="kn-link topbar-link" onClick={() => setTab("knowledge")}>
+            Kho tri thức
+          </button>
           {projects.length > 0 && (
             <span className="projects">
               Dự án:
@@ -191,6 +206,8 @@ export default function App() {
           )}
         </header>
         {error && <div className="banner-error">{error}</div>}
+        {view === "connectors" && <ConnectorsView userId={userId} />}
+        {view === "chat" && (<>
         <ChatView messages={messages} onExample={send} onConfirm={confirm} />
         <Composer
           disabled={busy}
@@ -200,7 +217,9 @@ export default function App() {
           onAttach={attach}
           onRemoveAttachment={(name) => setAttachments((a) => a.filter((x) => x !== name))}
         />
+        </>)}
       </main>
+      )}
     </div>
   );
 }

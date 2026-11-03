@@ -1,4 +1,7 @@
-"""Migration: bảng Postgres + collection Qdrant + checkpoint LangGraph + seed project_aliases.
+"""Migration: bảng Postgres + collection Qdrant + checkpoint LangGraph + seed projects / project_aliases.
+
+projects / project_buildings: seed từ config/projects.yaml ở lần migrate đầu (bảng rỗng); sau đó DB là nguồn
+sự thật (sửa qua giao diện). project_aliases sinh lại từ DB.
 
 CLI: python -m app.cli.migrate
 """
@@ -43,8 +46,8 @@ def setup_checkpointer(s: Settings) -> None:
         PostgresSaver(conn).setup()
 
 
-def alias_rows(s: Settings) -> list[tuple[str, str, str, str, str]]:
-    """(alias_norm, alias, project_id, building, kind) từ config/projects.yaml."""
+def project_alias_rows(projects: list[dict]) -> list[tuple[str, str, str, str, str]]:
+    """(alias_norm, alias, project_id, building, kind) từ danh sách dự án dạng projects.yaml."""
     rows: dict[tuple[str, str, str], tuple] = {}
 
     def add(alias: str, pid: str, building: str, kind: str) -> None:
@@ -52,27 +55,61 @@ def alias_rows(s: Settings) -> list[tuple[str, str, str, str, str]]:
         if norm:
             rows.setdefault((norm, pid, building), (norm, alias, pid, building, kind))
 
-    for p in s.project_list():
+    for p in projects:
         pid = p["project_id"]
-        for a in [p["project_id"], p["name"], *p.get("aliases", [])]:
+        for a in [p["project_id"], p["name"], *(p.get("aliases") or [])]:
             add(a, pid, "", "project")
-        for a in p.get("owner_aliases", []):
+        for a in p.get("owner_aliases") or []:
             add(a, pid, "", "owner")
-        for b in p.get("buildings", []):
-            for a in [b["building"], *b.get("aliases", [])]:
+        for b in p.get("buildings") or []:
+            for a in [b["building"], *(b.get("aliases") or [])]:
                 add(a, pid, b["building"], "building")
     return list(rows.values())
 
 
-def seed_aliases(s: Settings) -> int:
-    rows = alias_rows(s)
+def alias_rows(s: Settings) -> list[tuple[str, str, str, str, str]]:
+    """(alias_norm, alias, project_id, building, kind) từ config/projects.yaml."""
+    return project_alias_rows(s.project_list())
+
+
+def seed_projects(s: Settings) -> int:
+    """Lần migrate đầu (bảng projects rỗng): nạp dự án + công trình từ config/projects.yaml."""
     with pg_connect(s, autocommit=True) as conn, conn.transaction():
+        if conn.execute("SELECT 1 FROM projects LIMIT 1").fetchone():
+            return 0
+        for p in s.project_list():
+            conn.execute(
+                "INSERT INTO projects (project_id, name, aliases, owner_aliases, source_priority, governing_language) "
+                "VALUES (%s,%s,%s,%s,%s,%s)",
+                (p["project_id"], p.get("name") or p["project_id"], list(p.get("aliases") or []),
+                 list(p.get("owner_aliases") or []), list(p.get("source_priority") or []),
+                 p.get("governing_language") or "vi"))
+            for b in p.get("buildings") or []:
+                conn.execute("INSERT INTO project_buildings (project_id, building, aliases) VALUES (%s,%s,%s)",
+                             (p["project_id"], b["building"], list(b.get("aliases") or [])))
+    return len(s.project_list())
+
+
+def replace_aliases(conn, rows: list[tuple[str, str, str, str, str]], project_id: str | None = None) -> int:
+    """Ghi lại project_aliases (toàn bộ, hoặc chỉ của 1 dự án) trong transaction của conn."""
+    if project_id is None:
         conn.execute("DELETE FROM project_aliases")
-        with conn.cursor() as cur:
-            cur.executemany(
-                "INSERT INTO project_aliases (alias_norm, alias, project_id, building, kind) VALUES (%s,%s,%s,%s,%s)", rows
-            )
+    else:
+        conn.execute("DELETE FROM project_aliases WHERE project_id = %s", (project_id,))
+        rows = [r for r in rows if r[2] == project_id]
+    with conn.cursor() as cur:
+        cur.executemany(
+            "INSERT INTO project_aliases (alias_norm, alias, project_id, building, kind) VALUES (%s,%s,%s,%s,%s)", rows
+        )
     return len(rows)
+
+
+def seed_aliases(s: Settings) -> int:
+    """project_aliases sinh lại từ bảng projects / project_buildings."""
+    from app.repositories.postgres import db_projects
+
+    with pg_connect(s, autocommit=True) as conn, conn.transaction():
+        return replace_aliases(conn, project_alias_rows(db_projects(conn)))
 
 
 def migrate_qdrant(s: Settings, recreate: bool = False) -> list[str]:
@@ -107,6 +144,7 @@ def migrate(s: Settings | None = None, recreate: bool = False) -> dict:
         "qdrant": migrate_qdrant(s, recreate),
     }
     setup_checkpointer(s)
+    result["projects"] = seed_projects(s)
     result["aliases"] = seed_aliases(s)
     return result
 

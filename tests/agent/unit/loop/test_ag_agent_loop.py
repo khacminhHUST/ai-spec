@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.services.agent.config import agent_cfg
-from app.services.agent.loop.agent import agent_input, agent_result, build_agent
+from app.services.agent.loop.agent import agent_input, agent_result, build_agent, tool_summary
 from app.services.agent.loop.confirm import pending_confirms, resume_command
 from app.services.agent.sandbox import SandboxManager
 from app.services.agent.sandbox.mock_backend import MockSandbox
@@ -194,3 +194,10 @@ def test_summarization_threshold(mock_settings, threshold, expect_summary):
     sent = model.calls[0]
     assert (len(sent) < 40) is expect_summary                     # phần cũ được thay bằng bản tóm tắt
     assert agent_result(st)["answer"] == "Xong."
+
+
+def test_tool_summary_is_short():
+    mcp = json.dumps([{"type": "text", "text": "{\"columns\": [\"id\"], \"rows\": [] }" * 50}])
+    assert tool_summary(mcp) == (True, f"xong ({len(mcp)} ký tự)")                    # không hiện JSON thô của MCP
+    assert tool_summary(json.dumps({"ok": True, "source": "mail", "tools": ["a", "b"]})) == (True, "mail: 2 công cụ")
+    assert tool_summary(json.dumps({"ok": False, "error": "hết hạn"})) == (False, "hết hạn")

@@ -29,11 +29,13 @@ class ScriptedModel(BaseChatModel):
     """LLM giả cho agent: trả lần lượt `script` (AIMessage | str | callable(messages) → AIMessage).
 
     Hết script → lặp phần tử cuối. Lời gọi tóm tắt hội thoại (SummarizationMiddleware) trả `summary`, không tiêu script.
+    `bound`: tên tool gửi kèm mỗi lần bind_tools (tool của nguồn ngoài chỉ có sau khi mở nguồn).
     """
 
     script: list = []
     summary: str = "TÓM TẮT"
     calls: list = []
+    bound: list = []
     summary_calls: int = 0
 
     @property
@@ -41,6 +43,7 @@ class ScriptedModel(BaseChatModel):
         return "scripted"
 
     def bind_tools(self, tools, **kwargs):
+        self.bound.append([getattr(t, "name", None) or t.get("name") for t in tools])
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:

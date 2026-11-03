@@ -11,6 +11,9 @@ export default defineConfig({
     proxy: {
       "/chat": API,
       "/conversations": API,
+      "/mcp": API,
+      "/knowledge": API,
+      "/projects": API,
     },
   },
 });

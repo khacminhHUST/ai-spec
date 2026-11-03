@@ -1,4 +1,4 @@
-"""Unit – API agent: SSE mới, upload/tải file, phân quyền, /chat/confirm (mock LLM, MockSandbox, InMemorySaver)."""
+"""Unit – API agent: SSE, upload/tải file, phân quyền, /chat/confirm (mock LLM, MockSandbox, InMemorySaver)."""
 import json
 
 import pytest
@@ -50,9 +50,9 @@ def _writes_file(sbx, cmd):
 @pytest.fixture
 def client_factory(mock_settings):
     def make(script):
-        deps = make_deps(mock_settings, llm=MockChatModel(responses=['{"route": "agent", "reason": "t"}'], calls=[]))
+        deps = make_deps(mock_settings, llm=MockChatModel(responses=["x"], calls=[]))
         rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(_writes_file), 1800),
-                           model=ScriptedModel(script=script, calls=[]), mcp_tools=[push_data])
+                           model=ScriptedModel(script=script, calls=[]), extra_tools=[push_data])
         return TestClient(create_app(deps, InMemorySaver(), rt))
     return make
 
@@ -67,7 +67,7 @@ def test_chat_agent_sse_and_download(client_factory):
     with client_factory([tool_call("run_code", code="print(1)"), "Đã tạo file."]) as c:
         ev = _chat(c)
         kinds = [e for e, _ in ev]
-        assert kinds[0:2] == ["status", "route"] and json.loads(ev[1][1]) == {"route": "agent"}
+        assert kinds[0] == "status" and json.loads(ev[0][1]) == {"step": "agent"} and "route" not in kinds
         assert {"tool_start", "tool_end", "token", "citations", "file", "done"} <= set(kinds)
         f = json.loads(next(d for e, d in ev if e == "file"))
         assert f["name"] == "kết quả.xlsx" and f["size"] == 7
@@ -79,7 +79,7 @@ def test_chat_agent_sse_and_download(client_factory):
         assert c.get(f"/conversations/{cid}/files/khong-co.xlsx", params={"user_id": U}).status_code == 404
         assert c.get(f"/conversations/{cid}/files/..%2Finput%2Fa", params={"user_id": U}).status_code == 400
         conv = c.get(f"/conversations/{cid}").json()
-        assert conv["messages"][1]["route"] == "agent" and conv["messages"][1]["files"][0]["url"] == f["url"]
+        assert conv["messages"][1]["files"][0]["url"] == f["url"]
 
 
 def test_upload_attachment_flow_and_permissions(client_factory):
@@ -90,7 +90,7 @@ def test_upload_attachment_flow_and_permissions(client_factory):
         assert r.status_code == 200 and r.json() == {"name": "mẫu.xlsx", "size": 8}       # bỏ phần đường dẫn
         assert c.post(f"/conversations/{cid}/files", params={"user_id": "other"}, files=files).status_code == 403
         ev = _chat(c, conversation_id=cid, attachments=["mẫu.xlsx"])
-        assert json.loads(ev[1][1]) == {"route": "agent"}
+        assert json.loads(ev[-1][1])["status"] == "OK"
         bad = c.post("/chat", json={"user_id": U, "question": "x", "conversation_id": cid, "attachments": ["zz.xlsx"]})
         assert bad.status_code == 400
         assert c.post("/chat", json={"user_id": U, "question": "x", "attachments": ["a.xlsx"]}).status_code == 400

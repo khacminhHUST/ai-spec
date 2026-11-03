@@ -1,0 +1,182 @@
+/* Tab "Kết nối" – dùng biến màu chung trong styles.css */
+.app-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 16px;
+}
+.app-tabs button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 3px 12px;
+  cursor: pointer;
+  color: var(--fg);
+}
+.app-tabs button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.cn-view {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 24px;
+}
+.cn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cn-head h2 {
+  margin: 8px 0;
+}
+.cn-view button,
+.cn-form button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.cn-view button:hover {
+  border-color: var(--accent);
+}
+.cn-view button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.cn-primary {
+  background: var(--accent) !important;
+  color: #fff;
+  border-color: var(--accent) !important;
+}
+.cn-danger {
+  color: var(--err-fg);
+}
+.cn-note {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+.cn-ok {
+  background: var(--user-bg);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+.cn-table,
+.cn-tools {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  margin-top: 8px;
+}
+.cn-table th,
+.cn-table td,
+.cn-tools th,
+.cn-tools td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.cn-url {
+  word-break: break-all;
+  max-width: 280px;
+}
+.cn-actions {
+  white-space: nowrap;
+}
+.cn-actions button {
+  margin: 0 4px 4px 0;
+}
+.cn-disabled {
+  opacity: 0.55;
+}
+.cn-status {
+  font-size: 12px;
+  border-radius: 10px;
+  padding: 2px 8px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.cn-connected,
+.cn-ready {
+  background: #e6f4ea;
+  color: #1e7a34;
+}
+.cn-needs_reauth {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.cn-forbidden {
+  background: var(--err-bg);
+  color: var(--err-fg);
+}
+.cn-form {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 8px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cn-form h3 {
+  margin: 0;
+}
+.cn-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.cn-form input,
+.cn-form select,
+.cn-form textarea {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.cn-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.cn-row textarea {
+  flex: 1;
+  resize: vertical;
+}
+.cn-desc {
+  max-width: 420px;
+  margin-top: 2px;
+}
+.cn-row input {
+  flex: 1;
+}
+.cn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.cn-form .cn-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.cn-auth {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  gap: 16px;
+}
+.cn-headers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

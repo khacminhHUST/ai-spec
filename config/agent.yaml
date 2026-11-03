@@ -2,11 +2,8 @@
 # Phiên bản đã chốt (kiểm tra 2026-10-29): deepagents 0.7.32 · langgraph 1.2.18 · langchain 1.4.7
 #   langchain-core 1.7.0 · langchain-mcp-adapters 0.3.2 · docker (SDK) 7.2.0 · Docker Engine 29.0.1
 # Model ID kiểm tra bằng ListModels 2026-10-29: gemini-3.8-flash, gemini-3.5-flash-lite có sẵn.
+# Không còn Gate (2026-11-03): mọi câu hỏi vào agent; tra tài liệu dự án là tool search_project_docs.
 
-gate:
-  llm: fast                 # dùng cấu hình llm.fast trong pipeline.yaml
-  history_turns: 6
-  json_retry: 1
 agent:
   provider: google_genai
   model: gemini-3.8-flash   # nâng model nếu tỉ lệ code lỗi cao

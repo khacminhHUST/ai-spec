@@ -1,11 +1,12 @@
 """FastAPI app.
 
-    POST /chat (SSE)                {conversation_id?, user_id, question, attachments?, force_route?}
+    POST /chat (SSE)                {conversation_id?, user_id, question, attachments?}
     POST /chat/confirm (SSE)        {conversation_id, user_id, confirm_id, approve}
     GET  /conversations?user_id=    danh sách hội thoại
     GET  /conversations/{id}        hội thoại + messages (từ checkpoint)
     POST /conversations/{id}/files  upload file vào sandbox
     GET  /conversations/{id}/files/{name}  tải file kết quả
+    /mcp/...                        MCP connector (app/api/routes/mcp.py)
 
 Chạy: uvicorn app.main:app --port 8000
 """
@@ -17,9 +18,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import chat, confirm, conversations, files
+from app.api.routes import chat, confirm, conversations, files, knowledge, mcp, projects
 from app.services.agent.graph import build_assistant_graph
 from app.services.agent.runtime import AgentRuntime, build_runtime
+from app.services.knowledge.cache import attach_store_version
 from app.services.query.deps import Deps
 
 log = logging.getLogger(__name__)
@@ -33,7 +35,7 @@ def _destroy_orphan_sandboxes(backend: str) -> None:
         from app.services.agent.sandbox.docker_backend import DockerSandbox
 
         DockerSandbox.destroy_all()
-    except Exception as e:  # noqa: BLE001 – Docker chưa chạy: tuyến lookup vẫn hoạt động
+    except Exception as e:  # noqa: BLE001 – Docker chưa chạy: agent vẫn tra cứu được, chỉ mất sandbox
         log.warning("Không dọn được sandbox cũ: %s", e)
 
 
@@ -55,6 +57,7 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
         rt = runtime or build_runtime(d)
         if deps is None:
             await asyncio.to_thread(_destroy_orphan_sandboxes, rt.cfg["sandbox"].get("backend", "docker"))
+            attach_store_version(d)  # tài liệu do worker phát hành → làm mới cache hồ sơ dự án
         app.state.deps = d
         app.state.runtime = rt
         app.state.graph = build_assistant_graph(d, rt, cp)
@@ -81,6 +84,9 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
     app.include_router(confirm.router)
     app.include_router(conversations.router)
     app.include_router(files.router)
+    app.include_router(mcp.router)
+    app.include_router(projects.router)
+    app.include_router(knowledge.router)
     return app
 
 

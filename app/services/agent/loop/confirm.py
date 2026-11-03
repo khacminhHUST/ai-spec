@@ -11,9 +11,11 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command, interrupt
 
-from app.services.agent.tools.base import fail
+from app.services.agent.tools.base import access_of, fail
 
 REJECTED = "Người dùng TỪ CHỐI thực thi – thao tác KHÔNG được thực hiện. Báo lại người dùng, không gọi lại tool này."
+UNAVAILABLE = ("Tool {name} không có trong bộ tool hiện tại (chưa mở nguồn, hoặc connector đã tắt / ngắt kết nối) – thao tác "
+               "KHÔNG được thực hiện. Không gọi lại tool này; dùng tool có sẵn hoặc báo lại người dùng.")
 
 
 def is_approved(decision: Any) -> bool:
@@ -37,13 +39,15 @@ def resume_command(confirm_id: str, approve: bool) -> Command:
 
 
 class ConfirmMiddleware(AgentMiddleware):
-    def __init__(self, write_tools: set[str]):
-        super().__init__()
-        self.write_tools = set(write_tools)
+    """Đặt sau SourcesMiddleware: tool của nguồn ngoài đã được gắn vào request trước khi xét access."""
 
     def wrap_tool_call(self, request, handler):
         call = request.tool_call
-        if call["name"] not in self.write_tools:
+        if getattr(request, "tool", None) is None:
+            # Tool không có trong agent và không thuộc nguồn đang mở (VD resume sau khi ngắt kết nối)
+            return ToolMessage(fail(UNAVAILABLE.format(name=call["name"]), unavailable=True), tool_call_id=call["id"],
+                               name=call["name"], status="error")
+        if access_of(request.tool) != "write":
             return handler(request)
         decision = interrupt({"type": "confirm_required", "tool": call["name"], "args": call.get("args") or {},
                               "tool_call_id": call.get("id")})
