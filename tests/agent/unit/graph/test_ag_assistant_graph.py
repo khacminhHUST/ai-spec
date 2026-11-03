@@ -1,11 +1,12 @@
-"""Unit – assistant graph: phân tuyến, lịch sử hợp nhất lookup → agent → lookup, active_projects, file, xác nhận tool write."""
+"""Unit – assistant graph (không còn Gate): mọi câu hỏi vào agent, stream token / token_reset, lịch sử giữa các lượt,
+active_projects, file, xác nhận tool write."""
 import json
 
 import pytest
 from langchain.tools import tool
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from app.providers.llm import MockChatModel
 from app.services.agent.graph import (
     WAITING_CONFIRM, build_assistant_graph, pending_confirm_ids, stream_assistant_turn, stream_confirm,
 )
@@ -34,29 +35,16 @@ def push_data(payload: str) -> str:
 push_data.metadata = {"access": "write"}
 
 
-def _gate_aware_llm(answer="Bán kính uốn 6 lần [1]."):
-    """Fast/main LLM giả: Gate → agent khi câu hỏi có 'xuất' hoặc 'đẩy'; còn lại như scripted_llm của Query Pipeline."""
-    base = scripted_llm(BEND, answer=answer)
-
-    def handler(messages):
-        if str(messages[0].content).startswith("Bạn phân tuyến"):
-            q = str(messages[-1].content).split("Yêu cầu:")[-1].lower()
-            return json.dumps({"route": "agent" if ("xuất" in q or "đẩy" in q) else "lookup", "reason": "t"})
-        return base.handler(messages)
-
-    return MockChatModel(handler=handler, calls=[])
-
-
 def _write_file(sbx, cmd):
     sbx.put_file("output/a.xlsx", b"PK")
     return ExecResult(0, "ok", "")
 
 
 def _setup(mock_settings, script):
-    deps = make_deps(mock_settings, llm=_gate_aware_llm())
+    deps = make_deps(mock_settings, llm=scripted_llm(BEND))
     manager = SandboxManager(lambda cid: MockSandbox(_write_file), 1800)
     model = ScriptedModel(script=script, calls=[])
-    rt = build_runtime(deps, manager=manager, model=model, mcp_tools=[push_data])
+    rt = build_runtime(deps, manager=manager, model=model, extra_tools=[push_data])
     return build_assistant_graph(deps, rt, InMemorySaver()), deps, model, manager
 
 
@@ -70,27 +58,52 @@ def _kinds(events):
     return [e["event"] for e in events]
 
 
-def test_lookup_route_keeps_events_and_no_agent(mock_settings):
-    graph, _, model, _ = _setup(mock_settings, ["KHÔNG ĐƯỢC GỌI"])
+def _answer(events):
+    """Text hiển thị như giao diện: cộng token, token_reset thì xóa."""
+    text = ""
+    for e in events:
+        if e["event"] == "token":
+            text += e["data"]
+        elif e["event"] == "token_reset":
+            text = ""
+    return text
+
+
+def test_simple_question_goes_to_agent_and_streams(mock_settings):
+    graph, deps, model, _ = _setup(mock_settings, [tool_call("search_project_docs", question="Bán kính uốn cáp?"),
+                                                   "Bán kính uốn 6 lần [1]."])
     events, done = _turn(graph, "Bán kính uốn cáp?")
-    assert next(e["data"] for e in events if e["event"] == "route") == {"route": "lookup"}
-    assert {"status", "token", "citations", "done"} <= set(_kinds(events))
-    assert done["status"] == "OK" and done["route"] == "lookup" and model.calls == []
-    tokens = "".join(e["data"] for e in events if e["event"] == "token")
-    assert tokens == "Bán kính uốn 6 lần [1]."
+    assert "route" not in _kinds(events) and "route" not in done
+    assert [e["data"]["tool"] for e in events if e["event"] == "tool_start"] == ["search_project_docs"]
+    assert _answer(events) == "Bán kính uốn 6 lần [1]." and "token_reset" not in _kinds(events)
+    assert [c["n"] for c in next(e["data"] for e in events if e["event"] == "citations")] == [1]
+    assert done["status"] == "OK" and done["active_projects"] == [S5]
+    assert not [c for c in deps.llm_main.calls                                         # không chạy N7 của pipeline
+                if str(c[0].content).startswith("Bạn là trợ lý tra cứu")]
 
 
-def test_agent_route_events_files_and_citations(mock_settings):
+def test_text_before_tool_call_is_reset(mock_settings):
+    lead = AIMessage("Tôi sẽ tra cứu tài liệu.", tool_calls=[{"name": "search_project_docs",
+                                                              "args": {"question": "Bán kính uốn?"}, "id": "c1"}])
+    graph, _, _, _ = _setup(mock_settings, [lead, "Bán kính uốn 6 lần [1]."])
+    events, done = _turn(graph, "Bán kính uốn cáp?")
+    k = _kinds(events)
+    assert k.index("token") < k.index("token_reset") < k.index("tool_start")
+    assert _answer(events) == "Bán kính uốn 6 lần [1]."
+    msgs = graph.get_state(turn_config(done["conversation_id"])).values["messages"]
+    assert msgs[-1]["content"] == "Bán kính uốn 6 lần [1]."
+
+
+def test_agent_events_files_and_citations(mock_settings):
     script = [tool_call("search_project_docs", question="Bán kính uốn cáp > 25mm2?"),
               tool_call("run_code", code="print(1)"), "Đã xuất a.xlsx theo mục 5.7 [1]."]
     graph, _, model, _ = _setup(mock_settings, script)
     events, done = _turn(graph, "Xuất excel bán kính uốn")
     k = _kinds(events)
-    assert next(e["data"] for e in events if e["event"] == "route") == {"route": "agent"}
     assert k.count("tool_start") == 2 and k.count("tool_end") == 2
     assert [e["data"]["tool"] for e in events if e["event"] == "tool_start"] == ["search_project_docs", "run_code"]
     assert all(e["data"]["ok"] for e in events if e["event"] == "tool_end")
-    assert "".join(e["data"] for e in events if e["event"] == "token") == "Đã xuất a.xlsx theo mục 5.7 [1]."
+    assert _answer(events) == "Đã xuất a.xlsx theo mục 5.7 [1]."
     cites = next(e["data"] for e in events if e["event"] == "citations")
     assert [c["n"] for c in cites] == [1]
     f = next(e["data"] for e in events if e["event"] == "file")
@@ -98,33 +111,30 @@ def test_agent_route_events_files_and_citations(mock_settings):
     assert done["status"] == "OK" and done["active_projects"] == [S5]
 
 
-def test_unified_history_lookup_agent_lookup(mock_settings):
+def test_history_across_turns(mock_settings):
     seen = []
 
-    def agent_step(messages):
+    def step(messages):
         seen.append([type(m).__name__ for m in messages])
-        return "Đã xuất file."
+        return f"Trả lời {len(seen)}."
 
-    graph, deps, _, _ = _setup(mock_settings, [agent_step])
+    graph, deps, _, _ = _setup(mock_settings, [step])
     _, d1 = _turn(graph, "Bán kính uốn cáp?")
     cid = d1["conversation_id"]
-    _, d2 = _turn(graph, "Xuất excel bảng trên", cid)
-    _, d3 = _turn(graph, "Tiết diện tối thiểu?", cid)
-    assert (d2["route"], d3["route"]) == ("agent", "lookup")
-    assert seen[0] == ["SystemMessage", "HumanMessage", "AIMessage", "HumanMessage"]   # agent thấy lượt lookup
+    _turn(graph, "Xuất excel bảng trên", cid)
+    _turn(graph, "Tiết diện tối thiểu?", cid)
+    assert seen[0] == ["SystemMessage", "HumanMessage"]
+    assert seen[2] == ["SystemMessage", *["HumanMessage", "AIMessage"] * 2, "HumanMessage"]   # thấy 2 lượt trước
     msgs = graph.get_state(turn_config(cid)).values["messages"]
     assert [m["role"] for m in msgs] == ["user", "assistant"] * 3
-    assert msgs[3]["content"] == "Đã xuất file." and msgs[3]["route"] == "agent"
+    assert msgs[3]["content"] == "Trả lời 2." and "route" not in msgs[3]
     assert not any(m.get("tool_calls") for m in msgs)                                   # không có tool call nội bộ
-    router_calls = [str(c[-1].content) for c in deps.llm_fast.calls if str(c[0].content).startswith("Bạn là bộ định")]
-    assert "Đã xuất file." in router_calls[-1]                                          # lookup thấy lượt agent
-    assert graph.get_state(turn_config(cid)).values["active_projects"] == [S5]
     assert deps.repo.get_conversation(cid)["title"] == "Bán kính uốn cáp?"
 
 
-def test_agent_search_updates_active_projects_for_next_lookup(mock_settings):
+def test_search_updates_active_projects(mock_settings):
     graph, _, _, _ = _setup(mock_settings, [tool_call("search_project_docs", question="Bán kính uốn?"), "Xong [1]."])
-    _, d = _turn(graph, "Xuất excel", force_route="agent")
+    _, d = _turn(graph, "Xuất excel")
     assert d["active_projects"] == [S5]
     assert graph.get_state(turn_config(d["conversation_id"])).values["active_projects"] == [S5]
 
@@ -144,7 +154,7 @@ def test_write_tool_confirm_through_assistant_graph(mock_settings, approve):
     ev2 = list(stream_confirm(graph, cid, confirm["confirm_id"], approve))
     assert PUSHED == (["RFI-1"] if approve else [])
     assert next(e["data"] for e in ev2 if e["event"] == "done")["status"] == "OK"
-    assert "".join(e["data"] for e in ev2 if e["event"] == "token") == "Đã xử lý."
+    assert _answer(ev2) == "Đã xử lý."
     assert next(e["data"] for e in ev2 if e["event"] == "tool_end")["tool"] == "push_data"
     assert pending_confirm_ids(graph, cid) == []
     msgs = graph.get_state(turn_config(cid)).values["messages"]
@@ -167,13 +177,11 @@ def test_new_turn_after_abandoned_confirm_starts_clean(mock_settings):
     graph, _, _, _ = _setup(mock_settings, [tool_call("push_data", payload="x"), "Trả lời lượt mới."])
     _, d = _turn(graph, "Đẩy dữ liệu")
     cid = d["conversation_id"]
-    _, d2 = _turn(graph, "Bán kính uốn cáp?", cid)
-    assert d2["route"] == "lookup" and d2["status"] == "OK" and PUSHED == []
+    events, d2 = _turn(graph, "Bán kính uốn cáp?", cid)
+    assert d2["status"] == "OK" and PUSHED == [] and _answer(events) == "Trả lời lượt mới."
 
 
 def test_parallel_write_tools_are_confirmed_one_by_one(mock_settings):
-    from langchain_core.messages import AIMessage
-
     PUSHED.clear()
     calls = [{"name": "push_data", "args": {"payload": p}, "id": f"c{p}"} for p in ("A", "B")]
     graph, _, _, _ = _setup(mock_settings, [AIMessage("", tool_calls=calls), "Xong."])

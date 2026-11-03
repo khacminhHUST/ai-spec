@@ -1,4 +1,5 @@
-"""Lưu trữ connector MCP khai qua giao diện (bảng mcp_connectors, mcp_tool_overrides – migration 002_mcp.sql).
+"""Lưu trữ connector MCP khai qua giao diện (bảng mcp_connectors, mcp_tool_overrides – migration 002_mcp.sql,
+cột description – 004_source_description.sql).
 
 `ConnectorStore` là interface; `PgConnectorStore` là bản Postgres. Xóa connector → token, override, state đi kèm
 bị xóa theo (ON DELETE CASCADE).
@@ -10,7 +11,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-CONNECTOR_FIELDS = ("name", "display_name", "url", "transport", "auth_type", "headers_enc", "resource", "issuer",
+CONNECTOR_FIELDS = ("name", "display_name", "description", "url", "transport", "auth_type", "headers_enc", "resource", "issuer",
                     "as_metadata", "scopes", "enabled", "created_by")
 
 

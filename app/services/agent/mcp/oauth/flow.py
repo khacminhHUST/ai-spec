@@ -13,11 +13,11 @@ from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 import httpx
 
-from app.services.oauth.client_registry import ClientInfo
-from app.services.oauth.crypto import SecretBox
-from app.services.oauth.errors import OAuthError
-from app.services.oauth.pkce import challenge_s256, new_state, new_verifier
-from app.services.oauth.store import OAuthStore, utcnow
+from app.services.agent.mcp.oauth.client_registry import ClientInfo
+from app.services.agent.mcp.oauth.crypto import SecretBox
+from app.services.agent.mcp.oauth.errors import OAuthError
+from app.services.agent.mcp.oauth.pkce import challenge_s256, new_state, new_verifier
+from app.services.agent.mcp.oauth.store import OAuthStore, utcnow
 
 ERROR_TEXT = {
     "invalid_target": "Server MCP (resource) chưa được quản trị Authorization Server đăng ký – liên hệ quản trị Server A",

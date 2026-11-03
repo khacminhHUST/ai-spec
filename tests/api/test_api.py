@@ -1,4 +1,4 @@
-"""Unit – API FastAPI (mock deps, InMemorySaver)."""
+"""Unit – API FastAPI (mock deps, InMemorySaver, agent giả tra tài liệu rồi trả lời)."""
 import json
 
 import pytest
@@ -6,6 +6,10 @@ from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.main import create_app
+from app.services.agent.runtime import build_runtime
+from app.services.agent.sandbox import SandboxManager
+from app.services.agent.sandbox.mock_backend import MockSandbox
+from tests.agent.fakes import ScriptedModel, tool_call
 from tests.query.fakes import make_deps, router_json, scripted_llm
 
 pytestmark = pytest.mark.unit
@@ -28,7 +32,10 @@ def test_chat_sse_and_conversations(mock_settings):
     llm = scripted_llm(router_json(q="Thời gian bảo hành hệ thống điện", queries_vi=["thời gian bảo hành hệ thống điện"]),
                        answer="Bảo hành 24 tháng [1].")
     deps = make_deps(mock_settings, llm=llm)
-    with TestClient(create_app(deps, InMemorySaver())) as client:
+    model = ScriptedModel(script=[tool_call("search_project_docs", question="Thời gian bảo hành hệ thống điện?"),
+                                  "Bảo hành 24 tháng [1]."], calls=[])
+    rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800), model=model, yaml_tools=[])
+    with TestClient(create_app(deps, InMemorySaver(), rt)) as client:
         r = client.post("/chat", json={"user_id": "test_engineer", "question": "Bảo hành bao lâu?"})
         assert r.status_code == 200
         events = _sse(r.text)

@@ -26,7 +26,7 @@ from mcp.client.auth.utils import (
 )
 from mcp.types import LATEST_PROTOCOL_VERSION
 
-from app.services.oauth.errors import OAuthError
+from app.services.agent.mcp.oauth.errors import OAuthError
 
 log = logging.getLogger(__name__)
 

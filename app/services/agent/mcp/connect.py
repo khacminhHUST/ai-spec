@@ -6,14 +6,14 @@ from typing import Any, Callable
 
 import httpx
 
+from app.services.agent.mcp.oauth import flow
+from app.services.agent.mcp.oauth.client_registry import ClientRegistry
+from app.services.agent.mcp.oauth.crypto import SecretBox
+from app.services.agent.mcp.oauth.errors import OAuthError
+from app.services.agent.mcp.oauth.store import OAuthStore
+from app.services.agent.mcp.oauth.token_store import TokenStore
 from app.services.agent.mcp.registry import ConnectorError, ConnectorRegistry
 from app.services.agent.mcp.tools import ConnectorTools
-from app.services.oauth import flow
-from app.services.oauth.client_registry import ClientRegistry
-from app.services.oauth.crypto import SecretBox
-from app.services.oauth.errors import OAuthError
-from app.services.oauth.store import OAuthStore
-from app.services.oauth.token_store import TokenStore
 
 log = logging.getLogger(__name__)
 

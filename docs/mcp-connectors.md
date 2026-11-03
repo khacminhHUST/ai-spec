@@ -90,12 +90,13 @@ Transport: `streamable_http` (mặc định) hoặc `sse`. Chỉ chấp nhận `
 
 ## 3. Agent dùng tool MCP
 
-- **Dựng vòng lặp agent theo từng lượt** (thay cho dựng 1 lần ở `app/services/agent/runtime.py`). Bộ tool của lượt gồm:
-  - Tool có sẵn.
-  - Tool từ `config/mcp.yaml`.
-  - Tool từ connector `none` / `headers` đang bật.
-  - Tool từ connector `oauth` đang bật **mà user hiện tại đã kết nối** (`status=connected`).
-- Danh sách tool (`tools/list`) cache theo (connector, user) trong `tool_cache_ttl_s` (600s). Kết nối lại hoặc sửa connector thì xóa cache. Connector lỗi khi nạp thì bỏ qua và ghi log, lượt chat vẫn chạy.
+> Cập nhật 2026-11-03: tool của connector **không** nạp sẵn vào mọi lượt nữa mà nạp 2 tầng – danh mục nguồn + mở nguồn
+> (`docs/agent-harness.md` mục 3.2). Agent dựng 1 lần; tool của nguồn đã mở được gắn động mỗi lần gọi LLM.
+
+- Mỗi connector đang bật (và mỗi server trong `config/mcp.yaml`) là 1 **nguồn** trong danh mục, kèm trạng thái theo user: `none` / `headers` → sẵn sàng; `oauth` → đã kết nối / chưa kết nối / hết hạn / không có quyền. Danh mục chỉ đọc DB.
+- Agent mở nguồn (`open_source_tools`) → nạp tool của connector cho user đó (connector `oauth` phải `status=connected`).
+- Cột `description` (migration `004_source_description.sql`): mô tả nguồn cho danh mục. Để trống → tự điền ở lần thử kết nối thành công đầu tiên (giới thiệu server tự trả → LLM tóm tắt danh sách tool → tên tool). `POST /connectors/{id}/describe?user_id=` trả gợi ý (không lưu).
+- Danh sách tool (`tools/list`) cache theo (connector, user) trong `tool_cache_ttl_s` (600s). Kết nối lại hoặc sửa connector thì xóa cache. Connector lỗi khi mở nguồn → lỗi có cấu trúc cho agent, lượt chat vẫn chạy.
 - Gọi tool: mỗi lần gọi mở phiên MCP qua `langchain-mcp-adapters` (`streamable_http` / `sse`).
   - Connector `oauth`: truyền `auth=httpx.Auth` tự viết, lấy token của user đang chat theo mục 2.4.
   - Connector `headers`: truyền `headers`.
@@ -107,8 +108,7 @@ Transport: `streamable_http` (mặc định) hoặc `sse`. Chỉ chấp nhận `
 
   Tool `write` đi qua `ConfirmMiddleware` hiện có (`app/services/agent/loop/confirm.py`).
 - `ToolError` / `isError` từ server: trả cho agent dạng lỗi tool có cấu trúc (`ok:false`). Kết nối vẫn giữ.
-- **Chạy tiếp sau xác nhận** (`/chat/confirm`): dựng lại agent với bộ tool của lượt đó. Tool cần chạy không còn (ví dụ vừa ngắt kết nối) thì trả lỗi có cấu trúc, không làm sập.
-- Không đổi định dạng `messages`, sự kiện SSE và hành vi tuyến `lookup`.
+- **Chạy tiếp sau xác nhận** (`/chat/confirm`): tool của nguồn đã mở được nạp lại tại thời điểm đó. Tool cần chạy không còn (ví dụ vừa ngắt kết nối) thì trả lỗi có cấu trúc, không làm sập.
 
 ---
 
@@ -165,7 +165,7 @@ Thêm proxy `/mcp` vào `frontend/vite.config.ts`. Callback đi qua origin của
 
 Được sửa/thêm:
 - `app/services/agent/**`, gồm `mcp/`, `runtime.py`, `graph.py`, `loop/agent.py`, `tools/registry.py`.
-- `app/services/oauth/**` (mới: discovery, pkce, client_registry, token_store, crypto).
+- `app/services/agent/mcp/oauth/**` (mới: discovery, pkce, client_registry, token_store, crypto).
 - `app/api/routes/mcp.py`.
 - `app/db/migrations/002_mcp.sql`.
 - `config/mcp.yaml`.
@@ -196,7 +196,7 @@ Không sửa: `app/services/query/`, `app/services/ingestion/`, `app/services/kn
 5. Refresh có khóa: 2 luồng đồng thời chỉ gọi token endpoint **1 lần**. Refresh token mới được lưu.
 6. 401 khi gọi tool: refresh 1 lần rồi gọi lại. `invalid_grant` thì `needs_reauth`.
 7. Phân loại đọc/ghi: override > annotation > mặc định `write`. Tool `write` sinh `confirm_required`.
-8. Bộ tool theo lượt: connector `oauth` chưa kết nối không có tool; connector tắt không có tool; user A không thấy token của user B.
+8. Danh mục nguồn + tool theo nguồn: connector `oauth` chưa kết nối không mở được; connector tắt không có trong danh mục; user A không thấy token của user B.
 9. Token không xuất hiện trong log (dùng `caplog`).
 10. Mã hóa: giá trị lưu DB khác plaintext, giải mã đúng.
 
@@ -219,7 +219,7 @@ Không sửa: `app/services/query/`, `app/services/ingestion/`, `app/services/kn
 
 ### Hồi quy
 - Toàn bộ test hiện có pass (276 unit + integration).
-- Agent E2E A1–A8 và Gate không giảm nếu có key (`MEP_NS=ingest`).
+- Agent E2E A1–A8 và câu hỏi vàng qua agent không giảm nếu có key (`MEP_NS=ingest`).
 - A7 (tool MCP write) vẫn đạt.
 
 ### E2E với A thật (tùy chọn, nếu A chạy được ở local)
@@ -230,7 +230,7 @@ Không sửa: `app/services/query/`, `app/services/ingestion/`, `app/services/kn
 - Kết nối được MCP server thường (không xác thực / header tĩnh).
 - Token mã hóa khi lưu, không xuất hiện trong log, đúng user.
 - Hai refresh đồng thời không làm A thu hồi phiên.
-- Toàn bộ test cũ pass; luồng lookup không đổi.
+- Toàn bộ test cũ pass.
 
 ---
 

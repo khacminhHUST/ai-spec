@@ -45,7 +45,7 @@ def env(kn_ns, store, tmp_path, monkeypatch):
                 reranker=MockReranker(), llm_fast=llm, llm_main=llm, count_tokens=approx_tokens)
     attach_store_version(deps)      # như app/main.py: worker (tiến trình riêng) phát hành → làm mới cache
     rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800),
-                       model=ScriptedModel(script=[], calls=[]), mcp_tools=[])
+                       model=ScriptedModel(script=[], calls=[]), yaml_tools=[])
     app = create_app(deps, InMemorySaver(), rt)
     app.dependency_overrides[get_store] = lambda: store
     with TestClient(app) as client:

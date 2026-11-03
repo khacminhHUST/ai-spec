@@ -11,7 +11,7 @@ import os
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from app.services.oauth.errors import OAuthError, SecretKeyMissing
+from app.services.agent.mcp.oauth.errors import OAuthError, SecretKeyMissing
 
 ENV_KEY = "MEP_SECRET_KEY"
 

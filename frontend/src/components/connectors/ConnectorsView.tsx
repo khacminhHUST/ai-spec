@@ -174,6 +174,11 @@ function ConnectorRow({ c, userId, toolsOpen, ...h }: RowProps) {
             {c.name}
             {c.readonly && <span className="chip">yaml · chỉ đọc</span>}
           </div>
+          {c.description ? (
+            <div className="cn-desc small">{c.description}</div>
+          ) : (
+            <div className="muted small">Chưa có mô tả – agent khó biết khi nào dùng nguồn này</div>
+          )}
         </td>
         <td className="cn-url small">{c.url}</td>
         <td>

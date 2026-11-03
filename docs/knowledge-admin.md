@@ -163,7 +163,7 @@ Không thêm thư viện router; điều hướng bằng state.
 
 Sửa tối thiểu (vài dòng): `app/main.py` (include router), `frontend/src/App.tsx` (thêm tab), `frontend/vite.config.ts` (proxy), `docker-compose.yml` (nếu thêm service worker, không đổi service cũ).
 
-Không sửa: `app/services/agent/**`, `app/services/oauth/**`, schema bảng cũ, `CLAUDE.md`. `app/services/query/` chỉ theo ngoại lệ ở mục 6.
+Không sửa: `app/services/agent/**`, `app/services/agent/mcp/oauth/**`, schema bảng cũ, `CLAUDE.md`. `app/services/query/` chỉ theo ngoại lệ ở mục 6.
 
 ---
 

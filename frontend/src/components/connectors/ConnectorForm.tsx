@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   createConnector,
+  describeConnector,
   discover,
+  testConnector,
   updateConnector,
   type AuthType,
   type Connector,
@@ -20,10 +22,22 @@ interface Props {
 
 const AUTH_LABEL: Record<AuthType, string> = { oauth: "OAuth", none: "Không xác thực", headers: "Header tĩnh" };
 
+/** Gợi ý mã connector từ tên miền: https://phaply.hawee.com.vn/mcp → "phaply" */
+function slugFromUrl(url: string): string {
+  try {
+    const host = new URL(url).hostname.split(".")[0] ?? "";
+    const slug = host.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32);
+    return slug.length >= 2 ? slug : "";
+  } catch {
+    return "";
+  }
+}
+
 export default function ConnectorForm({ userId, editing, onSaved, onCancel }: Props) {
   const [url, setUrl] = useState(editing?.url ?? "");
   const [name, setName] = useState(editing?.name ?? "");
   const [displayName, setDisplayName] = useState(editing?.display_name ?? "");
+  const [description, setDescription] = useState(editing?.description ?? "");
   const [transport, setTransport] = useState<Transport>((editing?.transport as Transport) ?? "streamable_http");
   const [authType, setAuthType] = useState<AuthType>(editing?.auth_type ?? "oauth");
   const [headers, setHeaders] = useState<HeaderItem[]>(
@@ -45,8 +59,23 @@ export default function ConnectorForm({ userId, editing, onSaved, onCancel }: Pr
     try {
       const d = await discover(url.trim());
       setFound(d);
+      if (!name.trim()) setName(slugFromUrl(url.trim()));
       setAuthType(d.auth_type);
       if (d.auth_type === "oauth" && !d.registration) setAdvanced(true);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canSuggest = !!editing && (editing.auth_type !== "oauth" || editing.status === "connected");
+  const suggest = async () => {
+    if (!editing) return;
+    setError(null);
+    setBusy(true);
+    try {
+      setDescription((await describeConnector(editing.connector_id, userId)).description);
     } catch (e) {
       setError(String((e as Error).message ?? e));
     } finally {
@@ -66,6 +95,7 @@ export default function ConnectorForm({ userId, editing, onSaved, onCancel }: Pr
     const body: ConnectorInput = {
       name: name.trim(),
       display_name: displayName.trim() || undefined,
+      description: description.trim(),
       url: url.trim(),
       transport,
       auth_type: authType,
@@ -79,7 +109,11 @@ export default function ConnectorForm({ userId, editing, onSaved, onCancel }: Pr
     }
     try {
       if (editing) await updateConnector(editing.connector_id, body);
-      else await createConnector(body, userId);
+      else {
+        const c = await createConnector(body, userId);
+        // Không cần token: thử kết nối ngay để server trả danh sách tool → tự điền mô tả nếu đang trống
+        if (c.auth_type !== "oauth") await testConnector(c.connector_id, userId).catch(() => undefined);
+      }
       onSaved();
     } catch (err) {
       setError(String((err as Error).message ?? err));
@@ -115,12 +149,26 @@ export default function ConnectorForm({ userId, editing, onSaved, onCancel }: Pr
       )}
       <div className="cn-grid">
         <label>
-          Tên (a-z, 0-9, _)
-          <input value={name} onChange={(e) => setName(e.target.value)} pattern="[a-z0-9_]{2,32}" required />
+          Mã connector (a-z, 0-9, _ – tiền tố tên tool)
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            pattern="[a-z0-9_]{2,32}"
+            placeholder="vd: mail_hawee"
+            autoComplete="off"
+            name="mcp-connector-code"
+            required
+          />
         </label>
         <label>
           Tên hiển thị
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="vd: Hộp thư HAWEE"
+            autoComplete="off"
+            name="mcp-connector-label"
+          />
         </label>
         <label>
           Transport
@@ -133,6 +181,28 @@ export default function ConnectorForm({ userId, editing, onSaved, onCancel }: Pr
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Bật
         </label>
       </div>
+      <label>
+        Mô tả cho agent (nguồn này chứa dữ liệu gì, làm được gì)
+        <div className="cn-row">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="Để trống: tự điền khi kết nối thành công lần đầu (giới thiệu của server hoặc tóm tắt danh sách tool)"
+          />
+          {editing && (
+            <button
+              type="button"
+              onClick={suggest}
+              disabled={busy || !canSuggest}
+              title={canSuggest ? "" : "Kết nối trước để server trả danh sách tool"}
+            >
+              Gợi ý
+            </button>
+          )}
+        </div>
+      </label>
       <fieldset className="cn-auth">
         <legend>Kiểu xác thực</legend>
         {(Object.keys(AUTH_LABEL) as AuthType[]).map((t) => (

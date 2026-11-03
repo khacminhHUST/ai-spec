@@ -16,8 +16,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.api.deps import get_runtime
+from app.services.agent.mcp.oauth.errors import OAuthError, SecretKeyMissing
 from app.services.agent.runtime import AgentRuntime
-from app.services.oauth.errors import OAuthError, SecretKeyMissing
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -32,6 +32,7 @@ class HeaderItem(BaseModel):
 class ConnectorIn(BaseModel):
     name: str
     display_name: str | None = None
+    description: str | None = None      # trống → tự điền ở lần thử kết nối thành công đầu tiên (/test, OAuth callback)
     url: str
     transport: Literal["streamable_http", "sse"] = "streamable_http"
     auth_type: Literal["oauth", "none", "headers"]
@@ -45,6 +46,7 @@ class ConnectorIn(BaseModel):
 class ConnectorPatch(BaseModel):
     name: str | None = None
     display_name: str | None = None
+    description: str | None = None
     url: str | None = None
     transport: Literal["streamable_http", "sse"] | None = None
     auth_type: Literal["oauth", "none", "headers"] | None = None
@@ -106,7 +108,7 @@ def list_connectors(user_id: str = Query(...), hub=Depends(get_hub)) -> list[dic
 
 @router.post("/connectors/discover")
 def discover(body: DiscoverIn, hub=Depends(get_hub)) -> dict[str, Any]:
-    from app.services.oauth.discovery import check_url, discover as run
+    from app.services.agent.mcp.oauth.discovery import check_url, discover as run
 
     url = _call(check_url, body.url, bool(hub.cfg.get("allow_http_localhost", True)))
     d = _call(run, url, hub.http(), client_name=hub.cfg.get("client_name", "MEP Project Assistant"))
@@ -192,7 +194,7 @@ def _yaml_tools(runtime: AgentRuntime, connector_id: str) -> list[dict[str, Any]
     return [{"name": (t.metadata or {}).get("mcp_tool", t.name), "full_name": t.name, "title": None,
              "description": t.description, "default_access": t.metadata.get("access"), "override": None,
              "access": t.metadata.get("access"), "annotations": {}, "readonly": True}
-            for t in runtime.toolset.tools if (t.metadata or {}).get("mcp_server") == name]
+            for t in (runtime.sources.yaml_tools.get(name, []) if runtime.sources else [])]
 
 
 @router.get("/connectors/{connector_id}/tools")
@@ -205,6 +207,19 @@ def list_tools(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub
         raise HTTPException(409, "Chưa kết nối – bấm Kết nối để xem danh sách tool")
     try:
         return hub.tools.views(row, user_id)
+    except Exception as e:  # noqa: BLE001
+        status, msg = hub.tools.explain(row, e)
+        raise HTTPException(502, {"code": status, "message": msg}) from None
+
+
+@router.post("/connectors/{connector_id}/describe")
+def describe(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, str]:
+    """Gợi ý mô tả cho danh mục nguồn của agent (không lưu – người dùng xem lại rồi bấm Lưu)."""
+    row = _db_row(hub, connector_id)
+    if row["auth_type"] == "oauth" and hub.tokens.status(user_id, connector_id) is None:
+        raise HTTPException(409, "Chưa kết nối – bấm Kết nối trước để server trả danh sách tool")
+    try:
+        return {"description": hub.suggest_description(row, user_id)}
     except Exception as e:  # noqa: BLE001
         status, msg = hub.tools.explain(row, e)
         raise HTTPException(502, {"code": status, "message": msg}) from None

@@ -8,14 +8,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.services.oauth.client_registry import ClientRegistry
-from app.services.oauth.crypto import SecretBox, secret_box
-from app.services.oauth.discovery import check_url, discover
-from app.services.oauth.errors import OAuthError, ReauthRequired, SecretKeyMissing
-from app.services.oauth.flow import TokenSet, consume_state, exchange_code, start
-from app.services.oauth.pkce import challenge_s256, new_verifier
-from app.services.oauth.store import utcnow
-from app.services.oauth.token_store import TokenStore
+from app.services.agent.mcp.oauth.client_registry import ClientRegistry
+from app.services.agent.mcp.oauth.crypto import SecretBox, secret_box
+from app.services.agent.mcp.oauth.discovery import check_url, discover
+from app.services.agent.mcp.oauth.errors import OAuthError, ReauthRequired, SecretKeyMissing
+from app.services.agent.mcp.oauth.flow import TokenSet, consume_state, exchange_code, start
+from app.services.agent.mcp.oauth.pkce import challenge_s256, new_verifier
+from app.services.agent.mcp.oauth.store import utcnow
+from app.services.agent.mcp.oauth.token_store import TokenStore
 from tests.agent.unit.mcp.fakes import AS, MCP_URL, REDIRECT, SECRET, FakeAS, MemoryStore, connector_row, mock_http, prm_server
 
 pytestmark = pytest.mark.unit
@@ -127,7 +127,7 @@ def test_no_registration_endpoint_requires_manual_client():
 # ------------------------------------------------------------------ 4. state
 
 def _start(store, user="u1"):
-    from app.services.oauth.client_registry import ClientInfo
+    from app.services.agent.mcp.oauth.client_registry import ClientInfo
 
     url = start(store, BOX, user_id=user, connector_id="c1", as_meta=FakeAS().metadata(),
                 client=ClientInfo("cid", None, "none"), redirect_uri=REDIRECT, resource=MCP_URL, scope=None, ttl_s=600)

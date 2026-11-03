@@ -9,6 +9,7 @@ export interface Connector {
   connector_id: string;
   name: string;
   display_name: string;
+  description: string; // mô tả cho danh mục nguồn của agent
   url: string;
   transport: string;
   auth_type: AuthType;
@@ -41,6 +42,7 @@ export interface HeaderItem {
 export interface ConnectorInput {
   name: string;
   display_name?: string;
+  description?: string;
   url: string;
   transport: Transport;
   auth_type: AuthType;
@@ -116,6 +118,10 @@ export const disconnect = (cid: string, userId: string) =>
 
 export const testConnector = (cid: string, userId: string) =>
   post(`/mcp/connectors/${id(cid)}/test?${q(userId)}`).then((r) => call<TestResult>(r));
+
+/** Gợi ý mô tả (không lưu): giới thiệu server tự trả → LLM tóm tắt danh sách tool → tên tool */
+export const describeConnector = (cid: string, userId: string) =>
+  post(`/mcp/connectors/${id(cid)}/describe?${q(userId)}`).then((r) => call<{ description: string }>(r));
 
 export const listTools = (cid: string, userId: string) =>
   fetch(`/mcp/connectors/${id(cid)}/tools?${q(userId)}`).then((r) => call<McpTool[]>(r));

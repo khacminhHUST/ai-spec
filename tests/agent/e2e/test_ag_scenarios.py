@@ -1,4 +1,4 @@
-"""E2E – kịch bản agent A1–A8 + độ chính xác Gate, chấm theo tiêu chí nghiệm thu docs/agent-harness.md mục 10.
+"""E2E – kịch bản agent A1–A8 + bộ câu hỏi vàng qua agent, chấm theo tiêu chí nghiệm thu docs/agent-harness.md mục 10.
 
 Gọi API thật (Gemini), Docker sandbox thật, dữ liệu S5 đã ingest (namespace MEP_E2E_NS, mặc định `ingest`).
 Báo cáo: artifacts/agent_e2e_report.json.
@@ -18,7 +18,6 @@ from docx import Document
 from openpyxl import Workbook, load_workbook
 
 from app.services.agent.config import agent_cfg
-from app.services.agent.gate import run_gate
 from app.services.agent.graph import build_assistant_graph, stream_assistant_turn, stream_confirm
 from app.services.agent.mcp import load_mcp_tools
 from app.services.agent.runtime import build_runtime
@@ -38,15 +37,15 @@ FILE_SCENARIOS = {"A1", "A2", "A3", "A4", "A8"}
 
 
 def collect(events, t0) -> dict:
-    out = {"route": None, "status": None, "answer": "", "tools": [], "tool_ok": [], "files": [], "citations": [],
+    out = {"status": None, "answer": "", "tools": [], "tool_ok": [], "files": [], "citations": [],
            "confirms": [], "conversation_id": None, "ttft": None}
     for ev in events:
         kind, d = ev["event"], ev["data"]
-        if kind == "route":
-            out["route"] = d["route"]
-        elif kind == "token":
+        if kind == "token":
             out["ttft"] = out["ttft"] or round(time.monotonic() - t0, 2)
             out["answer"] += d
+        elif kind == "token_reset":
+            out["answer"] = ""
         elif kind == "tool_start":
             out["tools"].append(d["tool"])
         elif kind == "tool_end":
@@ -165,7 +164,8 @@ def check_a5(out, sbx):
 
 
 def check_a6(out, sbx):
-    return {"route_lookup": out["route"] == "lookup", "khong_goi_tool": not out["tools"],
+    """Câu tra cứu đơn giản: chỉ tra tài liệu (không sandbox / nguồn ngoài), trả lời nhanh."""
+    return {"chi_tra_tai_lieu": set(out["tools"]) == {"search_project_docs"},
             "ttft_10s": bool(out["ttft"] and out["ttft"] < 10), "6_lan": "6 lần" in norm(out["answer"])}
 
 
@@ -215,7 +215,7 @@ def harness(settings, tmp_path_factory):
     mcp = load_mcp_tools({"tool_name_prefix": True, "servers": {"echo": {
         "transport": "stdio", "command": sys.executable, "args": [ECHO_SERVER], "env": {"MCP_ECHO_LOG": str(log)},
         "access": "read", "tools": {"create_issue": {"access": "write"}}}}})
-    rt = build_runtime(deps, mcp_tools=mcp)
+    rt = build_runtime(deps, yaml_tools=mcp)                # server echo = 1 nguồn ngoài, agent phải mở trước khi dùng
     with postgres_checkpointer(s) as cp:      # checkpointer thật như production
         yield build_assistant_graph(deps, rt, cp), rt, deps, log
     rt.manager.close_all()
@@ -226,27 +226,8 @@ def _turn(graph, question, cid=None, **kw) -> dict:
     return collect(stream_assistant_turn(graph, SCENARIOS["user_id"], question, cid, **kw), t0)
 
 
-def test_gate_accuracy(harness):
-    """Gate phân tuyến đúng ≥ 95% (bộ câu hỏi vàng + kịch bản agent)."""
-    _, rt, deps, _ = harness
-    cases = [(t["question"], "lookup", []) for q in GOLDEN["questions"]
-             for t in (q.get("turns") or [{"question": q["question"]}])]
-    a8_history = [{"role": "user", "content": SCENARIOS["scenarios"][0]["question"]},
-                  {"role": "assistant", "content": "Đã xuất file gio_tuoi_S5.xlsx", "route": "agent",
-                   "files": [{"name": "gio_tuoi_S5.xlsx", "size": 1}]}]
-    cases += [(x["question"], x["route"], a8_history if x.get("continues") else []) for x in SCENARIOS["scenarios"]]
-    wrong = []
-    for q, expected, history in cases:
-        out = run_gate(deps.llm_fast, rt.cfg["gate"], q, history)
-        if out.route != expected:
-            wrong.append({"question": q, "expected": expected, "got": out.route, "reason": out.reason})
-    acc = 1 - len(wrong) / len(cases)
-    print(json.dumps({"gate_accuracy": acc, "n": len(cases), "wrong": wrong}, ensure_ascii=False))
-    assert acc >= 0.95, wrong
-
-
 def test_golden_through_assistant(harness):
-    """Bộ câu hỏi vàng đi qua Gate: đúng tuyến lookup, giữ điểm giá trị, TTFT (điểm retrieval: tests/e2e/test_golden_e2e.py)."""
+    """Bộ câu hỏi vàng qua agent: giữ điểm giá trị, TTFT (điểm retrieval: tests/e2e/test_golden_e2e.py)."""
     graph, _, _, _ = harness
     rows = []
     for q in GOLDEN["questions"]:
@@ -254,18 +235,18 @@ def test_golden_through_assistant(harness):
         for t in q.get("turns") or [{"question": q["question"], "expected_values": q["expected_values"]}]:
             last = _turn(graph, t["question"], cid)
             cid = last["conversation_id"]
-            rows.append({"id": q["id"], "route": last["route"], "ttft": last["ttft"], "tools": last["tools"]})
+            rows.append({"id": q["id"], "ttft": last["ttft"], "tools": last["tools"], "seconds": last["seconds"]})
         rows[-1].update(status=last["status"], expected=q["expected_status"],
                         values=values_found(last["answer"], t["expected_values"]))
     final = [r for r in rows if "status" in r]
     with_values = [r for r in final if r["values"]]
     values_rate = sum(all(r["values"]) for r in with_values) / len(with_values)
     ttfts = [r["ttft"] for r in rows if r["ttft"]]
-    summary = {"lookup_rate": sum(r["route"] == "lookup" for r in rows) / len(rows), "values_rate": values_rate,
-               "status_ok": sum(r["status"] == r["expected"] for r in final) / len(final),
-               "ttft_p50": statistics.median(ttfts)}
+    summary = {"values_rate": values_rate, "ttft_p50": statistics.median(ttfts),
+               "seconds_p50": statistics.median(r["seconds"] for r in rows),
+               "search_only_rate": sum(set(r["tools"]) == {"search_project_docs"} for r in rows) / len(rows)}
     print(json.dumps(summary, ensure_ascii=False), [r for r in final if not r["values"] or not all(r["values"])])
-    assert summary["lookup_rate"] >= 0.95 and values_rate >= 0.85 and summary["ttft_p50"] < 10
+    assert values_rate >= 0.85 and summary["ttft_p50"] < 10
 
 
 def test_scenarios(harness):
@@ -283,7 +264,7 @@ def test_scenarios(harness):
             out = _turn(graph, sc["question"], cid, **kw)
             sbx = rt.manager.peek(out["conversation_id"])
             if sid == "A7":
-                checks = {"route_agent": out["route"] == "agent", "co_confirm": bool(out["confirms"]),
+                checks = {"mo_nguon": "open_source_tools" in out["tools"], "co_confirm": bool(out["confirms"]),
                           "dung_tool": bool(out["confirms"]) and out["confirms"][0]["tool"] == "echo_create_issue"}
                 if out["confirms"]:
                     t0 = time.monotonic()
@@ -298,8 +279,7 @@ def test_scenarios(harness):
             out, checks = {"error": repr(e), "seconds": None, "status": None, "tools": [], "files": []}, {"khong_loi": False}
         by_id[sid] = out
         passed = all(checks.values())
-        results.append({"id": sid, "passed": passed, "checks": checks, "route": out.get("route"),
-                        "status": out.get("status"), "seconds": out.get("seconds"), "tools": out.get("tools"),
+        results.append({"id": sid, "passed": passed, "checks": checks, "status": out.get("status"), "seconds": out.get("seconds"), "tools": out.get("tools"),
                         "files": [f["name"] for f in out.get("files", [])], "answer": out.get("answer"),
                         "citations": len(out.get("citations") or []), "error": out.get("error")})
         print(f"{sid}: {'PASS' if passed else 'FAIL'} {out.get('seconds')}s tools={len(out.get('tools') or [])} {checks}")

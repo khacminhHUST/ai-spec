@@ -1,4 +1,4 @@
-"""POST /chat (SSE): route · status · token · tool_start · tool_end · citations · file · confirm_required · done (lỗi → error)."""
+"""POST /chat (SSE): status · token · token_reset · tool_start · tool_end · citations · file · confirm_required · done (lỗi → error)."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,4 +30,4 @@ def chat(req: ChatRequest, deps: Deps = Depends(get_deps), graph=Depends(get_gra
         check_owner(deps, req.conversation_id, req.user_id)
     _check_attachments(runtime, req)
     return sse_response(stream_assistant_turn(graph, req.user_id, req.question, req.conversation_id,
-                                              req.attachments, req.force_route))
+                                              req.attachments))

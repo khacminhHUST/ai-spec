@@ -35,7 +35,7 @@ Dùng khi: cần số liệu/yêu cầu kỹ thuật để trả lời hoặc đ
 - project_mentions: tên/mã dự án hoặc công trình người dùng nhắc (VD ["S5"]); không nhắc → bỏ trống (dùng dự án đang chọn).
 - disciplines: lọc phân hệ trong HVAC, ELECTRICAL, ELV, PLUMBING, FIRE, LIFT, BMS, GENERAL (không chắc → bỏ trống).
 - streams: lọc loại nguồn LEGAL_STANDARD (TCVN/QCVN), OPERATOR_STANDARD (Westin/Marriott), DESIGN_CONSULTANT (thuyết minh/spec/chỉ dẫn), CONTRACT (hợp đồng). Chỉ điền khi cần đúng 1 loại nguồn (VD so sánh Thuyết minh với Westin → gọi 2 lần, mỗi lần 1 stream).
-Trả về JSON: status (OK | PARTIAL | NOT_FOUND | ASK_CLARIFY), blocks (n, doc, rev, section, pages, lang, vi/en = nội dung), citations.
+Trả về JSON: status (OK | PARTIAL | NOT_FOUND | ASK_CLARIFY), projects (name, aliases, governing_language), blocks (n, stream, priority – 1 là cao nhất, doc, rev, section, pages, lang, vi/en = nội dung), citations.
 - Trích dẫn trong câu trả lời bằng [n] của block. NOT_FOUND → nói rõ không có trong tài liệu, KHÔNG tự điền số liệu.
 - ASK_CLARIFY → hỏi lại người dùng theo clarify_options rồi dừng.
 - Kết quả dài → full_result_file (JSON trong /workspace/input) để đọc đủ số liệu."""
@@ -102,7 +102,8 @@ def _pages(b: dict[str, Any]) -> str:
 
 def _block(b: dict[str, Any], n: int, profiles: dict[str, Any]) -> dict[str, Any]:
     out = {"n": n, "project": profiles.get(b.get("project_id"), {}).get("name", b.get("project_id")),
-           "stream": b.get("stream"), "doc": b.get("doc_title") or b["doc_id"], "rev": b.get("revision"),
+           "stream": b.get("stream"), "priority": b.get("priority"), "doc": b.get("doc_title") or b["doc_id"],
+           "rev": b.get("revision"),
            "section": " ".join(x for x in (b.get("number"), b.get("title")) if x) or b["section_key"],
            "pages": _pages(b), "lang": [lang for lang in ("vi", "en") if b.get(lang)]}
     for lang in ("vi", "en"):
@@ -200,7 +201,9 @@ def search_impl(search: SearchDocs, manager: SandboxManager, agent_cfg: dict[str
     cites = [_citation(b, first + i) for i, b in enumerate(context)]
     payload = {"status": "NOT_FOUND" if not blocks else status,
                "question": (st.get("router") or {}).get("rewritten_question") or question,
-               "projects": [p.get("name", pid) for pid, p in profiles.items()], "blocks": blocks, "citations": cites}
+               "projects": [{"name": p.get("name", pid), "aliases": p.get("aliases") or [],
+                             "governing_language": p.get("governing_language", "vi")} for pid, p in profiles.items()],
+               "blocks": blocks, "citations": cites}
     if status == "PARTIAL":
         payload["missing"] = [m.split(":", 1)[-1] for m in st.get("missing") or []]
     if not blocks:

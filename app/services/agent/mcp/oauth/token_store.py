@@ -13,11 +13,11 @@ from typing import Any, Callable
 
 import httpx
 
-from app.services.oauth.client_registry import ClientInfo, ClientRegistry
-from app.services.oauth.crypto import SecretBox
-from app.services.oauth.errors import OAuthError, ReauthRequired
-from app.services.oauth.flow import TokenSet, refresh_grant
-from app.services.oauth.store import OAuthStore, utcnow
+from app.services.agent.mcp.oauth.client_registry import ClientInfo, ClientRegistry
+from app.services.agent.mcp.oauth.crypto import SecretBox
+from app.services.agent.mcp.oauth.errors import OAuthError, ReauthRequired
+from app.services.agent.mcp.oauth.flow import TokenSet, refresh_grant
+from app.services.agent.mcp.oauth.store import OAuthStore, utcnow
 
 log = logging.getLogger(__name__)
 

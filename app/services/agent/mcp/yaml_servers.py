@@ -1,4 +1,5 @@
-"""Nạp MCP tool từ config/mcp.yaml (langchain-mcp-adapters), gắn nhãn access read | write vào tool.metadata.
+"""Server MCP khai trong config/mcp.yaml: nạp tool 1 lần lúc khởi động (langchain-mcp-adapters), gắn nhãn access
+read | write vào tool.metadata. Mỗi server là 1 nguồn trong danh mục nguồn của agent (mô tả: khóa `description`).
 
 Access: tools.<tên>.access > access của server > "write" (không khai báo coi là write).
 Tool MCP chỉ có bản async → bọc thêm bản sync (mỗi lần gọi mở session mới, theo cơ chế mặc định của adapter).
@@ -6,18 +7,18 @@ Server lỗi khi nạp → bỏ qua, ghi log (không làm sập app).
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import re
-import threading
 from typing import Any, Callable
 
 from langchain_core.tools import BaseTool, StructuredTool
 
+from app.services.agent.mcp.session import run_sync
+
 log = logging.getLogger(__name__)
 
-_CONN_KEYS = {"access", "tools"}
+_CONN_KEYS = {"access", "tools", "description"}
 _VAR_RE = re.compile(r"\$\{(\w+)\}")
 
 
@@ -42,28 +43,6 @@ def tool_access(cfg: dict[str, Any], server: str, tool_name: str) -> str:
     t = (s.get("tools") or {}).get(tool_name) or {}
     access = str(t.get("access") or s.get("access") or "write").lower()
     return access if access in ("read", "write") else "write"
-
-
-def run_sync(coro_factory: Callable[[], Any]) -> Any:
-    """Chạy coroutine từ code sync (kể cả khi thread hiện tại đã có event loop)."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro_factory())
-    box: dict[str, Any] = {}
-
-    def target():
-        try:
-            box["v"] = asyncio.run(coro_factory())
-        except BaseException as e:  # noqa: BLE001
-            box["e"] = e
-
-    t = threading.Thread(target=target)
-    t.start()
-    t.join()
-    if "e" in box:
-        raise box["e"]
-    return box["v"]
 
 
 def _with_sync(t: BaseTool, server: str, original: str, access: str) -> BaseTool:

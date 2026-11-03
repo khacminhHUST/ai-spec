@@ -1,12 +1,17 @@
 """Phiên MCP tới connector (langchain-mcp-adapters `create_session`) + đọc lỗi HTTP lồng trong ExceptionGroup.
 
+`alisting`: initialize + tools/list, giữ lại phần giới thiệu server tự trả (instructions, mô tả server – đều tùy chọn).
+
 Transport của SDK `mcp` chạy request trong task group → lỗi 401/403 tới tay người gọi dưới dạng ExceptionGroup
 chứa httpx.HTTPStatusError; `find_exc` / `http_status` dò cả nhóm lẫn __cause__/__context__.
 """
 from __future__ import annotations
 
+import asyncio
+import threading
+from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 from langchain_mcp_adapters.sessions import create_session
@@ -30,15 +35,25 @@ def connection(url: str, transport: str, *, timeout_s: float, headers: dict[str,
     return conn
 
 
-async def alist_tools(conn: dict[str, Any]) -> list[Tool]:
+@dataclass
+class ServerListing:
+    tools: list[Tool] = field(default_factory=list)
+    instructions: str = ""          # InitializeResult.instructions
+    about: str = ""                 # serverInfo.title / description (bản giao thức mới)
+
+
+async def alisting(conn: dict[str, Any]) -> ServerListing:
     """initialize + tools/list (đủ các trang)."""
-    out: list[Tool] = []
+    out = ServerListing()
     async with create_session(conn) as session:
-        await session.initialize()
+        init = await session.initialize()
+        info = getattr(init, "serverInfo", None)
+        out.instructions = (getattr(init, "instructions", None) or "").strip()
+        out.about = " – ".join(x for x in (getattr(info, "title", None), getattr(info, "description", None)) if x)
         cursor = None
         for _ in range(MAX_PAGES):
             page = await session.list_tools(cursor=cursor)
-            out.extend(page.tools or [])
+            out.tools.extend(page.tools or [])
             cursor = page.nextCursor
             if not cursor:
                 break
@@ -72,3 +87,25 @@ def short_error(exc: BaseException) -> str:
     leaves = [e for e in _walk(exc) if not getattr(e, "exceptions", None)]
     e = leaves[0] if leaves else exc
     return f"{type(e).__name__}: {e}"[:300]
+
+
+def run_sync(coro_factory: Callable[[], Any]) -> Any:
+    """Chạy coroutine từ code sync (kể cả khi thread hiện tại đã có event loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro_factory())
+    box: dict[str, Any] = {}
+
+    def target():
+        try:
+            box["v"] = asyncio.run(coro_factory())
+        except BaseException as e:  # noqa: BLE001
+            box["e"] = e
+
+    t = threading.Thread(target=target)
+    t.start()
+    t.join()
+    if "e" in box:
+        raise box["e"]
+    return box["v"]

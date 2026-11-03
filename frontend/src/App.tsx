@@ -86,6 +86,7 @@ export default function App() {
   const handlers: ChatHandlers = {
     onStatus: (step) => patchLast((m) => ({ ...m, step })),
     onToken: (t) => patchLast((m) => ({ ...m, content: m.content + t })),
+    onTokenReset: () => patchLast((m) => ({ ...m, content: "" })),
     onCitations: (citations) => patchLast((m) => ({ ...m, citations })),
     onToolStart: (d) =>
       patchLast((m) => ({ ...m, tools: [...(m.tools ?? []), { tool: d.tool, args_preview: d.args_preview, done: false }] })),

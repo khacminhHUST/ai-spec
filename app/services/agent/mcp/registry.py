@@ -12,19 +12,20 @@ from typing import Any, Callable
 
 import httpx
 
-from app.services.agent.mcp.client import _subst
+from app.services.agent.mcp.oauth.client_registry import ClientRegistry
+from app.services.agent.mcp.oauth.crypto import SecretBox
+from app.services.agent.mcp.oauth.discovery import check_url, discover
+from app.services.agent.mcp.oauth.errors import OAuthError
+from app.services.agent.mcp.oauth.store import OAuthStore
 from app.services.agent.mcp.store import ConnectorStore
-from app.services.oauth.client_registry import ClientRegistry
-from app.services.oauth.crypto import SecretBox
-from app.services.oauth.discovery import check_url, discover
-from app.services.oauth.errors import OAuthError
-from app.services.oauth.store import OAuthStore
+from app.services.agent.mcp.yaml_servers import _subst
 
 NAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 AUTH_TYPES = ("oauth", "none", "headers")
 TRANSPORTS = ("streamable_http", "sse")
 YAML_PREFIX = "yaml:"
-EDITABLE = ("name", "display_name", "url", "transport", "auth_type", "enabled", "headers", "client_id", "client_secret")
+DESCRIPTION_MAX = 500
+EDITABLE = ("name", "display_name", "description", "url", "transport", "auth_type", "enabled", "headers", "client_id", "client_secret")
 
 
 class ConnectorError(ValueError):
@@ -55,7 +56,8 @@ class ConnectorRegistry:
         for name, s in (self.cfg.get("servers") or {}).items():
             s = s or {}
             target = s.get("url") or " ".join([str(s.get("command", "")), *map(str, s.get("args") or [])]).strip()
-            out.append({"connector_id": YAML_PREFIX + name, "name": name, "display_name": name, "url": target,
+            out.append({"connector_id": YAML_PREFIX + name, "name": name, "display_name": name,
+                        "description": s.get("description", ""), "url": target,
                         "transport": s.get("transport", ""), "auth_type": "headers" if s.get("headers") else "none",
                         "enabled": True, "source": "yaml", "readonly": True,
                         "header_names": sorted((s.get("headers") or {}).keys())})
@@ -119,6 +121,8 @@ class ConnectorRegistry:
             out["auth_type"] = data["auth_type"]
         if "display_name" in data:
             out["display_name"] = str(data["display_name"] or "").strip()
+        if "description" in data:
+            out["description"] = " ".join(str(data["description"] or "").split())[:DESCRIPTION_MAX]
         if "enabled" in data:
             out["enabled"] = bool(data["enabled"])
         return out
@@ -129,6 +133,7 @@ class ConnectorRegistry:
             raise ConnectorError("Thiếu url hoặc auth_type")
         name = self._check_name(data.get("name", ""))
         row: dict[str, Any] = {"connector_id": uuid.uuid4().hex, "name": name, "display_name": f.get("display_name") or name,
+                               "description": f.get("description", ""),
                                "url": f["url"], "transport": f["transport"], "auth_type": f["auth_type"],
                                "enabled": f.get("enabled", True), "created_by": created_by}
         row.update(self._auth_fields(f["auth_type"], f["url"], data, None))

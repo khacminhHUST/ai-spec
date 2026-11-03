@@ -1,6 +1,6 @@
 """FastAPI app.
 
-    POST /chat (SSE)                {conversation_id?, user_id, question, attachments?, force_route?}
+    POST /chat (SSE)                {conversation_id?, user_id, question, attachments?}
     POST /chat/confirm (SSE)        {conversation_id, user_id, confirm_id, approve}
     GET  /conversations?user_id=    danh sách hội thoại
     GET  /conversations/{id}        hội thoại + messages (từ checkpoint)
@@ -35,7 +35,7 @@ def _destroy_orphan_sandboxes(backend: str) -> None:
         from app.services.agent.sandbox.docker_backend import DockerSandbox
 
         DockerSandbox.destroy_all()
-    except Exception as e:  # noqa: BLE001 – Docker chưa chạy: tuyến lookup vẫn hoạt động
+    except Exception as e:  # noqa: BLE001 – Docker chưa chạy: agent vẫn tra cứu được, chỉ mất sandbox
         log.warning("Không dọn được sandbox cũ: %s", e)
 
 

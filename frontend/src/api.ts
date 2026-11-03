@@ -28,6 +28,7 @@ export function uploadFile(conversationId: string, userId: string, file: File) {
 export interface ChatHandlers {
   onStatus?: (step: string, data: Record<string, unknown>) => void;
   onToken?: (text: string) => void;
+  onTokenReset?: () => void; // phần vừa stream là lời dẫn trước khi gọi tool → xóa
   onCitations?: (c: Citation[]) => void;
   onToolStart?: (d: { tool: string; args_preview?: string }) => void;
   onToolEnd?: (d: { tool: string; ok: boolean; summary: string }) => void;
@@ -89,6 +90,9 @@ function dispatch(block: string, h: ChatHandlers) {
   switch (event) {
     case "token":
       h.onToken?.(raw);
+      break;
+    case "token_reset":
+      h.onTokenReset?.();
       break;
     case "status": {
       const d = JSON.parse(raw);

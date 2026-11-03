@@ -1,4 +1,4 @@
-"""Trạng thái / ngữ cảnh chạy của Agent Harness + chuyển đổi messages lookup ⇄ agent.
+"""Trạng thái / ngữ cảnh chạy của Agent Harness + chuyển đổi `messages` hội thoại ⇄ message của agent.
 
 AgentContext: giá trị do CODE đặt từ request (không bao giờ lấy từ tham số tool LLM truyền vào).
 HarnessState: state vòng lặp agent (namespace riêng, không đẩy vào `messages` hiển thị).
@@ -20,8 +20,10 @@ from typing_extensions import NotRequired
 class AgentContext:
     user_id: str
     conversation_id: str
-    active_projects: list[str] = field(default_factory=list)   # đầu lượt (dùng chung với lookup)
-    history: list[dict] = field(default_factory=list)           # `messages` hợp nhất trước lượt này (định dạng lookup)
+    active_projects: list[str] = field(default_factory=list)   # dự án đang chọn đầu lượt
+    history: list[dict] = field(default_factory=list)           # `messages` hội thoại trước lượt này
+    sources: list[dict] = field(default_factory=list)           # danh mục nguồn ngoài đầu lượt (mcp/catalog.py)
+    open_sources: list[str] = field(default_factory=list)       # nguồn đã mở ở các lượt trước
     next_source_n: int = 1                                      # số [n] kế tiếp trong lượt (tool chạy song song)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
@@ -43,7 +45,8 @@ def runtime_context(runtime: Any) -> AgentContext:
         return ctx
     if isinstance(ctx, dict) and ctx.get("user_id") and ctx.get("conversation_id"):
         return AgentContext(ctx["user_id"], ctx["conversation_id"], list(ctx.get("active_projects") or []),
-                            list(ctx.get("history") or []))
+                            list(ctx.get("history") or []), list(ctx.get("sources") or []),
+                            list(ctx.get("open_sources") or []))
     raise RuntimeError("Thiếu AgentContext (user_id, conversation_id) trong runtime")
 
 
@@ -54,6 +57,13 @@ def add_sources(left: list[dict] | None, right: list[dict] | None) -> list[dict]
     return [*(left or []), *right]
 
 
+def add_names(left: list[str] | None, right: list[str] | None) -> list[str]:
+    """Reducer `open_sources`: hợp, giữ thứ tự mở (nhiều tool mở nguồn chạy song song)."""
+    out = list(left or [])
+    out += [x for x in right or [] if x not in out]
+    return out
+
+
 def last_value(left: Any, right: Any) -> Any:
     """Reducer lấy giá trị sau cùng (nhiều tool song song cùng cập nhật không bị lỗi)."""
     return right
@@ -62,12 +72,13 @@ def last_value(left: Any, right: Any) -> Any:
 class HarnessState(AgentState):
     sources: NotRequired[Annotated[list[dict], add_sources]]     # citation của mọi search trong lượt
     active_projects: NotRequired[Annotated[list[str], last_value]]
+    open_sources: NotRequired[Annotated[list[str], add_names]]  # nguồn ngoài đã mở (tool của nguồn được nạp)
     step_count: NotRequired[Annotated[int, PrivateStateAttr]]
     started_at: NotRequired[Annotated[float, PrivateStateAttr]]
     stop_reason: NotRequired[str | None]
 
 
-# ------------------------------------------------------------------ messages lookup ⇄ agent
+# ------------------------------------------------------------------ messages hội thoại ⇄ agent
 
 _FILES_NOTE_RE = re.compile(r"\s*\[File đã tạo:[^\]]*\]")
 
@@ -81,7 +92,7 @@ def strip_files_note(text: str) -> str:
 
 
 def history_to_messages(history: list[dict]) -> list[BaseMessage]:
-    """`messages` hợp nhất (dict) → message LangChain cho agent (chỉ text + ghi chú file, không tool calls)."""
+    """`messages` hội thoại (dict) → message LangChain cho agent (chỉ text + ghi chú file, không tool calls)."""
     out: list[BaseMessage] = []
     for m in history:
         content = str(m.get("content") or "")
@@ -92,12 +103,12 @@ def history_to_messages(history: list[dict]) -> list[BaseMessage]:
     return out
 
 
-def turn_messages(user_text: str, answer: str, *, route: str, status: str | None = None,
+def turn_messages(user_text: str, answer: str, *, status: str | None = None,
                   citations: list[dict] | None = None, files: list[dict] | None = None,
                   attachments: list[str] | None = None) -> list[dict]:
-    """1 lượt (user + assistant) ở định dạng `messages` của Query Pipeline (+ route, files, attachments)."""
+    """1 lượt (user + assistant) ở định dạng `messages` của Query Pipeline (+ files, attachments)."""
     user: dict[str, Any] = {"role": "user", "content": user_text}
     if attachments:
         user["attachments"] = list(attachments)
     return [user, {"role": "assistant", "content": answer, "status": status, "citations": citations or [],
-                   "route": route, "files": files or []}]
+                   "files": files or []}]

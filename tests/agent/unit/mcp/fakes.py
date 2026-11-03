@@ -15,9 +15,9 @@ from urllib.parse import parse_qs
 
 import httpx
 
+from app.services.agent.mcp.oauth.pkce import challenge_s256
+from app.services.agent.mcp.oauth.store import TOKEN_FIELDS, OAuthStore, utcnow
 from app.services.agent.mcp.store import ConnectorStore
-from app.services.oauth.pkce import challenge_s256
-from app.services.oauth.store import TOKEN_FIELDS, OAuthStore, utcnow
 
 SECRET = "unit-test-secret-key-0123456789abcdef"
 AS = "https://as.example.com"

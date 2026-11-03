@@ -136,7 +136,8 @@
   font-size: 13px;
 }
 .cn-form input,
-.cn-form select {
+.cn-form select,
+.cn-form textarea {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 5px 8px;
@@ -146,6 +147,14 @@
   display: flex;
   gap: 6px;
   align-items: center;
+}
+.cn-row textarea {
+  flex: 1;
+  resize: vertical;
+}
+.cn-desc {
+  max-width: 420px;
+  margin-top: 2px;
 }
 .cn-row input {
   flex: 1;

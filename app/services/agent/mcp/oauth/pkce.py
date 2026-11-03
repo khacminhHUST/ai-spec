@@ -1,4 +1,4 @@
-"""PKCE S256 (RFC 7636) + state ngẫu nhiên. Đối chiếu ai-planner/app/services/oauth/pkce.py (phía A verify)."""
+"""PKCE S256 (RFC 7636) + state ngẫu nhiên. Đối chiếu ai-planner/app/services/agent/mcp/oauth/pkce.py (phía A verify)."""
 from __future__ import annotations
 
 import base64

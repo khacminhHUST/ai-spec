@@ -1,5 +1,5 @@
-"""Unit – API /mcp: CRUD connector, discover, connect → callback (HTML postMessage), tool + ghi đè, yaml chỉ đọc,
-thiếu MEP_SECRET_KEY (TestClient, store in-memory, MockTransport)."""
+"""Unit – API /mcp: CRUD connector, discover, connect → callback (HTML postMessage), mô tả nguồn, tool + ghi đè,
+yaml chỉ đọc, thiếu MEP_SECRET_KEY (TestClient, store in-memory, MockTransport)."""
 import json
 import re
 
@@ -12,11 +12,12 @@ from mcp.types import Tool, ToolAnnotations
 from app.main import create_app
 from app.providers.llm import MockChatModel
 from app.services.agent.mcp.hub import McpHub
+from app.services.agent.mcp.oauth.crypto import SecretBox
+from app.services.agent.mcp.oauth.errors import SecretKeyMissing
+from app.services.agent.mcp.session import ServerListing
 from app.services.agent.runtime import build_runtime
 from app.services.agent.sandbox import SandboxManager
 from app.services.agent.sandbox.mock_backend import MockSandbox
-from app.services.oauth.crypto import SecretBox
-from app.services.oauth.errors import SecretKeyMissing
 from tests.agent.fakes import ScriptedModel
 from tests.agent.unit.mcp.fakes import MCP_URL, SECRET, FakeAS, MemoryStore, mock_http, prm_server
 from tests.agent.unit.mcp.test_mcp_connectors import CFG
@@ -35,9 +36,10 @@ def api(mock_settings, monkeypatch):
         open_srv = lambda r: httpx.Response(200, json={}) if r.url.host == "pub.example.com" else None   # noqa: E731
         hub = McpHub(CFG, store, store, box=box, http=mock_http(prm_server(), fa.handle, open_srv))
         monkeypatch.setattr(hub.tools, "mcp_tools", lambda row, user, fresh=False: TOOLS)
-        deps = make_deps(mock_settings, llm=MockChatModel(responses=['{"route": "agent", "reason": "t"}'], calls=[]))
+        monkeypatch.setattr(hub.tools, "listing", lambda row, user: ServerListing(tools=TOOLS))
+        deps = make_deps(mock_settings, llm=MockChatModel(responses=["x"], calls=[]))
         rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800),
-                           model=ScriptedModel(script=["ok"], calls=[]), mcp_tools=[], mcp=hub)
+                           model=ScriptedModel(script=["ok"], calls=[]), yaml_tools=[], mcp=hub)
         return TestClient(create_app(deps, InMemorySaver(), rt)), hub, fa, store
     return make
 
@@ -65,7 +67,14 @@ def test_discover_create_connect_callback_tools(api):
         assert msg == {"type": "mcp-oauth", "connector_id": cid, "status": "connected", "message": "Đã kết nối"}
         assert "http://localhost:5173" in page.text
         lst = c.get("/mcp/connectors", params={"user_id": "u1"}).json()
-        assert next(x for x in lst if x["name"] == "kho")["status"] == "connected"
+        kho = next(x for x in lst if x["name"] == "kho")
+        assert kho["status"] == "connected"
+        assert kho["description"] == "Công cụ: list_items, create_item"          # tự điền khi kết nối lần đầu
+        assert c.post(f"/mcp/connectors/{cid}/describe", params={"user_id": "u1"}).json() == {
+            "description": "Công cụ: list_items, create_item"}
+        assert c.post(f"/mcp/connectors/{cid}/describe", params={"user_id": "u2"}).status_code == 409
+        r = c.patch(f"/mcp/connectors/{cid}", json={"description": "Kho vật tư:  tồn kho, nhập xuất"})
+        assert r.json()["description"] == "Kho vật tư: tồn kho, nhập xuất"
         assert next(x for x in c.get("/mcp/connectors", params={"user_id": "u2"}).json()
                     if x["name"] == "kho")["status"] == "not_connected"
         tools = c.get(f"/mcp/connectors/{cid}/tools", params={"user_id": "u1"}).json()
@@ -73,7 +82,7 @@ def test_discover_create_connect_callback_tools(api):
         assert c.put(f"/mcp/connectors/{cid}/tools/create_item", json={"access": "disabled"}).status_code == 200
         tools = c.get(f"/mcp/connectors/{cid}/tools", params={"user_id": "u1"}).json()
         assert next(t for t in tools if t["name"] == "create_item")["access"] == "disabled"
-        assert {t.name for t in hub.turn_tools("u1")} == {"kho_list_items"}
+        assert {t.name for t in hub.source_tools("u1", "kho")} == {"kho_list_items"}
         assert c.post(f"/mcp/connectors/{cid}/test", params={"user_id": "u1"}).json()["ok"]
         r = c.post(f"/mcp/connectors/{cid}/disconnect", params={"user_id": "u1"})
         assert "60 phút" in r.json()["message"]

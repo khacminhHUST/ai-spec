@@ -30,7 +30,9 @@ Bộ tài liệu mẫu: `S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/` (dự án Qu�
 ## Kiến trúc tổng
 1. **Ingestion** – spec: `docs/ingestion.md` ✅ đã chốt
 2. **Query Pipeline** – spec: `docs/query-pipeline.md` ✅ đã chốt (sơ đồ: `docs/query-pipeline.png`)
-3. **Agent Harness** – spec: `docs/agent-harness.md` ✅ đã làm (Gate: lookup → Query Pipeline | agent → `create_agent` + middleware + sandbox Docker + MCP + skills)
+3. **Agent Harness** – spec: `docs/agent-harness.md` ✅ đã làm. Từ 2026-11-03 không còn Gate/lookup: mọi câu hỏi vào 1 agent
+   (`create_agent` + middleware + sandbox Docker + skills); tra tài liệu là tool `search_project_docs` (Query Pipeline N1–N6);
+   nguồn ngoài (MCP) nạp 2 tầng: danh mục nguồn trong prompt → agent mở nguồn mới nạp tool.
 
 Lưu trữ dùng chung:
 - PostgreSQL: `documents`, `parent_chunks`, `project_aliases`, `conversations`, checkpoint LangGraph (PostgresSaver)
@@ -47,7 +49,7 @@ LLM qua interface chung (không khóa provider),
 LangGraph (query pipeline + assistant graph).
 Agent (chốt 2026-10-29): langgraph 1.2.18 · langchain 1.4.7 · langchain-core 1.7.0 · deepagents 0.7.32 (chỉ dùng
 PatchToolCallsMiddleware – `create_deep_agent` ép tool filesystem + subagent `task` nên không dùng) ·
-langchain-mcp-adapters 0.3.2 · docker SDK 7.2.0 / Engine 29.0.1. Agent: gemini-3.8-flash (`thinking_level: low`); Gate: gemini-3.5-flash-lite.
+langchain-mcp-adapters 0.3.2 · docker SDK 7.2.0 / Engine 29.0.1. Agent: gemini-3.8-flash (`thinking_level: low`).
 
 ## Cấu trúc thư mục
 ```
@@ -63,8 +65,9 @@ app/
   services/
     ingestion/        # parse, structure, bilingual, metadata, chunks, pipeline
     query/            # LangGraph: graph + router, resolver, retrieval, context, grader, generator
-    agent/            # Agent Harness: graph (gate → lookup | agent → save), gate/, loop/ (agent, limits,
-                      #   confirm, context), tools/ (search_docs, sandbox_tools, skill_tool, registry), sandbox/, skills/, mcp/
+    agent/            # Agent Harness: graph (prepare → agent → save), loop/ (agent, limits, context, sources, confirm),
+                      #   tools/ (search_docs, sandbox_tools, skill_tool, source_tool), mcp/ (catalog, connector, oauth/),
+                      #   sandbox/, skills/
   utils/              # keys (ID/section_key), sparse (BM25), tokens
   cli/                # python -m app.cli.migrate | python -m app.cli.ingest
 sandbox/              # image/Dockerfile + helpers/ (mep_helpers) + templates/ + build.ps1 → image mep-sandbox:latest
@@ -74,20 +77,22 @@ config/  tests/  docs/
 ```
 (Giai đoạn 1–3 bên dưới viết theo tên cũ: `shared/` → `app/{core,db,models,providers,utils}`, `ingestion/` → `app/services/ingestion`, `query/` → `app/services/query` + `app/api`.)
 
-## Trạng thái (2026-11-02): TẠM DỪNG PHÁT TRIỂN
-Đã xong cả 3 module; tất cả đã gộp vào `main`. Bản này đủ cho demo hoặc pilot nội bộ có giám sát, **chưa đủ cho production**.
+## Trạng thái (2026-11-03)
+Đã xong 3 module + kết nối MCP (`docs/mcp-connectors.md`) + kho tri thức (`docs/knowledge-admin.md`) + bỏ Gate (1 agent duy nhất);
+tất cả đã gộp vào `main`. Bản này đủ cho demo hoặc pilot nội bộ có giám sát, **chưa đủ cho production**.
 
 Kết quả kiểm thử lần cuối:
-- 276 unit + integration pass.
-- Agent E2E: A1–A8 8/8; Gate 22/22; xuất file p50 33.7s.
-- Câu hỏi vàng 100%: TTFT p50 5.73s, qua Gate 6.6s.
+- 285 unit pass; integration pass (gồm MCP OAuth giả + kho tri thức).
+- Agent E2E: A1–A8 8/8; xuất file p50 32.0s.
+- Câu hỏi vàng qua agent 100%: TTFT p50 9.8s (trước, qua tuyến lookup: 5.73s).
+- Câu hỏi nguồn nhân sự (MCP) 50–80s do agent tự dò cấu trúc bảng mỗi lượt.
 - Số lần chạy E2E còn ít; UI chưa được test bằng click tay.
 
 Việc còn mở:
 - Spec `docs/agent-harness.md` mục 10 A1 ghi "gym 3.8 / 0.9", lệch với PDF Thuyết minh tr.11 (Health club 10 / 0.3;
   Lounges 3.8 / 0.9). Test đang theo PDF; spec chờ người dùng xác nhận để sửa.
 - Ingest nên gắn caption vào chunk bảng (thay cho cách vá ở agent: nạp kèm `table_A_B_*` theo mục). Việc này cần đổi ingest nên phải được duyệt trước.
-- Luồng `CONTRACT` chưa có dữ liệu mẫu; chưa nối MCP server thật.
+- Luồng `CONTRACT` chưa có dữ liệu mẫu. MCP thật mới thử nguồn nhân sự; mail, ERP, Trimble/Revit chưa nối.
 
 Còn thiếu so với production (ưu tiên trên xuống):
 1. Xác thực: `user_id` hiện do client tự gửi, nên ai cũng mạo danh được.

@@ -16,19 +16,21 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.db.client import pg_pool
 from app.main import create_app
 from app.providers.llm import MockChatModel
+from app.services.agent.mcp.catalog import SourceUnavailable
 from app.services.agent.mcp.hub import McpHub
+from app.services.agent.mcp.oauth.crypto import SecretBox
+from app.services.agent.mcp.oauth.store import PgOAuthStore
 from app.services.agent.mcp.store import PgConnectorStore
 from app.services.agent.runtime import build_runtime
 from app.services.agent.sandbox import SandboxManager
 from app.services.agent.sandbox.mock_backend import MockSandbox
-from app.services.oauth.crypto import SecretBox
-from app.services.oauth.store import PgOAuthStore
+from app.services.agent.tools.source_tool import NAME as OPEN
 from tests.agent.fakes import ScriptedModel, tool_call
 from tests.fixtures.oauth_fake.fake_a import FakeServerA
 from tests.fixtures.oauth_fake.mcp_servers import oauth_server, open_server, require_header
@@ -66,9 +68,9 @@ def env(test_ns, servers, mock_settings):
     hub = McpHub(CFG, PgOAuthStore(pool), PgConnectorStore(pool), box=lambda: BOX)
 
     def client(script):
-        deps = make_deps(mock_settings, llm=MockChatModel(responses=['{"route": "agent", "reason": "t"}'], calls=[]))
+        deps = make_deps(mock_settings, llm=MockChatModel(responses=["x"], calls=[]))
         model = ScriptedModel(script=script, calls=[])
-        rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800), model=model, mcp_tools=[],
+        rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800), model=model, yaml_tools=[],
                            mcp=hub)
         return TestClient(create_app(deps, InMemorySaver(), rt)), model
 
@@ -97,13 +99,19 @@ def _sse(text):
 
 
 def _chat(c, user, question="làm việc với kho"):
-    r = c.post("/chat", json={"user_id": user, "question": question, "force_route": "agent"})
+    r = c.post("/chat", json={"user_id": user, "question": question})
     assert r.status_code == 200, r.text
     return _sse(r.text)
 
 
 def _first(events, kind):
-    return next(d for e, d in events if e == kind)
+    """Sự kiện đầu tiên loại `kind` (tool_end: bỏ qua bước mở nguồn)."""
+    return next(d for e, d in events if e == kind and not (kind == "tool_end" and d["tool"] == OPEN))
+
+
+def _opened(*names):
+    """Bước đầu của script: agent mở các nguồn (tool của nguồn chỉ có sau khi mở)."""
+    return AIMessage("", tool_calls=[{"name": OPEN, "args": {"name": n}, "id": f"open_{n}"} for n in names])
 
 
 def _add_kho(c, w, name="kho"):
@@ -126,8 +134,12 @@ def _browser_connect(c, cid, user, a_user=None):
 
 
 def _tool_results(model):
-    """ToolMessage của lượt gần nhất (lời gọi LLM cuối thấy đủ các kết quả tool theo thứ tự)."""
-    return [m for m in model.calls[-1] if isinstance(m, ToolMessage)]
+    """ToolMessage của lượt gần nhất (lời gọi LLM cuối thấy đủ các kết quả tool theo thứ tự), bỏ bước mở nguồn."""
+    return [m for m in model.calls[-1] if isinstance(m, ToolMessage) and m.name != OPEN]
+
+
+def _status(hub, user, name):
+    return next(e["status"] for e in hub.catalog(user) if e["name"] == name)
 
 
 def _expire(pool, user, cid):
@@ -145,7 +157,7 @@ def _token_row(pool, user, cid):
 # ------------------------------------------------------------------ 1. chỉ bằng URL → agent gọi tool đọc
 
 def test_1_connect_by_url_and_agent_reads(env):
-    c, model = env.client([tool_call("kho_list_items"), "Kho có Ống thép DN50."])
+    c, model = env.client([_opened("kho"), tool_call("kho_list_items"), "Kho có Ống thép DN50."])
     with c:
         regs = env.w.a.register_calls
         cid = _add_kho(c, env.w)
@@ -167,7 +179,7 @@ def test_1_connect_by_url_and_agent_reads(env):
 # ------------------------------------------------------------------ 2. tool ghi → confirm_required → đồng ý / từ chối
 
 def test_2_write_tool_confirm_approve_and_reject(env):
-    c, model = env.client([tool_call("kho_create_item", ten="Van DN50"), "Xong."])
+    c, model = env.client([_opened("kho"), tool_call("kho_create_item", ten="Van DN50"), "Xong."])
     with c:
         cid = _add_kho(c, env.w)
         _browser_connect(c, cid, "alice")
@@ -191,7 +203,7 @@ def test_2_write_tool_confirm_approve_and_reject(env):
 # ------------------------------------------------------------------ 3. access token hết hạn → tự refresh
 
 def test_3_expired_token_auto_refresh(env):
-    c, model = env.client([tool_call("kho_whoami"), "ok"])
+    c, model = env.client([_opened("kho"), tool_call("kho_whoami"), "ok"])
     a = env.w.a
     with c:
         cid = _add_kho(c, env.w)
@@ -220,7 +232,7 @@ def test_3_expired_token_auto_refresh(env):
 # ------------------------------------------------------------------ 4. A thu hồi refresh token → needs_reauth
 
 def test_4_revoked_refresh_needs_reauth(env):
-    c, model = env.client([tool_call("kho_list_items"), "Kết nối hết hạn."])
+    c, model = env.client([_opened("kho"), tool_call("kho_list_items"), "Kết nối hết hạn."])
     with c:
         cid = _add_kho(c, env.w)
         _browser_connect(c, cid, "dave")
@@ -232,7 +244,9 @@ def test_4_revoked_refresh_needs_reauth(env):
         assert _first(ev, "done")["status"] == "OK"                       # vòng lặp không sập
         st = next(x for x in c.get("/mcp/connectors", params={"user_id": "dave"}).json() if x["connector_id"] == cid)
         assert st["status"] == "needs_reauth"
-        assert all(t.name != "kho_list_items" for t in env.hub.turn_tools("dave"))
+        assert _status(env.hub, "dave", "kho") == "needs_reauth"
+        with pytest.raises(SourceUnavailable):
+            env.hub.source_tools("dave", "kho")
         assert _browser_connect(c, cid, "dave")["status"] == "connected"   # bấm Kết nối lại
 
 
@@ -244,14 +258,17 @@ def test_5_no_permission_forbidden(env):
         cid = _add_kho(c, env.w)
         msg = _browser_connect(c, cid, "nobody")
         assert msg["status"] == "forbidden" and "chưa được cấp quyền" in msg["message"]
-        assert env.hub.turn_tools("nobody") == []
+        assert _status(env.hub, "nobody", "kho") == "forbidden"
+        with pytest.raises(SourceUnavailable):
+            env.hub.source_tools("nobody", "kho")
 
 
 # ------------------------------------------------------------------ 6. connector none / headers dùng được ngay
 
 def test_6_none_and_headers_connectors(env, monkeypatch):
     monkeypatch.setenv("HDR_API_KEY", API_KEY)
-    c, model = env.client([tool_call("pub_echo", text="xin chào"), tool_call("hdr_echo", text="bí mật"), "ok"])
+    c, model = env.client([_opened("pub", "hdr"), tool_call("pub_echo", text="xin chào"),
+                           tool_call("hdr_echo", text="bí mật"), "ok"])
     with c:
         assert c.post("/mcp/connectors/discover", json={"url": env.w.open_url}).json()["auth_type"] == "none"
         pub = c.post("/mcp/connectors", json={"name": "pub", "url": env.w.open_url, "auth_type": "none"}).json()
@@ -262,7 +279,7 @@ def test_6_none_and_headers_connectors(env, monkeypatch):
         tools = c.get(f"/mcp/connectors/{pub['connector_id']}/tools", params={"user_id": "x"}).json()
         assert {t["name"]: t["access"] for t in tools} == {"echo": "read", "ping": "write"}
         ev = _chat(c, "anyone")
-        ends = [d for e, d in ev if e == "tool_end"]
+        ends = [d for e, d in ev if e == "tool_end" and d["tool"] != OPEN]
         assert [e["ok"] for e in ends] == [True, True]
         texts = [str(m.content) for m in _tool_results(model)]
         assert "echo: xin chào" in texts[0] and "echo: bí mật" in texts[1]
@@ -274,7 +291,7 @@ def test_6_none_and_headers_connectors(env, monkeypatch):
 # ------------------------------------------------------------------ 7. hai user khác nhau có token riêng
 
 def test_7_two_users_separate_tokens(env):
-    c, model = env.client([tool_call("kho_whoami"), tool_call("kho_create_item", ten="Bơm"), "ok"])
+    c, model = env.client([_opened("kho"), tool_call("kho_whoami"), tool_call("kho_create_item", ten="Bơm"), "ok"])
     with c:
         cid = _add_kho(c, env.w)
         _browser_connect(c, cid, "alice")
@@ -291,7 +308,7 @@ def test_7_two_users_separate_tokens(env):
         assert not end["ok"] and "quyền 'write'" in end["summary"]           # ToolError → lỗi có cấu trúc
         assert _token_row(env.pool, "bob", cid)["status"] == "connected"       # kết nối vẫn giữ
         model.calls.clear()
-        model.script = [tool_call("kho_whoami"), "ok"]
+        model.script = [_opened("kho"), tool_call("kho_whoami"), "ok"]
         _chat(c, "alice")
         assert "alice@hawee.com.vn" in str(_tool_results(model)[0].content)
 

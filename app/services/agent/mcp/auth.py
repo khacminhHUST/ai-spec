@@ -11,7 +11,7 @@ from typing import Any, Generator
 
 import httpx
 
-from app.services.oauth.token_store import FORBIDDEN, NEEDS_REAUTH, TokenStore
+from app.services.agent.mcp.oauth.token_store import FORBIDDEN, NEEDS_REAUTH, TokenStore
 
 
 class ConnectorAuth(httpx.Auth):

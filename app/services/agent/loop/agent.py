@@ -1,4 +1,5 @@
-"""Dựng vòng lặp agent: LLM ⇄ tools với giới hạn bước/thời gian/lỗi, quản lý ngữ cảnh, xác nhận tool write.
+"""Dựng vòng lặp agent: LLM ⇄ tools với giới hạn bước/thời gian/lỗi, quản lý ngữ cảnh, nạp nguồn ngoài theo yêu cầu,
+xác nhận tool write. Câu trả lời cuối được stream từng đoạn (sự kiện token).
 
 Phiên bản chốt (2026-10-29): langchain 1.4.7 `create_agent` + middleware; deepagents 0.7.32 (PatchToolCallsMiddleware).
 Không dùng `deepagents.create_deep_agent`: bản 0.7.32 bắt buộc FilesystemMiddleware (tool read_file/write_file/ls/
@@ -23,6 +24,8 @@ from app.providers.llm import MockChatModel
 from app.services.agent.loop.confirm import ConfirmMiddleware
 from app.services.agent.loop.context import ToolGuardMiddleware, approx_tokens
 from app.services.agent.loop.limits import LimitsMiddleware
+from app.services.agent.loop.sources import SourcesMiddleware
+from app.services.agent.mcp.catalog import SourceCatalog
 from app.services.agent.sandbox import OUTPUT_DIR, SandboxManager
 from app.services.agent.skills import Skill, skills_prompt
 from app.services.agent.state import AgentContext, HarnessState, history_to_messages, strip_files_note
@@ -54,9 +57,10 @@ def system_prompt(skills: dict[str, Skill]) -> str:
 
 
 def build_agent(model: BaseChatModel, toolset: ToolSet, skills: dict[str, Skill], cfg: dict[str, Any],
-                manager: SandboxManager, checkpointer: Any = None, *,
+                manager: SandboxManager, checkpointer: Any = None, *, catalog: SourceCatalog | None = None,
                 count_tokens: Callable[[str], int] = approx_tokens, clock: Callable[[], float] = time.monotonic):
-    """cfg = toàn bộ agent.yaml. Middleware ngoài cùng trước: giới hạn → tóm tắt → vá tool call → guard → confirm."""
+    """cfg = toàn bộ agent.yaml. Middleware ngoài cùng trước: giới hạn → tóm tắt → vá tool call → guard →
+    nguồn ngoài (gắn tool của nguồn đã mở) → confirm (xét access sau khi đã có tool)."""
     a = cfg["agent"]
     middleware = [
         LimitsMiddleware(int(a["max_steps"]), int(a["max_consecutive_tool_errors"]), float(a["max_wall_time_s"]),
@@ -64,7 +68,8 @@ def build_agent(model: BaseChatModel, toolset: ToolSet, skills: dict[str, Skill]
         SummarizationMiddleware(model, trigger=("tokens", int(a["summarize_above_tokens"])), keep=("messages", 20)),
         PatchToolCallsMiddleware(),
         ToolGuardMiddleware(manager, int(a["tool_result_max_tokens"]), count_tokens),
-        ConfirmMiddleware(toolset.write_tools),
+        *([SourcesMiddleware(catalog)] if catalog is not None else []),
+        ConfirmMiddleware(),
     ]
     return create_agent(model, toolset.tools, system_prompt=system_prompt(skills), middleware=middleware,
                         state_schema=HarnessState, context_schema=AgentContext, checkpointer=checkpointer,
@@ -85,7 +90,7 @@ def agent_input(ctx: AgentContext, question: str, attachments: list[str] | None 
     if attachments:
         text += "\n\n[File đính kèm: " + ", ".join(f"/workspace/input/{a}" for a in attachments) + "]"
     return {"messages": [*history_to_messages(ctx.history), HumanMessage(text)],
-            "active_projects": list(ctx.active_projects)}
+            "active_projects": list(ctx.active_projects), "open_sources": list(ctx.open_sources)}
 
 
 def tool_summary(content: Any) -> tuple[bool, str]:
@@ -95,6 +100,8 @@ def tool_summary(content: Any) -> tuple[bool, str]:
         obj = json.loads(text)
     except ValueError:
         return True, clip(text, SSE_PREVIEW_CHARS)
+    if isinstance(obj, list):                        # nội dung MCP: [{"type": "text", "text": …}, …]
+        return True, f"xong ({len(text)} ký tự)"
     if not isinstance(obj, dict):
         return True, clip(text, SSE_PREVIEW_CHARS)
     success = obj.get("ok") is not False
@@ -104,34 +111,47 @@ def tool_summary(content: Any) -> tuple[bool, str]:
         return True, f"{obj['status']}: {len(obj.get('blocks') or [])} mục"
     if obj.get("new_files"):
         return True, "file: " + ", ".join(f["path"] for f in obj["new_files"])
+    if obj.get("source"):
+        return True, f"{obj['source']}: {len(obj.get('tools') or [])} công cụ"
     return True, "xong"
 
 
 def stream_agent(agent: Any, ctx: AgentContext, question: str, attachments: list[str] | None, max_steps: int,
-                 emit: Callable[[str, Any], None]) -> dict[str, Any]:
-    """Chạy vòng lặp trong node của assistant graph, phát tool_start / tool_end. → state cuối.
+                 emit: Callable[[str, Any], None]) -> tuple[dict[str, Any], str]:
+    """Chạy vòng lặp trong node của assistant graph. → (state cuối, text đã phát qua token).
 
-    Khi resume sau xác nhận, LangGraph bỏ qua input và chạy tiếp từ checkpoint của namespace con.
-    Interrupt (tool write) lan ra assistant graph dưới dạng GraphInterrupt.
+    Sự kiện: token (từng đoạn text LLM sinh ra), token_reset (đoạn vừa phát là lời dẫn trước khi gọi tool – giao diện
+    xóa đi), tool_start / tool_end. Khi resume sau xác nhận, LangGraph bỏ qua input và chạy tiếp từ checkpoint của
+    namespace con. Interrupt (tool write) lan ra assistant graph dưới dạng GraphInterrupt.
     """
     final: dict[str, Any] = {}
+    streamed = ""
     config = {"recursion_limit": max_steps * RECURSION_PER_STEP + 20}
     for mode, chunk in agent.stream(agent_input(ctx, question, attachments), config, context=ctx,
-                                    stream_mode=["updates", "values"]):
+                                    stream_mode=["updates", "values", "messages"]):
         if mode == "values":
             final = chunk
+            continue
+        if mode == "messages":
+            msg, meta = chunk
+            if (meta or {}).get("langgraph_node") == "model" and isinstance(msg, AIMessage) and msg.text:
+                emit("token", msg.text)
+                streamed += msg.text
             continue
         for update in chunk.values():
             for item in update if isinstance(update, list) else [update]:
                 for m in (item or {}).get("messages") or [] if isinstance(item, dict) else []:
                     if isinstance(m, AIMessage):
+                        if m.tool_calls and streamed:
+                            emit("token_reset", {})
+                            streamed = ""
                         for c in m.tool_calls:
                             preview = json.dumps(c.get("args") or {}, ensure_ascii=False, default=str)
                             emit("tool_start", {"tool": c["name"], "args_preview": clip(preview, SSE_PREVIEW_CHARS)})
                     elif isinstance(m, ToolMessage):
                         success, summary = tool_summary(m.content)
                         emit("tool_end", {"tool": m.name, "ok": success, "summary": summary})
-    return final
+    return final, streamed
 
 
 def final_answer(messages: list) -> str:
@@ -152,7 +172,8 @@ def agent_result(state: dict[str, Any]) -> dict[str, Any]:
     msgs = state.get("messages") or []
     answer = final_answer(msgs) or NO_ANSWER
     return {"answer": answer, "citations": answer_citations(answer, state.get("sources") or []),
-            "active_projects": list(state.get("active_projects") or []), "stop_reason": state.get("stop_reason")}
+            "active_projects": list(state.get("active_projects") or []), "stop_reason": state.get("stop_reason"),
+            "open_sources": list(state.get("open_sources") or [])}
 
 
 # ------------------------------------------------------------------ file kết quả

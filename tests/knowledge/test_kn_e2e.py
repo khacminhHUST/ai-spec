@@ -38,7 +38,7 @@ def test_upload_phat_hanh_spec_dien_hoi_cau_vang_1(test_ns, store, tmp_path, mon
 
     deps = Deps.default(s)
     attach_store_version(deps)
-    rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800), mcp_tools=[])
+    rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800), yaml_tools=[])
     app = create_app(deps, InMemorySaver(), rt)
     app.dependency_overrides[get_store] = lambda: store
     with TestClient(app) as client:

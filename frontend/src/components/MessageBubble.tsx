@@ -4,7 +4,6 @@ import type { Message } from "../types";
 import Citations from "./Citations";
 
 const STEP_LABEL: Record<string, string> = {
-  gate: "Đang phân loại yêu cầu…",
   agent: "Đang xử lý yêu cầu…",
   load: "Đang tải hội thoại…",
   router: "Đang phân tích câu hỏi…",
@@ -31,6 +30,7 @@ const TOOL_LABEL: Record<string, string> = {
   write_file: "Ghi file",
   list_files: "Xem danh sách file",
   load_skill: "Nạp hướng dẫn",
+  open_source_tools: "Mở nguồn",
 };
 
 function formatSize(n: number): string {
