@@ -8,7 +8,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.core.config import ROOT, Settings, get_settings
 from app.models.document import ChildChunk, Document, ParentChunk
@@ -63,21 +63,30 @@ class IngestResult:
 # ---------------------------------------------------------------- xử lý
 
 def process(path: str | Path, *, project: str | None = None, building: str | None = None, llm=None,
-            settings: Settings | None = None, use_cache: bool = True, workers: int = 8) -> IngestResult:
-    """Bước 1–5 (không ghi DB)."""
+            settings: Settings | None = None, use_cache: bool = True, workers: int = 8,
+            overrides: dict[str, Any] | None = None, on_step: Callable[[str], None] | None = None) -> IngestResult:
+    """Bước 1–5 (không ghi DB).
+
+    overrides: ghi đè metadata/doc_code (metadata.OVERRIDE_FIELDS) – upload qua giao diện.
+    on_step  : báo tiến độ (parse, bilingual, chunk_vi, chunk_en).
+    """
     s = settings or get_settings()
+    step = on_step or (lambda _name: None)
     t0 = time.time()
     path = Path(path)
     file_hash = docling_cache.file_sha256(path)
     timings: dict[str, float] = {}
 
+    step("parse")
     parsed = parse_pdf(path, file_hash, use_cache=use_cache)
     timings["parse"] = round(time.time() - t0, 1)
-    meta = infer_metadata(path, file_hash, parsed.blocks, project=project, building=building, settings=s)
+    meta = infer_metadata(path, file_hash, parsed.blocks, project=project, building=building, settings=s,
+                          overrides=overrides)
     prof = profile(meta.doc_type)
     warnings: list[str] = list(meta.warnings)
 
     # bước 3: ngôn ngữ / song ngữ
+    step("bilingual")
     t = time.time()
     langinfo = detect_languages(parsed, prof)
     per_lang_blocks = split_languages(parsed, prof, langinfo, warnings)
@@ -96,6 +105,7 @@ def process(path: str | Path, *, project: str | None = None, building: str | Non
         llm = get_chat_model("chunking", s)
     per_lang: dict[str, LangResult] = {}
     for lang, blocks in per_lang_blocks.items():
+        step(f"chunk_{lang}")
         t = time.time()
         blocks = reorder_headings(postprocess(blocks, prof, warnings))
         if not langinfo["bilingual"] and prof.get("recover_headings"):
