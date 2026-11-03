@@ -14,6 +14,8 @@ from langgraph.types import Command, interrupt
 from app.services.agent.tools.base import fail
 
 REJECTED = "Người dùng TỪ CHỐI thực thi – thao tác KHÔNG được thực hiện. Báo lại người dùng, không gọi lại tool này."
+UNAVAILABLE = ("Tool {name} không có trong bộ tool hiện tại (có thể connector đã tắt hoặc ngắt kết nối) – thao tác "
+               "KHÔNG được thực hiện. Không gọi lại tool này; dùng tool có sẵn hoặc báo lại người dùng.")
 
 
 def is_approved(decision: Any) -> bool:
@@ -43,6 +45,10 @@ class ConfirmMiddleware(AgentMiddleware):
 
     def wrap_tool_call(self, request, handler):
         call = request.tool_call
+        if getattr(request, "tool", None) is None:
+            # Agent dựng lại theo lượt (VD resume sau /chat/confirm) mà tool không còn trong bộ tool
+            return ToolMessage(fail(UNAVAILABLE.format(name=call["name"]), unavailable=True), tool_call_id=call["id"],
+                               name=call["name"], status="error")
         if call["name"] not in self.write_tools:
             return handler(request)
         decision = interrupt({"type": "confirm_required", "tool": call["name"], "args": call.get("args") or {},

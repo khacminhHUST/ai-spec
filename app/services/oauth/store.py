@@ -50,6 +50,10 @@ class OAuthStore(ABC):
     def delete_token(self, user_id: str, connector_id: str) -> None: ...
 
     @abstractmethod
+    def delete_connector_tokens(self, connector_id: str) -> None:
+        """Xóa token của mọi user cho 1 connector (đổi URL / kiểu xác thực)."""
+
+    @abstractmethod
     def token_statuses(self, user_id: str) -> dict[str, str]:
         """connector_id → status của user."""
 
@@ -110,6 +114,9 @@ class PgOAuthStore(OAuthStore):
 
     def delete_token(self, user_id, connector_id):
         self._q("DELETE FROM mcp_user_tokens WHERE user_id = %s AND connector_id = %s", (user_id, connector_id))
+
+    def delete_connector_tokens(self, connector_id):
+        self._q("DELETE FROM mcp_user_tokens WHERE connector_id = %s", (connector_id,))
 
     def token_statuses(self, user_id):
         return {r["connector_id"]: r["status"]

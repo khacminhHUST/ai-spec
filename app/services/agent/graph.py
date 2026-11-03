@@ -95,7 +95,7 @@ def build_assistant_graph(deps: Deps, runtime: AgentRuntime, checkpointer: Any =
     def agent_node(state: AssistantState) -> dict:
         ctx = AgentContext(state["user_id"], state["conversation_id"], list(state.get("active_projects") or []),
                            list(state.get("messages") or []))
-        final = stream_agent(runtime.agent, ctx, state["question"], state.get("attachments"),
+        final = stream_agent(runtime.agent_for(ctx), ctx, state["question"], state.get("attachments"),
                              int(cfg["agent"]["max_steps"]), emit)
         res = agent_result(final)
         emit("token", res["answer"])

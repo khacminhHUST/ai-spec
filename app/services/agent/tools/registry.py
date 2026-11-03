@@ -4,6 +4,7 @@ Tool `write` (ghi/đẩy dữ liệu ra hệ thống ngoài) → bắt buộc ng
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,7 @@ from app.services.agent.tools.search_docs import SearchDocs, make_search_tool
 from app.services.agent.tools.skill_tool import make_skill_tool
 from app.services.query.deps import Deps
 
+log = logging.getLogger(__name__)
 ACCESS = ("read", "sandbox", "write")
 
 
@@ -44,6 +46,18 @@ class ToolSet:
 
     def get(self, name: str) -> BaseTool | None:
         return next((t for t in self.tools if t.name == name), None)
+
+    def extended(self, extra: list[BaseTool]) -> "ToolSet":
+        """Bộ tool của lượt: thêm tool connector (đã gắn access); trùng tên tool có sẵn → bỏ qua, ghi log."""
+        names = set(self.names)
+        tools = list(self.tools)
+        for t in extra:
+            if t.name in names:
+                log.warning("Bỏ tool connector trùng tên: %s", t.name)
+                continue
+            tools.append(tag(t, (t.metadata or {}).get("access", "write")))
+            names.add(t.name)
+        return ToolSet(tools)
 
 
 def build_toolset(deps: Deps, manager: SandboxManager, cfg: dict[str, Any], skills: dict[str, Skill],

@@ -66,6 +66,9 @@ class MemoryStore(OAuthStore, ConnectorStore):
     def delete_token(self, user_id, connector_id):
         self.tokens.pop((user_id, connector_id), None)
 
+    def delete_connector_tokens(self, connector_id):
+        self.tokens = {k: v for k, v in self.tokens.items() if k[1] != connector_id}
+
     def token_statuses(self, user_id):
         return {c: r["status"] for (u, c), r in self.tokens.items() if u == user_id}
 
