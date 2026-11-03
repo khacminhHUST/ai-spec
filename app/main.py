@@ -6,6 +6,7 @@
     GET  /conversations/{id}        hội thoại + messages (từ checkpoint)
     POST /conversations/{id}/files  upload file vào sandbox
     GET  /conversations/{id}/files/{name}  tải file kết quả
+    /mcp/...                        MCP connector (app/api/routes/mcp.py)
 
 Chạy: uvicorn app.main:app --port 8000
 """
@@ -17,7 +18,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import chat, confirm, conversations, files
+from app.api.routes import chat, confirm, conversations, files, mcp
 from app.services.agent.graph import build_assistant_graph
 from app.services.agent.runtime import AgentRuntime, build_runtime
 from app.services.query.deps import Deps
@@ -81,6 +82,7 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
     app.include_router(confirm.router)
     app.include_router(conversations.router)
     app.include_router(files.router)
+    app.include_router(mcp.router)
     return app
 
 
