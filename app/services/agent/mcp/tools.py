@@ -165,6 +165,6 @@ class ConnectorTools:
             name=inner.name, description=inner.description, args_schema=inner.args_schema, coroutine=coro,
             func=lambda **kw: run_sync(lambda: coro(**kw)), response_format="content_and_artifact",
             metadata={**(inner.metadata or {}), "access": access, "mcp_server": row["name"], "mcp_tool": tool.name,
-                      "connector_id": row["connector_id"]},
+                      "connector_id": row["connector_id"], "connector_label": row.get("display_name") or ""},
             handle_tool_error=True,
         )

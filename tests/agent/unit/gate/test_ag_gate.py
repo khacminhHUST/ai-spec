@@ -4,7 +4,7 @@ import pytest
 from app.providers.llm import MockChatModel
 from app.services.agent.config import agent_cfg
 from app.services.agent.gate import run_gate
-from app.services.agent.gate.gate import history_text
+from app.services.agent.gate.gate import external_text, history_text
 
 pytestmark = pytest.mark.unit
 
@@ -51,6 +51,18 @@ def test_bad_json_retries_once_then_fallback_lookup():
 def test_retry_recovers():
     llm = _llm("hỏng", AGENT)
     assert run_gate(llm, CFG, "x", []).route == "agent" and len(llm.calls) == 2
+
+
+def test_external_systems_in_prompt():
+    """Gate thấy hệ thống ngoài đã kết nối (tên + tool) để chuyển câu hỏi về dữ liệu ở đó sang agent."""
+    llm = _llm(AGENT)
+    external = [{"name": "ai_nhansu", "label": "Nhân sự HAWEE",
+                 "tools": [{"name": "find_employee", "description": "Tra cứu nhân viên theo tên"}]}]
+    run_gate(llm, CFG, "Mã nhân viên của Nguyễn Văn A?", [], external=external)
+    prompt = str(llm.calls[0][-1].content)
+    assert "ai_nhansu (Nhân sự HAWEE)" in prompt and "find_employee: Tra cứu nhân viên theo tên" in prompt
+    run_gate(_llm(LOOKUP), CFG, "x", [])   # không có hệ thống ngoài → "(không có)"
+    assert external_text(None) == "(không có)"
 
 
 def test_history_marks_agent_turn_and_files():

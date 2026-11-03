@@ -60,8 +60,14 @@ def build_assistant_graph(deps: Deps, runtime: AgentRuntime, checkpointer: Any =
 
     def gate_node(state: AssistantState) -> dict:
         emit("status", {"step": "gate"})
+        external: list[dict] = []
+        if not state.get("force_route") and not state.get("attachments"):
+            try:
+                external = runtime.external_systems(state["user_id"])
+            except Exception as e:  # noqa: BLE001 – không biết hệ thống ngoài: Gate vẫn phân tuyến như cũ
+                log.warning("đọc hệ thống ngoài cho Gate lỗi: %s", e)
         out = run_gate(gate_llm, cfg["gate"], state["question"], state.get("messages") or [],
-                       state.get("attachments"), state.get("force_route"))
+                       state.get("attachments"), state.get("force_route"), external)
         emit("route", {"route": out.route})
         return {"route": out.route, "gate_reason": out.reason, "status": None, "answer": "", "citations": [],
                 "files": [], "stop_reason": None, "output_before": {}}

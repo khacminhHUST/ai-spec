@@ -309,6 +309,22 @@ def test_connector_write_tool_confirm_then_approve(mock_settings):
     assert CREATED == ["ống thép"] and next(e["data"] for e in ev2 if e["event"] == "done")["status"] == "OK"
 
 
+def test_gate_sees_connected_systems(mock_settings):
+    """Gate nhận danh sách hệ thống ngoài user dùng được → câu hỏi về dữ liệu ở đó đi tuyến agent."""
+    gate_llm = MockChatModel(responses=['{"route": "lookup", "reason": "t"}'], calls=[])
+    deps = make_deps(mock_settings, llm=gate_llm)
+    rt = build_runtime(deps, manager=SandboxManager(lambda cid: MockSandbox(), 1800),
+                       model=ScriptedModel(script=[], calls=[]), mcp_tools=[], mcp=FakeHub())
+    assert rt.external_systems("u1") == [{"name": "kho", "label": "", "tools": [
+        {"name": "kho_create_item", "description": "Tạo vật tư (giả lập tool connector write)."}]}]
+    rt.mcp.tools = []
+    assert rt.external_systems("u1") == []
+    rt.mcp.tools = [kho_create_item]
+    graph = build_assistant_graph(deps, rt, InMemorySaver())
+    list(stream_assistant_turn(graph, "u1", "tồn kho ống thép?"))
+    assert "kho_create_item" in str(gate_llm.calls[0][-1].content)
+
+
 def test_resume_after_tool_removed_returns_structured_error(mock_settings):
     CREATED.clear()
     hub = FakeHub()
