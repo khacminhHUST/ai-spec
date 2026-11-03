@@ -1,0 +1,14 @@
+# Quản lý kho tri thức qua giao diện (docs/knowledge-admin.md). Đường dẫn tương đối tính từ thư mục gốc repo.
+
+access:
+  # open  : mọi user thấy mọi dự án (mặc định cho app – chưa có đăng nhập/phân quyền)
+  # config: chỉ dự án trong config/projects.yaml › test_users (giữ cho test cũ)
+  # Ghi đè bằng biến môi trường MEP_ACCESS_MODE.
+  mode: open
+
+uploads_dir: data/uploads        # FileStore local: <uploads_dir>/<project_id>/<file_hash>.pdf
+artifacts_dir: artifacts/jobs    # kết quả nháp của job: <artifacts_dir>/<job_id>/<doc_id>/
+max_upload_mb: 200
+
+worker:
+  poll_interval_s: 3
