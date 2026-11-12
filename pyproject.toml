@@ -34,6 +34,7 @@ dependencies = [
     "langchain-mcp-adapters>=0.3.2,<0.4",
     "docker>=7.2",
     "python-multipart>=0.0.20",
+    "cryptography>=43",          # mã hóa token OAuth (Fernet) – mcp/oauth/crypto.py
 ]
 
 [dependency-groups]

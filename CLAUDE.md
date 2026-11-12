@@ -107,6 +107,7 @@ Còn thiếu so với production (ưu tiên trên xuống):
 
 ## Chạy
 ```
+pip install -r requirements.txt               # thư viện backend (ghim phiên bản đã test)
 docker compose up -d                          # Postgres + Qdrant
 python -m app.cli.migrate --ns ingest
 python -m app.cli.ingest "<thư mục S5>" --ns ingest   # đã ingest sẵn ở ns ingest
