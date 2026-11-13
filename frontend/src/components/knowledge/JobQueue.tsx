@@ -31,7 +31,7 @@ export default function JobQueue({ onOpen, onError }: Props) {
     <div className="kn-card">
       <div className="kn-row">
         <strong>Hàng chờ xử lý</strong>
-        <span>
+        <span className="kn-toolbar">
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">(mọi trạng thái)</option>
             {(Object.keys(STATUS_LABEL) as JobStatus[]).map((s) => (
@@ -39,13 +39,14 @@ export default function JobQueue({ onOpen, onError }: Props) {
                 {STATUS_LABEL[s]}
               </option>
             ))}
-          </select>{" "}
+          </select>
           <button className="kn-btn small" onClick={load}>
             Làm mới
           </button>
         </span>
       </div>
-      <table className="kn-table">
+      <div className="table-wrap">
+      <table className="kn-table stack">
         <thead>
           <tr>
             <th>File</th>
@@ -59,21 +60,21 @@ export default function JobQueue({ onOpen, onError }: Props) {
         <tbody>
           {jobs.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted">
+              <td colSpan={6} className="muted stack-full">
                 Chưa có job
               </td>
             </tr>
           )}
           {jobs.map((j) => (
             <tr key={j.job_id} className="kn-click" onClick={() => onOpen(j.job_id)}>
-              <td title={j.job_id}>{j.file_name}</td>
-              <td>
+              <td data-label="File" className="stack-title" title={j.job_id}>{j.file_name}</td>
+              <td data-label="Dự án / CT">
                 {j.project_id} / {j.building}
               </td>
-              <td className="small">
+              <td data-label="Bộ tài liệu" className="small kn-break">
                 {j.series_doc_code} {j.revision && `· Rev ${j.revision}`}
               </td>
-              <td>
+              <td data-label="Trạng thái">
                 <span className={`kn-status ${j.status.toLowerCase()}`}>{STATUS_LABEL[j.status]}</span>
                 {j.step && ACTIVE_STATUSES.includes(j.status) && <span className="small muted"> · {j.step}</span>}
                 {j.error && (
@@ -82,12 +83,13 @@ export default function JobQueue({ onOpen, onError }: Props) {
                   </div>
                 )}
               </td>
-              <td>{j.uploaded_by ?? "–"}</td>
-              <td className="small">{fmtTime(j.updated_at)}</td>
+              <td data-label="Người upload">{j.uploaded_by ?? "–"}</td>
+              <td data-label="Cập nhật" className="small">{fmtTime(j.updated_at)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

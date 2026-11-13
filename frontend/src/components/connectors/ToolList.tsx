@@ -29,7 +29,8 @@ export default function ToolList({ connector, userId }: { connector: Connector; 
   if (!tools) return <div className="muted small">Đang tải danh sách tool…</div>;
   if (!tools.length) return <div className="muted small">Không có tool.</div>;
   return (
-    <table className="cn-tools">
+    <div className="table-wrap">
+    <table className="cn-tools stack">
       <thead>
         <tr>
           <th>Tool</th>
@@ -40,11 +41,11 @@ export default function ToolList({ connector, userId }: { connector: Connector; 
       <tbody>
         {tools.map((t) => (
           <tr key={t.name}>
-            <td>
+            <td data-label="Tool" className="stack-title">
               <code>{t.full_name}</code>
             </td>
-            <td className="small">{t.description}</td>
-            <td>
+            <td data-label="Mô tả" className="small">{t.description}</td>
+            <td data-label="Quyền">
               {connector.readonly || t.readonly ? (
                 ACCESS_LABEL[t.access] ?? t.access
               ) : (
@@ -62,5 +63,6 @@ export default function ToolList({ connector, userId }: { connector: Connector; 
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

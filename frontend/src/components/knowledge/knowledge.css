@@ -107,6 +107,7 @@
 }
 
 .kn-card {
+  min-width: 0;
   padding: 18px 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -176,6 +177,7 @@
 }
 
 .kn-code {
+  overflow-wrap: anywhere;
   font-size: 12.5px;
   color: var(--muted);
 }
@@ -321,6 +323,29 @@
   cursor: pointer;
 }
 
+.kn-break {
+  overflow-wrap: anywhere;
+}
+
+.kn-toolbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.kn-card select,
+.kn-toolbar select {
+  max-width: 100%;
+  text-overflow: ellipsis;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 14px;
+}
+
 /* ---------- form ---------- */
 .kn-filters {
   display: flex;
@@ -356,6 +381,11 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--fg-2);
+}
+
+.kn-form select,
+.kn-form input:not([type="checkbox"]):not([type="radio"]) {
+  max-width: 100%;
 }
 
 .kn-field input,
@@ -526,11 +556,6 @@ input[type="radio"] {
 
   .kn-card {
     padding: 14px;
-  }
-
-  .kn-card:has(> .kn-table),
-  .kn-detail .kn-card {
-    overflow-x: auto;
   }
 
   .kn-meta {

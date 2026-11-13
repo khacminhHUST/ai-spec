@@ -106,7 +106,8 @@ export default function ConnectorsView({ userId }: { userId: string }) {
           }}
         />
       )}
-      <table className="cn-table">
+      <div className="table-wrap">
+      <table className="cn-table stack">
         <thead>
           <tr>
             <th>Tên</th>
@@ -120,7 +121,7 @@ export default function ConnectorsView({ userId }: { userId: string }) {
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted small">
+              <td colSpan={6} className="muted small stack-full">
                 Chưa có connector
               </td>
             </tr>
@@ -145,6 +146,7 @@ export default function ConnectorsView({ userId }: { userId: string }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -168,7 +170,7 @@ function ConnectorRow({ c, userId, toolsOpen, ...h }: RowProps) {
   return (
     <>
       <tr className={c.enabled ? "" : "cn-disabled"}>
-        <td>
+        <td data-label="Tên" className="stack-title">
           <b>{c.display_name || c.name}</b>
           <div className="muted small">
             {c.name}
@@ -180,19 +182,19 @@ function ConnectorRow({ c, userId, toolsOpen, ...h }: RowProps) {
             <div className="muted small">Chưa có mô tả – agent khó biết khi nào dùng nguồn này</div>
           )}
         </td>
-        <td className="cn-url small">{c.url}</td>
-        <td>
+        <td data-label="URL" className="cn-url small">{c.url}</td>
+        <td data-label="Xác thực">
           {AUTH_LABEL[c.auth_type] ?? c.auth_type}
           {c.header_names.length > 0 && <div className="muted small">{c.header_names.join(", ")}</div>}
         </td>
-        <td>
+        <td data-label="Bật">
           {c.readonly ? (
             "Có"
           ) : (
             <input type="checkbox" checked={c.enabled} onChange={h.onToggleEnabled} title="Bật/tắt connector" />
           )}
         </td>
-        <td>
+        <td data-label="Trạng thái">
           <span className={`cn-status cn-${c.status}`}>{STATUS_LABEL[c.status] ?? c.status}</span>
         </td>
         <td className="cn-actions">
@@ -211,8 +213,8 @@ function ConnectorRow({ c, userId, toolsOpen, ...h }: RowProps) {
         </td>
       </tr>
       {toolsOpen && (
-        <tr>
-          <td colSpan={6}>
+        <tr className="stack-sub">
+          <td colSpan={6} className="stack-full">
             <ToolList connector={c} userId={userId} />
           </td>
         </tr>

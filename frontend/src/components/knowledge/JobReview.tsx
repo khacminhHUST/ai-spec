@@ -155,6 +155,7 @@ export default function JobReview({ jobId, userId, onBack, onError }: Props) {
       {rep && (
         <div className="kn-card">
           <h3>Thống kê</h3>
+          <div className="table-wrap">
           <table className="kn-table">
             <thead>
               <tr>
@@ -185,6 +186,7 @@ export default function JobReview({ jobId, userId, onBack, onError }: Props) {
               ))}
             </tbody>
           </table>
+          </div>
           <p className="small">
             Kiểm tra trang: {rep.page_check?.ok ?? "?"}/{rep.page_check?.sampled ?? "?"} đạt · Song ngữ:{" "}
             {rep.language?.bilingual ? "có" : "không"} · OCR: {rep.parse?.ocr ? "có" : "không"} · {rep.parse?.n_blocks ?? "?"} block

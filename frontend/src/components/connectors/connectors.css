@@ -283,12 +283,6 @@
     padding: 14px 12px 24px;
   }
 
-  .cn-table,
-  .cn-tools {
-    display: block;
-    overflow-x: auto;
-  }
-
   .cn-form {
     padding: 14px;
   }

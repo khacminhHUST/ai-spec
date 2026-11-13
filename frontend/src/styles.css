@@ -1360,3 +1360,118 @@ a {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   Bảng responsive
+   - .table-wrap: bảng rộng cuộn ngang TRONG khung, trang không bị kéo ngang
+   - table.stack: khi KHUNG chứa bảng hẹp hơn 720px (container query, không phụ
+     thuộc màn hình) mỗi dòng thành 1 thẻ, nhãn cột lấy từ data-label
+   ============================================================ */
+.table-wrap {
+  container-type: inline-size;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap > table {
+  min-width: 640px;
+}
+
+@container (max-width: 720px) {
+  .table-wrap > table.stack {
+    min-width: 0;
+  }
+
+  table.stack,
+  table.stack tbody {
+    display: block;
+    width: 100%;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  table.stack thead {
+    display: none;
+  }
+
+  table.stack tr {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+  }
+
+  table.stack tr.stack-sub {
+    margin-top: -10px;
+    border-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  table.stack td {
+    position: relative;
+    display: block;
+    min-height: 20px;
+    padding: 0 0 0 min(36%, 140px);
+    border: 0;
+    max-width: none;
+    overflow-wrap: anywhere;
+    background: transparent;
+  }
+
+  table.stack td[data-label]::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: calc(min(36%, 140px) - 10px);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.8;
+  }
+
+  /* ô không nhãn (thao tác, dòng rỗng, ghi chú) và tiêu đề: chiếm cả hàng */
+  table.stack td:not([data-label]),
+  table.stack td.stack-full,
+  table.stack td.stack-title {
+    padding-left: 0;
+  }
+
+  table.stack td.kn-actions,
+  table.stack td.cn-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 6px;
+    white-space: normal;
+  }
+
+  table.stack td.stack-title {
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  table.stack td.stack-title::before {
+    display: none;
+  }
+
+  table.stack td:not([data-label]):empty {
+    display: none;
+  }
+
+  table.stack .kn-editing td input,
+  table.stack .kn-editing td select {
+    width: 100%;
+  }
+
+  table.stack tr:hover {
+    background: var(--panel);
+  }
+}

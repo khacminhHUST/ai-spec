@@ -286,7 +286,8 @@ export default function SeriesHistory({
           </select>
         </label>
       </div>
-      <table className="kn-table">
+      <div className="table-wrap">
+      <table className="kn-table stack">
         <thead>
           <tr>
             <th>Revision</th>
@@ -301,7 +302,7 @@ export default function SeriesHistory({
         <tbody>
           {data.revisions.length === 0 && (
             <tr>
-              <td colSpan={7} className="muted">
+              <td colSpan={7} className="muted stack-full">
                 Không có revision khớp bộ lọc
               </td>
             </tr>
@@ -309,17 +310,17 @@ export default function SeriesHistory({
           {data.revisions.map((r) =>
             editDoc === r.doc_id && docForm ? (
               <tr key={r.doc_id} className="kn-editing">
-                <td>
+                <td data-label="Revision">
                   <input value={docForm.revision} onChange={(e) => setDocForm({ ...docForm, revision: e.target.value })} />
                 </td>
-                <td>
+                <td data-label="Ngày ban hành">
                   <input
                     type="date"
                     value={docForm.issue_date}
                     onChange={(e) => setDocForm({ ...docForm, issue_date: e.target.value })}
                   />
                 </td>
-                <td>
+                <td data-label="Giai đoạn">
                   <select value={docForm.stage} onChange={(e) => setDocForm({ ...docForm, stage: e.target.value })}>
                     <option value="">–</option>
                     {Array.from(new Set([...(options?.stages ?? []), ...(docForm.stage ? [docForm.stage] : [])])).map(
@@ -329,7 +330,7 @@ export default function SeriesHistory({
                     )}
                   </select>
                 </td>
-                <td>
+                <td data-label="Tiêu đề / Đơn vị">
                   <input
                     value={docForm.title}
                     placeholder="Tiêu đề"
@@ -341,7 +342,7 @@ export default function SeriesHistory({
                     onChange={(e) => setDocForm({ ...docForm, issuer: e.target.value })}
                   />
                 </td>
-                <td colSpan={2} className="small muted">
+                <td colSpan={2} className="small muted stack-full">
                   Đổi revision / ngày ban hành không tự đổi bản hiệu lực – dùng "Đặt hiệu lực".
                 </td>
                 <td className="kn-actions">
@@ -355,17 +356,17 @@ export default function SeriesHistory({
               </tr>
             ) : (
               <tr key={r.doc_id} className={r.is_latest ? "kn-latest" : ""}>
-                <td>
+                <td data-label="Revision" className="stack-title">
                   {r.revision ?? "?"} {r.is_latest && <span className="kn-tag ok">Hiệu lực</span>}
                 </td>
-                <td>{fmtDate(r.issue_date)}</td>
-                <td>{r.stage ?? "–"}</td>
-                <td title={r.doc_id}>
+                <td data-label="Ngày ban hành">{fmtDate(r.issue_date)}</td>
+                <td data-label="Giai đoạn">{r.stage ?? "–"}</td>
+                <td data-label="Tiêu đề / Đơn vị" title={r.doc_id}>
                   {r.title ?? "–"}
                   {r.issuer && <div className="small muted">{r.issuer}</div>}
                 </td>
-                <td>{fmtTime(r.published_at ?? r.ingested_at)}</td>
-                <td>{r.published_by ?? (r.job_id ? "–" : "(CLI)")}</td>
+                <td data-label="Phát hành">{fmtTime(r.published_at ?? r.ingested_at)}</td>
+                <td data-label="Người phát hành">{r.published_by ?? (r.job_id ? "–" : "(CLI)")}</td>
                 <td className="kn-actions">
                   {!r.is_latest && (
                     <button
@@ -399,6 +400,7 @@ export default function SeriesHistory({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
