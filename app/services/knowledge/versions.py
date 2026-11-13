@@ -168,6 +168,88 @@ def delete_revision(conn, s: Settings, doc_id: str) -> dict[str, Any]:
     return {"deleted": doc_id, "doc_code": doc["doc_code"], "changes": changes}
 
 
+def delete_series(conn, s: Settings, doc_code: str) -> dict[str, Any]:
+    """Xóa mọi revision của bộ (documents + parent_chunks cascade + điểm Qdrant). File gốc giữ lại."""
+    with conn.transaction():
+        ids = [r["doc_id"] for r in _series_rows(conn, doc_code)]
+        conn.execute("DELETE FROM documents WHERE doc_code = %s", (doc_code,))
+    client = qdrant(s)
+    for doc_id in ids:
+        delete_points(client, s, doc_id)
+    return {"doc_code": doc_code, "deleted": ids}
+
+
+# ---------------------------------------------------------------- sửa metadata
+
+DOC_EDIT_FIELDS = ("title", "issuer", "revision", "issue_date", "stage")        # riêng từng revision
+SERIES_EDIT_FIELDS = ("project_id", "building", "stream", "disciplines")       # chung cả bộ (xác định bộ)
+
+
+def _clean(v: Any) -> Any:
+    return (v.strip() or None) if isinstance(v, str) else v
+
+
+def _set_payload(s: Settings, doc_ids: list[str], payload: dict[str, Any]) -> None:
+    from qdrant_client import models as qm
+
+    client = qdrant(s)
+    for doc_id in doc_ids:
+        flt = qm.Filter(must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))])
+        for lang in ("vi", "en"):
+            name = s.collection(lang)
+            if client.collection_exists(name):
+                client.set_payload(name, payload=payload, points=flt, wait=True)
+
+
+def update_document(conn, s: Settings, doc_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    """Sửa metadata riêng của 1 revision (tiêu đề, đơn vị ban hành, revision, ngày ban hành, giai đoạn).
+    is_latest giữ nguyên (đổi bản hiệu lực bằng set_latest). `revision` có trong payload Qdrant → đồng bộ."""
+    upd = {k: _clean(fields[k]) for k in DOC_EDIT_FIELDS if k in fields}
+    if not upd:
+        raise KnowledgeError("không có trường nào để sửa", 400)
+    with conn.transaction():
+        if not conn.execute("SELECT 1 FROM documents WHERE doc_id = %s FOR UPDATE", (doc_id,)).fetchone():
+            raise KnowledgeError(f"không có tài liệu {doc_id}", 404)
+        conn.execute(f"UPDATE documents SET {', '.join(f'{k} = %s' for k in upd)} WHERE doc_id = %s",
+                     (*upd.values(), doc_id))
+    if "revision" in upd:
+        _set_payload(s, [doc_id], {"revision": upd["revision"]})
+    return {"doc_id": doc_id, "updated": upd}
+
+
+def update_series(conn, s: Settings, doc_code: str, fields: dict[str, Any]) -> dict[str, Any]:
+    """Sửa thông tin chung của bộ cho mọi revision: dự án, công trình, luồng, phân hệ (Postgres + payload Qdrant).
+    doc_code giữ nguyên (khóa của bộ – revision mới vẫn nối đúng bộ)."""
+    from app.models.document import Discipline, Stream
+
+    upd = {k: _clean(fields[k]) for k in SERIES_EDIT_FIELDS if k in fields}
+    if not upd:
+        raise KnowledgeError("không có trường nào để sửa", 400)
+    if "stream" in upd and upd["stream"] not in Stream.__members__:
+        raise KnowledgeError(f"luồng không hợp lệ: {upd['stream']}", 400)
+    if "disciplines" in upd:
+        ds = list(dict.fromkeys(upd["disciplines"] or []))
+        bad = [d for d in ds if d not in {x.value for x in Discipline}]
+        if not ds or bad:
+            raise KnowledgeError(f"phân hệ không hợp lệ: {bad or 'rỗng'}", 400)
+        upd["disciplines"] = ds
+    with conn.transaction():
+        rows = _series_rows(conn, doc_code)
+        cur = conn.execute("SELECT project_id, building FROM documents WHERE doc_code = %s LIMIT 1",
+                           (doc_code,)).fetchone()
+        pid, bld = upd.get("project_id", cur["project_id"]), upd.get("building", cur["building"])
+        if "project_id" in upd or "building" in upd:
+            ok = conn.execute("SELECT 1 FROM project_buildings WHERE project_id = %s AND building = %s",
+                              (pid, bld)).fetchone()
+            if not ok:
+                raise KnowledgeError(f"dự án {pid} không có công trình {bld}", 400)
+        conn.execute(f"UPDATE documents SET {', '.join(f'{k} = %s' for k in upd)} WHERE doc_code = %s",
+                     (*upd.values(), doc_code))
+    ids = [r["doc_id"] for r in rows]
+    _set_payload(s, ids, upd)
+    return {"doc_code": doc_code, "doc_ids": ids, "updated": upd}
+
+
 def source_file(conn, doc_id: str) -> dict[str, Any]:
     row = conn.execute("SELECT d.source_path, j.file_name FROM documents d LEFT JOIN ingest_jobs j "
                        "ON j.doc_id = d.doc_id AND j.status = 'PUBLISHED' WHERE d.doc_id = %s LIMIT 1",

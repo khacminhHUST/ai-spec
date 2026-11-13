@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 import type { Message } from "../types";
+import Icon from "./Icon";
 import MessageBubble from "./MessageBubble";
 
-const EXAMPLES = [
-  "Bán kính uốn cong tối thiểu của cáp điện tòa S5 là bao nhiêu?",
-  "Lưu lượng gió tươi cho phòng khách sạn theo thuyết minh thiết kế?",
-  "Thời gian bảo hành hệ thống điện là bao lâu?",
-  "Xuất Excel bảng gió tươi tòa S5 (Thuyết minh Bảng 4.3), có cột Nguồn",
+const EXAMPLES: { q: string; icon: string; tag: string }[] = [
+  { q: "Bán kính uốn cong tối thiểu của cáp điện tòa S5 là bao nhiêu?", icon: "zap", tag: "Spec Điện" },
+  { q: "Lưu lượng gió tươi cho phòng khách sạn theo thuyết minh thiết kế?", icon: "book", tag: "Thuyết minh" },
+  { q: "Thời gian bảo hành hệ thống điện là bao lâu?", icon: "shield", tag: "Bảo hành" },
+  { q: "Xuất Excel bảng gió tươi tòa S5 (Thuyết minh Bảng 4.3), có cột Nguồn", icon: "table", tag: "Xuất file" },
 ];
 
 interface Props {
@@ -24,12 +25,23 @@ export default function ChatView({ messages, onExample, onConfirm }: Props) {
   if (messages.length === 0)
     return (
       <div className="chat empty">
-        <h2>Hỏi đáp tài liệu dự án cơ điện</h2>
-        <p className="muted">Thuyết minh, Spec, Chỉ dẫn kỹ thuật, tiêu chuẩn vận hành – trả lời kèm trích dẫn nguồn.</p>
+        <div className="hero">
+          <span className="hero-mark">
+            <Icon name="spark" size={26} />
+          </span>
+          <h1>Hỏi đáp tài liệu dự án cơ điện</h1>
+          <p>Thuyết minh, Spec, Chỉ dẫn kỹ thuật, tiêu chuẩn vận hành. Câu trả lời luôn kèm trích dẫn nguồn.</p>
+        </div>
         <div className="examples">
-          {EXAMPLES.map((q) => (
-            <button key={q} onClick={() => onExample(q)}>
-              {q}
+          {EXAMPLES.map((e) => (
+            <button key={e.q} className="example" onClick={() => onExample(e.q)}>
+              <span className="example-icon">
+                <Icon name={e.icon} />
+              </span>
+              <span className="example-body">
+                <span className="example-tag">{e.tag}</span>
+                <span>{e.q}</span>
+              </span>
             </button>
           ))}
         </div>
@@ -37,11 +49,13 @@ export default function ChatView({ messages, onExample, onConfirm }: Props) {
     );
 
   return (
-    <div className="chat">
-      {messages.map((m, i) => (
-        <MessageBubble key={i} m={m} onConfirm={onConfirm} />
-      ))}
-      <div ref={end} />
+    <div className="chat" role="log" aria-live="polite">
+      <div className="chat-inner">
+        {messages.map((m, i) => (
+          <MessageBubble key={i} m={m} onConfirm={onConfirm} />
+        ))}
+        <div ref={end} />
+      </div>
     </div>
   );
 }

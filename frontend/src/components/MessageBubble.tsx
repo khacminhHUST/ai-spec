@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Message } from "../types";
 import Citations from "./Citations";
+import Icon, { Spinner } from "./Icon";
 
 const STEP_LABEL: Record<string, string> = {
   agent: "Đang xử lý yêu cầu…",
@@ -62,12 +63,18 @@ export default function MessageBubble({ m, onConfirm }: Props) {
   const step = m.step ? (STEP_LABEL[m.step] ?? m.step) : null;
   return (
     <div className="msg assistant">
+      <span className="msg-avatar" aria-hidden>
+        <Icon name="spark" size={16} />
+      </span>
+      <div className="msg-body">
       {badge && <span className={"badge " + m.status}>{badge}</span>}
       {m.tools && m.tools.length > 0 && (
         <ul className="tools">
           {m.tools.map((t, i) => (
             <li key={i} className={t.done ? (t.ok ? "ok" : "fail") : "running"}>
-              <span className="tool-mark">{t.done ? (t.ok ? "✓" : "✕") : "…"}</span>
+              <span className="tool-mark">
+                {t.done ? <Icon name={t.ok ? "check" : "x"} size={14} label={t.ok ? "Xong" : "Lỗi"} /> : <Spinner size={12} />}
+              </span>
               {TOOL_LABEL[t.tool] ?? t.tool}
               {t.summary && <span className="tool-summary"> – {t.summary}</span>}
             </li>
@@ -79,10 +86,15 @@ export default function MessageBubble({ m, onConfirm }: Props) {
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
         </div>
       )}
-      {step && !(m.content && m.step === "generate") && <div className="step">{step}</div>}
+      {step && !(m.content && m.step === "generate") && (
+        <div className="step">
+          <Spinner size={14} /> {step}
+        </div>
+      )}
       {m.confirms?.map((c) => (
         <div key={c.confirm_id} className="confirm">
           <div className="confirm-title">
+            <Icon name="alert" size={16} />
             Cho phép thực hiện <code>{c.tool}</code> trên hệ thống ngoài?
           </div>
           <pre>{JSON.stringify(c.args, null, 2)}</pre>
@@ -98,13 +110,21 @@ export default function MessageBubble({ m, onConfirm }: Props) {
         <div className="files">
           {m.files.map((f) => (
             <a key={f.url} className="file" href={f.url} download={f.name}>
-              ⬇ {f.name} <span className="file-size">{formatSize(f.size)}</span>
+              <span className="file-icon">
+                <Icon name="file" />
+              </span>
+              <span className="file-meta">
+                <span className="file-name">{f.name}</span>
+                <span className="file-size">{formatSize(f.size)}</span>
+              </span>
+              <Icon name="download" className="file-dl" />
             </a>
           ))}
         </div>
       )}
       {m.error && <div className="msg-error">Lỗi: {m.error}</div>}
       {m.citations && m.citations.length > 0 && <Citations items={m.citations} />}
+      </div>
     </div>
   );
 }

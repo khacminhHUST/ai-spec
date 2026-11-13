@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getOptions, listProjects, type KnowledgeOptions, type Project } from "../../knowledgeApi";
+import { getOptions, listProjects, type KnowledgeOptions, type Project, type UploadPreset } from "../../knowledgeApi";
 import JobQueue from "./JobQueue";
 import JobReview from "./JobReview";
 import ProjectsView from "./ProjectsView";
@@ -22,17 +22,19 @@ interface Props {
 }
 
 /** Tab "Kho tri thức": điều hướng bằng state (không router). */
-export default function KnowledgePage({ userId, onClose }: Props) {
+export default function KnowledgePage({ userId }: Props) {
   const [view, setView] = useState<View>("repo");
   const [jobId, setJobId] = useState<string | null>(null);
   const [options, setOptions] = useState<KnowledgeOptions | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [preset, setPreset] = useState<UploadPreset | null>(null);
 
   const onError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
-  const reloadProjects = useCallback(() => {
-    listProjects().then(setProjects).catch(onError);
-  }, [onError]);
+  const reloadProjects = useCallback(
+    () => listProjects().then(setProjects).catch(onError),
+    [onError],
+  );
 
   useEffect(() => {
     getOptions().then(setOptions).catch(onError);
@@ -42,7 +44,12 @@ export default function KnowledgePage({ userId, onClose }: Props) {
   const go = (v: View) => {
     setError(null);
     setJobId(null);
+    setPreset(null);
     setView(v);
+  };
+  const openUpload = (p: UploadPreset) => {
+    go("upload");
+    setPreset(p);
   };
 
   return (
@@ -56,12 +63,9 @@ export default function KnowledgePage({ userId, onClose }: Props) {
             </button>
           ))}
         </nav>
-        <button className="kn-link" onClick={onClose}>
-          ← Hỏi đáp
-        </button>
       </header>
       {error && (
-        <div className="banner-error" onClick={() => setError(null)} title="Bấm để ẩn">
+        <div className="banner-error" role="alert" onClick={() => setError(null)} title="Bấm để ẩn">
           {error}
         </div>
       )}
@@ -69,13 +73,16 @@ export default function KnowledgePage({ userId, onClose }: Props) {
         {jobId ? (
           <JobReview jobId={jobId} userId={userId} onBack={() => setJobId(null)} onError={onError} />
         ) : view === "repo" ? (
-          <RepoView userId={userId} onError={onError} />
+          <RepoView userId={userId} options={options} projects={projects} onAdd={openUpload} onError={onError} />
         ) : view === "upload" ? (
           options && (
             <UploadForm
+              key={JSON.stringify(preset)}
+              preset={preset}
               userId={userId}
               options={options}
               projects={projects}
+              onProjectsChanged={reloadProjects}
               onUploaded={() => go("queue")}
               onError={onError}
             />

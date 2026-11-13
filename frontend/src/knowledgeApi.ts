@@ -55,6 +55,10 @@ export interface TreeProject {
 export interface Revision {
   doc_id: string;
   doc_code: string;
+  project_id: string;
+  building: string;
+  stream: string;
+  disciplines: string[];
   title: string | null;
   issuer: string | null;
   revision: string | null;
@@ -199,6 +203,31 @@ export const setLatest = (code: string, docId: string, userId: string) =>
   send("POST", `/knowledge/series/${enc(code)}/latest`, { doc_id: docId, user_id: userId });
 export const unpublishSeries = (code: string) => send("POST", `/knowledge/series/${enc(code)}/unpublish`);
 export const deleteRevision = (docId: string) => send("DELETE", `/knowledge/documents/${enc(docId)}`);
+export const deleteSeries = (code: string) => send("DELETE", `/knowledge/series/${enc(code)}`);
+
+export interface DocumentPatch {
+  title?: string | null;
+  issuer?: string | null;
+  revision?: string | null;
+  issue_date?: string | null;
+  stage?: string | null;
+}
+export interface SeriesPatch {
+  project_id?: string;
+  building?: string;
+  stream?: string;
+  disciplines?: string[];
+}
+export const updateDocument = (docId: string, p: DocumentPatch) =>
+  send("PATCH", `/knowledge/documents/${enc(docId)}`, p);
+export const updateSeries = (code: string, p: SeriesPatch) => send("PATCH", `/knowledge/series/${enc(code)}`, p);
+
+/** Mở form upload với thông tin điền sẵn (thêm tài liệu / revision mới từ kho). */
+export interface UploadPreset {
+  project_id?: string;
+  building?: string;
+  doc_code?: string;
+}
 export const fileUrl = (docId: string) => `/knowledge/documents/${enc(docId)}/file`;
 
 // ---- upload / job
