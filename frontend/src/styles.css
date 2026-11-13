@@ -1,44 +1,52 @@
 /* ============================================================
    Design tokens – Minimalism/Swiss · navy + xanh kỹ thuật
    ============================================================ */
+/* Màu đồng bộ hệ sinh thái Hawee: xanh thương hiệu, nền sáng.
+   Theme: data-theme="light" | "dark" trên <html>; không đặt → theo hệ thống. */
 :root {
-  --bg: #f8fafc;
-  --bg-subtle: #f1f5f9;
+  --bg: #f4f6fa;
+  --bg-subtle: #eef2f8;
   --panel: #ffffff;
-  --fg: #0f172a;
-  --fg-2: #334155;
-  --muted: #64748b;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --fg: #111827;
+  --fg-2: #374151;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
 
-  --accent: #0369a1;
-  --accent-hover: #075985;
-  --accent-soft: #e0f2fe;
+  --accent: #1d4ed8;
+  --accent-hover: #1e40af;
+  --accent-soft: #e8efff;
   --accent-fg: #ffffff;
-  --user-bg: #0f172a;
-  --user-fg: #f8fafc;
+  --accent-solid: #1d4ed8;
+  --accent-solid-hover: #1e40af;
+  --brand-grad: linear-gradient(135deg, #2f5fd0, #1a3e9c);
+  --user-bg: #1d4ed8;
+  --user-fg: #ffffff;
 
   --ok-bg: #dcfce7;
-  --ok-fg: #166534;
+  --ok-fg: #15803d;
   --warn-bg: #fef3c7;
   --warn-fg: #92400e;
   --err-bg: #fee2e2;
   --err-fg: #b91c1c;
 
-  --sidebar: #0b1220;
-  --sidebar-fg: #cbd5e1;
-  --sidebar-muted: #64748b;
-  --sidebar-hover: rgba(148, 163, 184, 0.1);
-  --sidebar-active: rgba(56, 189, 248, 0.14);
-  --sidebar-border: rgba(148, 163, 184, 0.14);
+  --sidebar: #ffffff;
+  --sidebar-fg: #374151;
+  --sidebar-strong: #111827;
+  --sidebar-muted: #6b7280;
+  --sidebar-hover: #f3f4f6;
+  --sidebar-active: #e8efff;
+  --sidebar-active-fg: #1d4ed8;
+  --sidebar-border: #e5e7eb;
+  --scrim: rgba(17, 24, 39, 0.4);
 
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.05);
-  --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
-  --ring: 0 0 0 3px rgba(3, 105, 161, 0.25);
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.05);
+  --shadow: 0 1px 3px rgba(17, 24, 39, 0.06), 0 4px 12px rgba(17, 24, 39, 0.05);
+  --shadow-lg: 0 10px 30px -8px rgba(17, 24, 39, 0.2);
+  --ring: 0 0 0 3px rgba(29, 78, 216, 0.22);
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --content-w: 820px;
   --sidebar-w: 272px;
@@ -52,33 +60,83 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b1120;
-    --bg-subtle: #111a2e;
-    --panel: #0f172a;
-    --fg: #e2e8f0;
+  :root:not([data-theme="light"]) {
+    --bg: #0f1420;
+    --bg-subtle: #171e2e;
+    --panel: #131a29;
+    --fg: #e5e7eb;
     --fg-2: #cbd5e1;
     --muted: #94a3b8;
-    --border: #1e293b;
+    --border: #232c3f;
     --border-strong: #334155;
-    --accent: #38bdf8;
-    --accent-hover: #7dd3fc;
-    --accent-soft: rgba(56, 189, 248, 0.12);
-    --accent-fg: #082f49;
-    --user-bg: #1e3a5f;
-    --user-fg: #f1f5f9;
+    --accent: #6b9bff;
+    --accent-hover: #93b6ff;
+    --accent-soft: rgba(107, 155, 255, 0.14);
+    --accent-fg: #ffffff;
+    --accent-solid: #2f5fd0;
+    --accent-solid-hover: #3b6ef0;
+    --user-bg: #2a4fb8;
+    --user-fg: #f1f5ff;
     --ok-bg: rgba(34, 197, 94, 0.14);
     --ok-fg: #86efac;
     --warn-bg: rgba(245, 158, 11, 0.14);
     --warn-fg: #fcd34d;
     --err-bg: rgba(239, 68, 68, 0.14);
     --err-fg: #fca5a5;
-    --sidebar: #070c18;
+    --sidebar: #111726;
+    --sidebar-fg: #cbd5e1;
+    --sidebar-strong: #f1f5f9;
+    --sidebar-muted: #7c8aa3;
+    --sidebar-hover: rgba(148, 163, 184, 0.1);
+    --sidebar-active: rgba(107, 155, 255, 0.16);
+    --sidebar-active-fg: #93b6ff;
+    --sidebar-border: #1f2738;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
-    --ring: 0 0 0 3px rgba(56, 189, 248, 0.3);
+    --ring: 0 0 0 3px rgba(107, 155, 255, 0.3);
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1420;
+    --bg-subtle: #171e2e;
+    --panel: #131a29;
+    --fg: #e5e7eb;
+    --fg-2: #cbd5e1;
+    --muted: #94a3b8;
+    --border: #232c3f;
+    --border-strong: #334155;
+    --accent: #6b9bff;
+    --accent-hover: #93b6ff;
+    --accent-soft: rgba(107, 155, 255, 0.14);
+    --accent-fg: #ffffff;
+    --accent-solid: #2f5fd0;
+    --accent-solid-hover: #3b6ef0;
+    --user-bg: #2a4fb8;
+    --user-fg: #f1f5ff;
+    --ok-bg: rgba(34, 197, 94, 0.14);
+    --ok-fg: #86efac;
+    --warn-bg: rgba(245, 158, 11, 0.14);
+    --warn-fg: #fcd34d;
+    --err-bg: rgba(239, 68, 68, 0.14);
+    --err-fg: #fca5a5;
+    --sidebar: #111726;
+    --sidebar-fg: #cbd5e1;
+    --sidebar-strong: #f1f5f9;
+    --sidebar-muted: #7c8aa3;
+    --sidebar-hover: rgba(148, 163, 184, 0.1);
+    --sidebar-active: rgba(107, 155, 255, 0.16);
+    --sidebar-active-fg: #93b6ff;
+    --sidebar-border: #1f2738;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+    --ring: 0 0 0 3px rgba(107, 155, 255, 0.3);
+    color-scheme: dark;
 }
 
 * {
@@ -236,9 +294,9 @@ a {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: linear-gradient(135deg, #0ea5e9, #0369a1);
+  background: var(--brand-grad);
   color: #fff;
-  box-shadow: 0 4px 12px -2px rgba(14, 165, 233, 0.45);
+  box-shadow: 0 4px 12px -2px rgba(29, 78, 216, 0.35);
 }
 
 .brand-text {
@@ -249,7 +307,7 @@ a {
 }
 
 .brand-text strong {
-  color: #f8fafc;
+  color: var(--sidebar-strong);
   font-size: 15px;
   font-weight: 600;
 }
@@ -267,7 +325,7 @@ a {
 
 .sidebar-close:hover:not(:disabled) {
   background: var(--sidebar-hover);
-  color: #fff;
+  color: var(--sidebar-strong);
 }
 
 .btn-new {
@@ -279,15 +337,16 @@ a {
   margin-bottom: 8px;
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius);
-  background: rgba(148, 163, 184, 0.06);
-  color: #f1f5f9;
+  background: var(--accent-solid);
+  border-color: var(--accent);
+  color: var(--accent-fg);
   font-weight: 500;
   transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
 }
 
 .btn-new:hover {
-  background: var(--sidebar-hover);
-  border-color: rgba(148, 163, 184, 0.3);
+  background: var(--accent-solid-hover);
+  border-color: var(--accent-solid-hover);
 }
 
 .nav {
@@ -312,13 +371,13 @@ a {
 
 .nav-item:hover {
   background: var(--sidebar-hover);
-  color: #fff;
+  color: var(--sidebar-strong);
 }
 
 .nav-item.active {
   background: var(--sidebar-active);
-  color: #7dd3fc;
-  font-weight: 500;
+  color: var(--sidebar-active-fg);
+  font-weight: 600;
 }
 
 .section-label {
@@ -340,7 +399,7 @@ a {
   margin: 0 -4px;
   padding: 0 4px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .conv-empty {
@@ -370,7 +429,8 @@ a {
 
 .conv-item.active {
   background: var(--sidebar-hover);
-  color: #fff;
+  color: var(--sidebar-strong);
+  font-weight: 500;
 }
 
 .conv-title {
@@ -404,8 +464,8 @@ a {
   height: 32px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--accent-soft);
+  color: var(--accent);
   font-weight: 600;
   font-size: 13px;
 }
@@ -430,7 +490,7 @@ a {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: #f1f5f9;
+  color: var(--sidebar-strong);
   font-size: 14px;
 }
 
@@ -440,12 +500,52 @@ a {
 
 .user-field input:focus {
   outline: none;
-  border-color: #38bdf8;
-  background: rgba(15, 23, 42, 0.6);
+  border-color: var(--accent);
+  background: var(--panel);
 }
 
 .scrim {
   display: none;
+}
+
+/* ---------- chọn giao diện sáng/tối ---------- */
+.theme-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin-top: 8px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius);
+  background: var(--sidebar-hover);
+}
+
+.theme-switch button {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.theme-switch button:hover {
+  color: var(--sidebar-strong);
+}
+
+.theme-switch button[aria-pressed="true"] {
+  background: var(--sidebar);
+  color: var(--sidebar-active-fg);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ---------- topbar ---------- */
@@ -565,9 +665,9 @@ a {
   height: 56px;
   margin-bottom: 18px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #0ea5e9, #0369a1);
+  background: var(--brand-grad);
   color: #fff;
-  box-shadow: 0 12px 28px -10px rgba(3, 105, 161, 0.6);
+  box-shadow: 0 12px 28px -10px rgba(29, 78, 216, 0.55);
 }
 
 .hero h1 {
@@ -884,14 +984,14 @@ a {
   padding: 0 18px;
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   font-weight: 500;
   transition: background 0.15s var(--ease);
 }
 
 .confirm-actions button:hover {
-  background: var(--accent-hover);
+  background: var(--accent-solid-hover);
 }
 
 .confirm-actions button.secondary {
@@ -1066,7 +1166,7 @@ a {
   padding: 0 14px;
   border: 0;
   border-radius: var(--radius);
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   font-weight: 500;
   font-size: 14px;
@@ -1074,7 +1174,7 @@ a {
 }
 
 .send-btn:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent-solid-hover);
 }
 
 .send-btn:disabled {
@@ -1157,7 +1257,7 @@ a {
     position: fixed;
     inset: 0;
     z-index: 30;
-    background: rgba(2, 6, 23, 0.45);
+    background: var(--scrim);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s var(--ease);

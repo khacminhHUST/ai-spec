@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ConversationSummary } from "../types";
 import Icon from "./Icon";
+import type { ThemePref } from "../theme";
 
 export type AppView = "chat" | "connectors" | "knowledge";
 
@@ -21,7 +22,15 @@ interface Props {
   onNav: (v: AppView) => void;
   open: boolean;
   onClose: () => void;
+  theme: ThemePref;
+  onTheme: (t: ThemePref) => void;
 }
+
+const THEMES: { id: ThemePref; label: string; icon: string }[] = [
+  { id: "light", label: "Sáng", icon: "sun" },
+  { id: "dark", label: "Tối", icon: "moon" },
+  { id: "system", label: "Tự động", icon: "monitor" },
+];
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
@@ -32,7 +41,7 @@ function shortDate(iso: string): string {
 }
 
 export default function Sidebar(p: Props) {
-  const { userId, onUserChange, conversations, activeId, onSelect, onNew, view, onNav, open, onClose } = p;
+  const { userId, onUserChange, conversations, activeId, onSelect, onNew, view, onNav, open, onClose, theme, onTheme } = p;
   const [draft, setDraft] = useState(userId);
   useEffect(() => {
     setDraft(userId);
@@ -111,6 +120,15 @@ export default function Sidebar(p: Props) {
             <input value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
           </label>
         </form>
+
+        <div className="theme-switch" role="group" aria-label="Giao diện">
+          {THEMES.map((t) => (
+            <button key={t.id} aria-pressed={theme === t.id} onClick={() => onTheme(t.id)} title={`Giao diện ${t.label}`}>
+              <Icon name={t.icon} size={14} />
+              {t.label}
+            </button>
+          ))}
+        </div>
       </aside>
     </>
   );

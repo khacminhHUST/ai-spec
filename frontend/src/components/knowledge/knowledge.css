@@ -248,14 +248,14 @@
 }
 
 .kn-btn.primary {
-  background: var(--accent);
+  background: var(--accent-solid);
   border-color: var(--accent);
   color: var(--accent-fg);
 }
 
 .kn-btn.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-solid-hover);
+  border-color: var(--accent-solid-hover);
 }
 
 .kn-btn.danger {

@@ -50,15 +50,15 @@
 
 .cn-view .cn-primary,
 .cn-form .cn-primary {
-  background: var(--accent);
+  background: var(--accent-solid);
   border-color: var(--accent);
   color: var(--accent-fg);
 }
 
 .cn-view .cn-primary:hover:not(:disabled),
 .cn-form .cn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-solid-hover);
+  border-color: var(--accent-solid-hover);
 }
 
 .cn-view .cn-danger {

@@ -6,6 +6,7 @@ import KnowledgePage from "./components/knowledge/KnowledgePage";
 import Icon from "./components/Icon";
 import Sidebar, { type AppView } from "./components/Sidebar";
 import ConnectorsView from "./components/connectors/ConnectorsView";
+import { isDarkNow, useTheme } from "./theme";
 import type { ConversationSummary, Message } from "./types";
 
 const USER_KEY = "mep.user_id";
@@ -30,6 +31,7 @@ export default function App() {
     return v === "connectors" || v === "knowledge" ? v : "chat";
   });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -197,6 +199,8 @@ export default function App() {
         onNav={nav}
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
+        theme={theme}
+        onTheme={setTheme}
       />
       <div className="shell">
         <header className="mobilebar">
@@ -204,6 +208,14 @@ export default function App() {
             <Icon name="menu" />
           </button>
           <span className="mobilebar-title">{title}</span>
+          <button
+            className="icon-btn"
+            onClick={() => setTheme(isDarkNow(theme) ? "light" : "dark")}
+            aria-label={isDarkNow(theme) ? "Chuyển giao diện sáng" : "Chuyển giao diện tối"}
+            title={isDarkNow(theme) ? "Giao diện sáng" : "Giao diện tối"}
+          >
+            <Icon name={isDarkNow(theme) ? "sun" : "moon"} />
+          </button>
           {view === "chat" && (
             <button className="icon-btn" onClick={newConversation} aria-label="Hội thoại mới">
               <Icon name="plus" />
