@@ -339,3 +339,12 @@
   font-family: inherit;
   font-size: 14px;
 }
+
+/* tạo nhanh dự án / công trình trong form upload */
+.kn-inline { margin: 4px 0 8px; background: #f8fafc; border-style: dashed; }
+.kn-inline .kn-row input { flex: 1; }
+
+/* sửa revision tại chỗ trong bảng lịch sử */
+.kn-editing input, .kn-editing select { width: 100%; box-sizing: border-box; margin: 1px 0; }
+.kn-editing td { vertical-align: top; }
+

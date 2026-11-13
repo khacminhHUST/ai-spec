@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getOptions, listProjects, type KnowledgeOptions, type Project } from "../../knowledgeApi";
+import { getOptions, listProjects, type KnowledgeOptions, type Project, type UploadPreset } from "../../knowledgeApi";
 import JobQueue from "./JobQueue";
 import JobReview from "./JobReview";
 import ProjectsView from "./ProjectsView";
@@ -28,11 +28,13 @@ export default function KnowledgePage({ userId, onClose }: Props) {
   const [options, setOptions] = useState<KnowledgeOptions | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [preset, setPreset] = useState<UploadPreset | null>(null);
 
   const onError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
-  const reloadProjects = useCallback(() => {
-    listProjects().then(setProjects).catch(onError);
-  }, [onError]);
+  const reloadProjects = useCallback(
+    () => listProjects().then(setProjects).catch(onError),
+    [onError],
+  );
 
   useEffect(() => {
     getOptions().then(setOptions).catch(onError);
@@ -42,7 +44,12 @@ export default function KnowledgePage({ userId, onClose }: Props) {
   const go = (v: View) => {
     setError(null);
     setJobId(null);
+    setPreset(null);
     setView(v);
+  };
+  const openUpload = (p: UploadPreset) => {
+    go("upload");
+    setPreset(p);
   };
 
   return (
@@ -69,13 +76,16 @@ export default function KnowledgePage({ userId, onClose }: Props) {
         {jobId ? (
           <JobReview jobId={jobId} userId={userId} onBack={() => setJobId(null)} onError={onError} />
         ) : view === "repo" ? (
-          <RepoView userId={userId} onError={onError} />
+          <RepoView userId={userId} options={options} projects={projects} onAdd={openUpload} onError={onError} />
         ) : view === "upload" ? (
           options && (
             <UploadForm
+              key={JSON.stringify(preset)}
+              preset={preset}
               userId={userId}
               options={options}
               projects={projects}
+              onProjectsChanged={reloadProjects}
               onUploaded={() => go("queue")}
               onError={onError}
             />

@@ -88,6 +88,44 @@ def delete_document(doc_id: str, conn=Depends(get_conn), deps: Deps = Depends(ge
     return out
 
 
+class DocumentPatch(BaseModel):
+    """Metadata riêng của 1 revision (chỉ gửi trường cần sửa)."""
+    title: str | None = None
+    issuer: str | None = None
+    revision: str | None = None
+    issue_date: date | None = None
+    stage: str | None = None
+
+
+class SeriesPatch(BaseModel):
+    """Thông tin chung của bộ, áp cho mọi revision (chỉ gửi trường cần sửa)."""
+    project_id: str | None = None
+    building: str | None = None
+    stream: str | None = None
+    disciplines: list[str] | None = None
+
+
+@router.patch("/documents/{doc_id}")
+def update_document(doc_id: str, body: DocumentPatch, conn=Depends(get_conn), deps: Deps = Depends(get_deps)):
+    out = call(versions.update_document, conn, deps.settings, doc_id, body.model_dump(exclude_unset=True))
+    clear_profiles(deps)
+    return out
+
+
+@router.patch("/series/{doc_code}")
+def update_series(doc_code: str, body: SeriesPatch, conn=Depends(get_conn), deps: Deps = Depends(get_deps)):
+    out = call(versions.update_series, conn, deps.settings, doc_code, body.model_dump(exclude_unset=True))
+    clear_profiles(deps)
+    return out
+
+
+@router.delete("/series/{doc_code}")
+def delete_series(doc_code: str, conn=Depends(get_conn), deps: Deps = Depends(get_deps)):
+    out = call(versions.delete_series, conn, deps.settings, doc_code)
+    clear_profiles(deps)
+    return out
+
+
 @router.get("/documents/{doc_id}/file")
 def download(doc_id: str, conn=Depends(get_conn)):
     row = call(versions.source_file, conn, doc_id)

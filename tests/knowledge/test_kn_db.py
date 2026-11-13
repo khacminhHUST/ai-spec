@@ -181,3 +181,56 @@ def test_dat_hieu_luc_go_xoa(conn, kn_ns):
     assert latest_state(s, conn) == {ids[1]: (True, {True})}
     with pytest.raises(KnowledgeError):
         versions.set_latest(conn, s, CODE, ids[0])
+
+
+def _payloads(s, doc_id) -> list[dict]:
+    flt = qm.Filter(must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))])
+    pts, _ = qdrant(s).scroll(s.collection("vi"), scroll_filter=flt, limit=50, with_payload=True)
+    return [p.payload for p in pts]
+
+
+def test_sua_metadata_va_xoa_ca_bo(conn, kn_ns):
+    s = kn_ns
+    a, b = make_doc("4", "A", date(2026, 1, 1)), make_doc("5", "B", date(2026, 5, 1))
+    for d in (a, b):
+        save_document(*d, s, embed_cache=False)
+    ida, idb = a[0].doc_id, b[0].doc_id
+
+    # sửa riêng 1 revision: Postgres + payload revision trên Qdrant; is_latest giữ nguyên; "" → NULL
+    versions.update_document(conn, s, idb, {"title": "Spec HVAC sửa", "revision": "B1", "issuer": "  ",
+                                            "issue_date": date(2026, 6, 1), "is_latest": False})
+    row = conn.execute("SELECT title, revision, issuer, issue_date, is_latest FROM documents WHERE doc_id = %s",
+                       (idb,)).fetchone()
+    assert (row["title"], row["revision"], row["issuer"], row["is_latest"]) == ("Spec HVAC sửa", "B1", None, True)
+    assert {p["revision"] for p in _payloads(s, idb)} == {"B1"}
+    assert {p["revision"] for p in _payloads(s, ida)} == {"A"}                 # revision khác không bị đổi
+    with pytest.raises(KnowledgeError):
+        versions.update_document(conn, s, "doc_khong_co", {"title": "x"})
+    with pytest.raises(KnowledgeError):
+        versions.update_document(conn, s, idb, {"doc_code": "đổi mã"})          # trường không cho sửa
+
+    # sửa thông tin chung của bộ: áp cho mọi revision, doc_code giữ nguyên
+    projects.add_building(conn, "26DA06", {"building": "S6", "aliases": []})
+    versions.update_series(conn, s, CODE, {"building": "S6", "stream": "OPERATOR_STANDARD",
+                                           "disciplines": ["PLUMBING", "HVAC", "PLUMBING"]})
+    rows = conn.execute("SELECT doc_code, building, stream, disciplines FROM documents WHERE doc_code = %s",
+                        (CODE,)).fetchall()
+    assert len(rows) == 2 and all((r["building"], r["stream"], r["disciplines"]) ==
+                                  ("S6", "OPERATOR_STANDARD", ["PLUMBING", "HVAC"]) for r in rows)
+    for d in (ida, idb):
+        assert all((p["building"], p["stream"], p["disciplines"]) == ("S6", "OPERATOR_STANDARD", ["PLUMBING", "HVAC"])
+                   for p in _payloads(s, d))
+    for bad in ({"building": "KHONG_CO"}, {"stream": "XYZ"}, {"disciplines": []}, {"disciplines": ["XYZ"]}, {}):
+        with pytest.raises(KnowledgeError):
+            versions.update_series(conn, s, CODE, bad)
+    assert conn.execute("SELECT building FROM documents WHERE doc_id = %s", (ida,)).fetchone()["building"] == "S6"
+
+    # xóa cả bộ: Postgres (cascade parent) + Qdrant
+    out = versions.delete_series(conn, s, CODE)
+    assert sorted(out["deleted"]) == sorted([ida, idb])
+    assert conn.execute("SELECT count(*) AS n FROM documents WHERE doc_code = %s", (CODE,)).fetchone()["n"] == 0
+    assert conn.execute("SELECT count(*) AS n FROM parent_chunks WHERE doc_id = ANY(%s)",
+                        ([ida, idb],)).fetchone()["n"] == 0
+    assert _payloads(s, ida) == [] and _payloads(s, idb) == []
+    with pytest.raises(KnowledgeError):
+        versions.delete_series(conn, s, CODE)
