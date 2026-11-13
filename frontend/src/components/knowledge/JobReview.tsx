@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -83,7 +84,7 @@ export default function JobReview({ jobId, userId, onBack, onError }: Props) {
     <div className="kn-review">
       <div className="kn-row">
         <button className="kn-link" onClick={onBack}>
-          ← Quay lại
+          <Icon name="arrowLeft" size={16} /> Quay lại
         </button>
         <span>
           <span className={`kn-status ${job.status.toLowerCase()}`}>{STATUS_LABEL[job.status]}</span>

@@ -22,7 +22,7 @@ interface Props {
 }
 
 /** Tab "Kho tri thức": điều hướng bằng state (không router). */
-export default function KnowledgePage({ userId, onClose }: Props) {
+export default function KnowledgePage({ userId }: Props) {
   const [view, setView] = useState<View>("repo");
   const [jobId, setJobId] = useState<string | null>(null);
   const [options, setOptions] = useState<KnowledgeOptions | null>(null);
@@ -63,12 +63,9 @@ export default function KnowledgePage({ userId, onClose }: Props) {
             </button>
           ))}
         </nav>
-        <button className="kn-link" onClick={onClose}>
-          ← Hỏi đáp
-        </button>
       </header>
       {error && (
-        <div className="banner-error" onClick={() => setError(null)} title="Bấm để ẩn">
+        <div className="banner-error" role="alert" onClick={() => setError(null)} title="Bấm để ẩn">
           {error}
         </div>
       )}

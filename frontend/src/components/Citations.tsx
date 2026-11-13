@@ -8,7 +8,7 @@ function pages(c: Citation): string | null {
 export default function Citations({ items }: { items: Citation[] }) {
   return (
     <div className="citations">
-      <div className="small muted">Nguồn</div>
+      <div className="citations-label">Nguồn ({items.length})</div>
       <ol>
         {items.map((c) => (
           <li key={c.n} value={c.n}>

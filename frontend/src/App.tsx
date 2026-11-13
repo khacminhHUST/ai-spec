@@ -3,7 +3,8 @@ import { confirmChat, getConversation, listConversations, streamChat, uploadFile
 import ChatView from "./components/ChatView";
 import Composer from "./components/Composer";
 import KnowledgePage from "./components/knowledge/KnowledgePage";
-import Sidebar from "./components/Sidebar";
+import Icon from "./components/Icon";
+import Sidebar, { type AppView } from "./components/Sidebar";
 import ConnectorsView from "./components/connectors/ConnectorsView";
 import type { ConversationSummary, Message } from "./types";
 
@@ -24,7 +25,11 @@ function loadUser(): string {
 
 export default function App() {
   const [userId, setUserId] = useState(loadUser);
-  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get("view") === "connectors" ? "connectors" : "chat"));
+  const [view, setView] = useState<AppView>(() => {
+    const v = new URLSearchParams(window.location.search).get("view");
+    return v === "connectors" || v === "knowledge" ? v : "chat";
+  });
+  const [menuOpen, setMenuOpen] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -33,7 +38,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [tab, setTab] = useState<"chat" | "knowledge">("chat");
   // id cấp trước cho hội thoại mới có file đính kèm (phải upload trước khi gửi câu hỏi đầu tiên)
   const draftIdRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -61,8 +65,14 @@ export default function App() {
     draftIdRef.current = null;
   };
 
+  const nav = (v: AppView) => {
+    setView(v);
+    setMenuOpen(false);
+  };
+
   const openConversation = async (id: string) => {
     reset();
+    nav("chat");
     setActiveId(id);
     try {
       const c = await getConversation(id);
@@ -75,6 +85,7 @@ export default function App() {
 
   const newConversation = () => {
     reset();
+    nav("chat");
     setActiveId(null);
     setMessages([]);
     setProjects([]);
@@ -168,6 +179,8 @@ export default function App() {
     }
   };
 
+  const title = view === "knowledge" ? "Kho tri thức" : view === "connectors" ? "Kết nối" : "Hỏi đáp";
+
   return (
     <div className="layout">
       <Sidebar
@@ -180,46 +193,63 @@ export default function App() {
         activeId={activeId}
         onSelect={openConversation}
         onNew={newConversation}
+        view={view}
+        onNav={nav}
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
       />
-      {tab === "knowledge" ? (
-        <KnowledgePage userId={userId} onClose={() => setTab("chat")} />
-      ) : (
-      <main className="main">
-        <header className="topbar">
-          <span className="topbar-title">MEP Project Assistant</span>
-          <nav className="app-tabs">
-            <button className={view === "chat" ? "active" : ""} onClick={() => setView("chat")}>Hội thoại</button>
-            <button className={view === "connectors" ? "active" : ""} onClick={() => setView("connectors")}>Kết nối</button>
-          </nav>
-          <button className="kn-link topbar-link" onClick={() => setTab("knowledge")}>
-            Kho tri thức
+      <div className="shell">
+        <header className="mobilebar">
+          <button className="icon-btn" onClick={() => setMenuOpen(true)} aria-label="Mở menu">
+            <Icon name="menu" />
           </button>
-          {projects.length > 0 && (
-            <span className="projects">
-              Dự án:
-              {projects.map((p) => (
-                <span key={p} className="chip">
-                  {p}
-                </span>
-              ))}
-            </span>
+          <span className="mobilebar-title">{title}</span>
+          {view === "chat" && (
+            <button className="icon-btn" onClick={newConversation} aria-label="Hội thoại mới">
+              <Icon name="plus" />
+            </button>
           )}
         </header>
-        {error && <div className="banner-error">{error}</div>}
-        {view === "connectors" && <ConnectorsView userId={userId} />}
-        {view === "chat" && (<>
-        <ChatView messages={messages} onExample={send} onConfirm={confirm} />
-        <Composer
-          disabled={busy}
-          attachments={attachments}
-          uploading={uploading}
-          onSend={send}
-          onAttach={attach}
-          onRemoveAttachment={(name) => setAttachments((a) => a.filter((x) => x !== name))}
-        />
-        </>)}
-      </main>
-      )}
+        {view === "knowledge" ? (
+          <KnowledgePage userId={userId} onClose={() => nav("chat")} />
+        ) : (
+          <main className="main">
+            <header className="topbar">
+              <span className="topbar-title">{view === "connectors" ? "Kết nối nguồn ngoài" : "Hỏi đáp dự án"}</span>
+              {view === "chat" && projects.length > 0 && (
+                <span className="projects">
+                  <span className="projects-label">Dự án</span>
+                  {projects.map((p) => (
+                    <span key={p} className="chip">
+                      {p}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </header>
+            {error && (
+              <div className="banner-error" role="alert">
+                <Icon name="alert" size={16} />
+                {error}
+              </div>
+            )}
+            {view === "connectors" && <ConnectorsView userId={userId} />}
+            {view === "chat" && (
+              <>
+                <ChatView messages={messages} onExample={send} onConfirm={confirm} />
+                <Composer
+                  disabled={busy}
+                  attachments={attachments}
+                  uploading={uploading}
+                  onSend={send}
+                  onAttach={attach}
+                  onRemoveAttachment={(name) => setAttachments((a) => a.filter((x) => x !== name))}
+                />
+              </>
+            )}
+          </main>
+        )}
+      </div>
     </div>
   );
 }
