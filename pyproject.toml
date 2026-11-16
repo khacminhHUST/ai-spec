@@ -20,6 +20,7 @@ dependencies = [
     "huggingface_hub>=0.25",
     # ingestion
     "docling>=2",
+    "easyocr>=1.7",  # OCR tiếng Việt cho PDF scan (docling_cache)
     "underthesea>=6",
     "lingua-language-detector>=2",
     # query
