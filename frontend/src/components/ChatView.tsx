@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Message } from "../types";
 import Icon from "./Icon";
 import MessageBubble from "./MessageBubble";
@@ -10,6 +10,9 @@ const EXAMPLES: { q: string; icon: string; tag: string }[] = [
   { q: "Xuất Excel bảng gió tươi tòa S5 (Thuyết minh Bảng 4.3), có cột Nguồn", icon: "table", tag: "Xuất file" },
 ];
 
+/** Cách đáy ≤ ngưỡng này (px) thì coi như đang "bám đáy" → tự cuộn theo nội dung mới. */
+const STICK_PX = 80;
+
 interface Props {
   messages: Message[];
   onExample: (q: string) => void;
@@ -17,10 +20,47 @@ interface Props {
 }
 
 export default function ChatView({ messages, onExample, onConfirm }: Props) {
-  const end = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  // Bám đáy: chỉ tự cuộn khi người dùng đang ở cuối. Kéo lên đọc → ngừng bám, không giành lại cuộn.
+  const stick = useRef(true);
+  const [showJump, setShowJump] = useState(false);
+  const userCount = messages.filter((m) => m.role === "user").length;
+
+  const toBottom = useCallback(() => {
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight; // tức thời: không animate theo từng token (gây giật)
+  }, []);
+
+  const onScroll = () => {
+    const el = box.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_PX;
+    stick.current = atBottom;
+    setShowJump(!atBottom);
+  };
+
+  // Người dùng gửi câu hỏi mới / mở hội thoại khác → bám đáy lại.
+  useLayoutEffect(() => {
+    stick.current = true;
+    setShowJump(false);
+    toBottom();
+  }, [userCount, toBottom]);
+
+  // Nội dung mới (token, tool, trích dẫn) → chỉ theo khi đang bám đáy; gom vào 1 frame.
+  useLayoutEffect(() => {
+    if (!stick.current) return;
+    const id = requestAnimationFrame(toBottom);
+    return () => cancelAnimationFrame(id);
+  }, [messages, toBottom]);
+
+  // Ảnh/bảng đổi chiều cao sau khi render → vẫn giữ đáy nếu đang bám.
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "end" });
-  }, [messages]);
+    const inner = box.current?.firstElementChild;
+    if (!inner || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => stick.current && toBottom());
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [messages.length > 0, toBottom]);
 
   if (messages.length === 0)
     return (
@@ -48,14 +88,32 @@ export default function ChatView({ messages, onExample, onConfirm }: Props) {
       </div>
     );
 
+  const streaming = messages[messages.length - 1]?.role === "assistant" && !!messages[messages.length - 1]?.step;
+
   return (
-    <div className="chat" role="log" aria-live="polite">
-      <div className="chat-inner">
-        {messages.map((m, i) => (
-          <MessageBubble key={i} m={m} onConfirm={onConfirm} />
-        ))}
-        <div ref={end} />
+    <div className="chat-scroll">
+      <div className="chat" ref={box} onScroll={onScroll} role="log" aria-live="polite" aria-busy={streaming}>
+        <div className="chat-inner">
+          {messages.map((m, i) => (
+            <MessageBubble key={i} m={m} onConfirm={onConfirm} />
+          ))}
+        </div>
       </div>
+      {showJump && (
+        <button
+          className="jump-latest"
+          onClick={() => {
+            // nhảy tức thời: cuộn mượt bị nội dung đang stream "chạy trốn" → onScroll tưởng người dùng kéo lên
+            stick.current = true;
+            setShowJump(false);
+            toBottom();
+          }}
+          aria-label="Cuộn xuống tin mới nhất"
+        >
+          <Icon name="arrowDown" size={16} />
+          {streaming ? "Đang trả lời" : "Mới nhất"}
+        </button>
+      )}
     </div>
   );
 }
