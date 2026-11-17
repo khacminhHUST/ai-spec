@@ -3,7 +3,6 @@ import {
   addBuilding,
   createProject,
   getTree,
-  suggestFromName,
   uploadDocument,
   type KnowledgeOptions,
   type Project,
@@ -57,7 +56,8 @@ function flattenSeries(tree: TreeProject[]): SeriesChoice[] {
   );
 }
 
-/** Form upload (mục 2.1): chỉ PDF, metadata bắt buộc + tùy chọn (gợi ý từ tên file), chọn bộ tài liệu. */
+/** Form upload (mục 2.1): chỉ PDF, chỉ các trường bắt buộc; revision / ngày / giai đoạn / tiêu đề / đơn vị ban hành
+ *  để hệ thống tự suy từ tên file và trang bìa khi xử lý. */
 export default function UploadForm({
   preset,
   userId,
@@ -76,7 +76,6 @@ export default function UploadForm({
   const [docType, setDocType] = useState("");
   const [seriesMode, setSeriesMode] = useState<"new" | "revision">("new");
   const [seriesCode, setSeriesCode] = useState("");
-  const [opt, setOpt] = useState({ revision: "", issue_date: "", stage: "", title: "", issuer: "" });
   const [series, setSeries] = useState<SeriesChoice[]>([]);
   const [busy, setBusy] = useState(false);
   // Tạo nhanh dự án / công trình ngay trong form
@@ -153,7 +152,7 @@ export default function UploadForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, preset, presetApplied]);
 
-  const pickFile = async (f: File | null) => {
+  const pickFile = (f: File | null) => {
     setFile(f);
     if (!f) return;
     if (!f.name.toLowerCase().endsWith(".pdf")) {
@@ -161,17 +160,6 @@ export default function UploadForm({
       return;
     }
     if (f.size > options.max_upload_mb * 1024 * 1024) onError(`File vượt giới hạn ${options.max_upload_mb} MB.`);
-    try {
-      const s = await suggestFromName(f.name);
-      setOpt((o) => ({
-        ...o,
-        revision: o.revision || s.revision || "",
-        issue_date: o.issue_date || s.issue_date || "",
-        stage: o.stage || s.stage || "",
-      }));
-    } catch (e) {
-      onError(e);
-    }
   };
 
   const pickSeries = (code: string) => {
@@ -205,7 +193,6 @@ export default function UploadForm({
       stream,
       disciplines,
       doc_type: docType,
-      ...Object.fromEntries(Object.entries(opt).filter(([, v]) => v.trim())),
       series: seriesMode === "new" ? { mode: "new" } : { mode: "revision", doc_code: seriesCode },
     };
     setBusy(true);
@@ -362,34 +349,10 @@ export default function UploadForm({
           </select>
         </label>
       </div>
-      <div className="kn-grid">
-        <label className="kn-field">
-          <span>Revision</span>
-          <input value={opt.revision} onChange={(e) => setOpt({ ...opt, revision: e.target.value })} />
-        </label>
-        <label className="kn-field">
-          <span>Ngày ban hành</span>
-          <input type="date" value={opt.issue_date} onChange={(e) => setOpt({ ...opt, issue_date: e.target.value })} />
-        </label>
-        <label className="kn-field">
-          <span>Giai đoạn</span>
-          <select value={opt.stage} onChange={(e) => setOpt({ ...opt, stage: e.target.value })}>
-            <option value="">(tự suy)</option>
-            {options.stages.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-        <label className="kn-field">
-          <span>Đơn vị ban hành</span>
-          <input value={opt.issuer} onChange={(e) => setOpt({ ...opt, issuer: e.target.value })} />
-        </label>
-      </div>
-      <label className="kn-field">
-        <span>Tiêu đề</span>
-        <input value={opt.title} onChange={(e) => setOpt({ ...opt, title: e.target.value })} />
-      </label>
-      <p className="small muted">Trường tùy chọn để trống → hệ thống tự suy từ trang bìa khi xử lý.</p>
+      <p className="small muted">
+        Revision, ngày ban hành, giai đoạn, tiêu đề, đơn vị ban hành: hệ thống tự suy từ tên file và trang bìa khi xử
+        lý (sửa được sau trong kho).
+      </p>
       <div className="kn-row">
         <span className="small muted">{missing.length > 0 && `Còn thiếu: ${missing.join(", ")}`}</span>
         <button className="kn-btn primary" disabled={busy || missing.length > 0} onClick={submit}>
