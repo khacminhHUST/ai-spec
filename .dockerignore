@@ -1,0 +1,18 @@
+# Ngữ cảnh build deploy/trithuc (Dockerfile.app, Dockerfile.web) – chỉ cần app/, config/, skills/, frontend/, requirements.txt
+.git
+.venv
+.env
+**/.env
+**/__pycache__
+.pytest_cache
+.cache
+.worktrees
+.claude
+artifacts
+data
+tests
+docs
+sandbox
+frontend/node_modules
+frontend/dist
+*.pdf

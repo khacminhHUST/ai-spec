@@ -5,6 +5,8 @@ import react from "@vitejs/plugin-react";
 const API = process.env.MEP_API_URL ?? "http://localhost:8000";
 
 export default defineConfig({
+  // Nhúng trong web Tri thức: VITE_BASE=/thongtinduan/ (xem src/deploy.ts, deploy/trithuc)
+  base: process.env.VITE_BASE || "/",
   plugins: [react()],
   server: {
     port: 5173,

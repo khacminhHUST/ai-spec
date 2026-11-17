@@ -1,0 +1,24 @@
+# Gateway server 2: nginx phục vụ frontend MEP (đã build) + chuyển /<prefix>/api/ vào backend.
+# Build (từ thư mục deploy/trithuc): docker compose build
+FROM node:22-alpine AS build
+WORKDIR /src
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+ARG VITE_BASE=/thongtinduan/
+ARG VITE_API_PREFIX=api
+ARG VITE_AUTH_TOKEN_KEY=
+ARG VITE_AUTH_USER_CLAIM=
+ENV VITE_BASE=$VITE_BASE \
+    VITE_API_PREFIX=$VITE_API_PREFIX \
+    VITE_AUTH_TOKEN_KEY=$VITE_AUTH_TOKEN_KEY \
+    VITE_AUTH_USER_CLAIM=$VITE_AUTH_USER_CLAIM
+RUN npm run build
+
+FROM nginx:1.27-alpine
+ARG VITE_BASE=/thongtinduan/
+# File tĩnh nằm đúng đường dẫn công khai: /usr/share/nginx/html/thongtinduan/…
+COPY --from=build /src/dist /usr/share/nginx/html${VITE_BASE}
+# nginx image tự thay ${PUBLIC_PREFIX}, ${ALLOW_FROM} khi khởi động (envsubst)
+COPY deploy/trithuc/gateway.conf.template /etc/nginx/templates/default.conf.template
+EXPOSE 8090

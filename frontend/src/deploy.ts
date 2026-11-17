@@ -1,0 +1,166 @@
+/**
+ * Chạy nhúng trong web Tri thức (deploy/trithuc): đường dẫn gốc, tiền tố API, đăng nhập dùng chung.
+ *
+ * Cấu hình lúc build (frontend/.env.production hoặc biến môi trường):
+ *   VITE_BASE            "/thongtinduan/"  – đường dẫn gốc của app (vite.config.ts › base)
+ *   VITE_API_PREFIX      "api"             – API nằm ở <base>api/… (gateway bỏ tiền tố trước khi vào backend)
+ *   VITE_AUTH_TOKEN_KEY  tên khóa token của web Tri thức trong sessionStorage/localStorage (STORAGE_KEY_TOKEN)
+ *   VITE_AUTH_USER_CLAIM trường email trong payload JWT (mặc định thử "email" rồi "sub")
+ * Không đặt gì (chạy local `npm run dev`) → không đổi hành vi: gọi thẳng /chat, /knowledge… như cũ.
+ *
+ * Gắn vào window.fetch một lần (installDeployAdapter) để mọi lời gọi API hiện có tự đi đúng đường và kèm token,
+ * không phải sửa từng component. Link tải file (thẻ <a>) không gửi được header nên được chặn và tải qua fetch.
+ */
+
+const BASE = import.meta.env.BASE_URL || "/";
+const API_PREFIX = String(import.meta.env.VITE_API_PREFIX ?? "").replace(/^\/+|\/+$/g, "");
+const TOKEN_KEY = String(import.meta.env.VITE_AUTH_TOKEN_KEY ?? "");
+const USER_CLAIM = String(import.meta.env.VITE_AUTH_USER_CLAIM ?? "");
+// Các nhóm route của backend (giống proxy trong vite.config.ts)
+const API_ROOTS = ["/chat", "/conversations", "/mcp", "/knowledge", "/projects"];
+
+/** Đăng nhập dùng chung với web Tri thức (user_id lấy từ token, không cho sửa tay). */
+export const authMode = TOKEN_KEY !== "";
+export const AUTH_EXPIRED_EVENT = "mep:auth-expired";
+
+const isApiPath = (p: string) => API_ROOTS.some((r) => p === r || p.startsWith(r + "/") || p.startsWith(r + "?"));
+
+/** "/knowledge/tree" → "/thongtinduan/api/knowledge/tree" (chạy local: giữ nguyên). */
+export function apiUrl(path: string): string {
+  if (!isApiPath(path)) return path;
+  return BASE.replace(/\/+$/, "") + (API_PREFIX ? `/${API_PREFIX}` : "") + path;
+}
+
+/** Token của web Tri thức: sessionStorage (không "ghi nhớ") trước, rồi localStorage. */
+export function readToken(): string | null {
+  if (!TOKEN_KEY) return null;
+  try {
+    const raw = sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
+    if (!raw) return null;
+    return raw.startsWith('"') ? (JSON.parse(raw) as string) : raw;
+  } catch {
+    return null;
+  }
+}
+
+function jwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const part = token.split(".")[1];
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** Email người dùng trong token (chỉ để hiển thị / gửi kèm; backend tự đọc lại từ token, không tin giá trị này). */
+export function tokenUser(): string | null {
+  const t = readToken();
+  const p = t ? jwtPayload(t) : null;
+  if (!p) return null;
+  for (const k of USER_CLAIM ? [USER_CLAIM] : ["email", "sub"]) {
+    const v = p[k];
+    if (typeof v === "string" && v) return v;
+  }
+  return null;
+}
+
+const USER_KEY = "mep.user_id"; // App.tsx đọc khóa này khi khởi động
+
+/** Ghi email trong token vào chỗ App.tsx đọc user_id (backend vẫn tự lấy lại từ token, không tin giá trị này). */
+function syncUser() {
+  const u = tokenUser();
+  try {
+    if (u) localStorage.setItem(USER_KEY, u);
+  } catch {
+    /* bỏ qua */
+  }
+  if (!u) showBanner("Chưa đăng nhập web Tri thức – đăng nhập rồi tải lại trang.");
+}
+
+function showBanner(text: string) {
+  let el = document.getElementById("mep-auth-banner");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "mep-auth-banner";
+    el.setAttribute("role", "alert");
+    el.style.cssText =
+      "position:fixed;top:0;left:0;right:0;z-index:9999;padding:10px 16px;font:14px system-ui,sans-serif;" +
+      "background:#fef2f2;color:#991b1b;border-bottom:1px solid #fecaca;text-align:center;cursor:pointer";
+    el.title = "Bấm để ẩn";
+    el.onclick = () => el?.remove();
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+}
+
+function notifyExpired() {
+  showBanner("Phiên đăng nhập web Tri thức đã hết hạn – đăng nhập lại rồi tải lại trang.");
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+  // Trang cha (web Tri thức) có thể làm mới token rồi app đọc lại ở request sau.
+  if (window.parent !== window) window.parent.postMessage({ type: AUTH_EXPIRED_EVENT }, window.location.origin);
+}
+
+/** Tải file qua fetch (kèm token) thay cho thẻ <a href> của API. */
+async function openApiLink(a: HTMLAnchorElement, href: string) {
+  const save = a.hasAttribute("download");
+  const win = save ? null : window.open("", "_blank"); // mở ngay trong cú click để không bị chặn popup
+  try {
+    const r = await fetch(href);
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    const url = URL.createObjectURL(await r.blob());
+    if (win) {
+      win.location.href = url;
+    } else {
+      const tmp = document.createElement("a");
+      tmp.href = url;
+      tmp.download = a.getAttribute("download") || href.split("/").pop()?.split("?")[0] || "file";
+      tmp.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    win?.close();
+    alert(`Không tải được file: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+let installed = false;
+
+export function installDeployAdapter() {
+  if (installed || (!API_PREFIX && BASE === "/" && !authMode)) return;
+  installed = true;
+  if (authMode) {
+    syncUser();
+    // Đổi tài khoản / đăng nhập lại ở trang cha → lần mở lại tab này dùng đúng user
+    window.addEventListener("focus", () => {
+      const u = tokenUser();
+      try {
+        if (u && localStorage.getItem(USER_KEY) !== u) window.location.reload();
+      } catch {
+        /* bỏ qua */
+      }
+    });
+  }
+  const orig = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof input !== "string" || !isApiPath(input)) return orig(input, init);
+    const headers = new Headers(init?.headers);
+    const token = readToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const r = await orig(apiUrl(input), { ...init, headers });
+    if (r.status === 401 && authMode) notifyExpired();
+    return r;
+  };
+  document.addEventListener(
+    "click",
+    (e) => {
+      const a = (e.target as Element | null)?.closest?.("a");
+      const href = a?.getAttribute("href");
+      if (!a || !href || !isApiPath(href) || e.defaultPrevented || e.button !== 0) return;
+      e.preventDefault();
+      void openApiLink(a, href);
+    },
+    true,
+  );
+}

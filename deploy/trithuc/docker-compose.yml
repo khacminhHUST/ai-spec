@@ -1,0 +1,91 @@
+# App MEP trên server 2, nhúng vào web Tri thức tại https://trithuc.hawee.com.vn${PUBLIC_PREFIX}/
+# Chạy trong thư mục này:  cp .env.example .env  (điền) →  docker compose up -d --build
+# Chỉ gateway mở cổng (8090); postgres, qdrant, api, worker chỉ nằm trong mạng Docker nội bộ.
+name: mep
+
+x-app: &app
+  image: mep-app:latest
+  env_file: .env
+  environment: &app-env
+    POSTGRES_URL: postgresql://mep:${POSTGRES_PASSWORD:?đặt POSTGRES_PASSWORD trong .env}@postgres:5432/mep
+    QDRANT_URL: http://qdrant:6333
+    MEP_NS: ${MEP_NS:-ingest}
+    MCP_PUBLIC_BASE_URL: ${PUBLIC_ORIGIN:?đặt PUBLIC_ORIGIN trong .env}${PUBLIC_PREFIX:-/thongtinduan}/api
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    qdrant: { condition: service_started }
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mep
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: mep
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mep -d mep"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    volumes: [qdrantdata:/qdrant/storage]
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    build:
+      context: ../..
+      dockerfile: deploy/trithuc/Dockerfile.app
+    environment:
+      <<: *app-env
+      MEP_AUTH_MODE: trusted_proxy                 # user_id lấy từ token web Tri thức (app/api/trusted_proxy.py)
+      MEP_AUTH_USER_CLAIM: ${AUTH_USER_CLAIM:-}
+    volumes:
+      # Agent tạo/dọn container sandbox qua Docker của máy chủ (sandbox chỉ dùng named volume, không bind thư mục)
+      - /var/run/docker.sock:/var/run/docker.sock
+      - appdata:/app/data
+      - artifacts:/app/artifacts
+      - models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 900s                           # lần đầu tải reranker (~1,2 GB) từ HuggingFace vào volume models
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.cli.worker"]
+    volumes:
+      - appdata:/app/data
+      - artifacts:/app/artifacts
+      - models:/models
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/trithuc/Dockerfile.web
+      args:
+        VITE_BASE: ${PUBLIC_PREFIX:-/thongtinduan}/
+        VITE_API_PREFIX: api
+        VITE_AUTH_TOKEN_KEY: ${AUTH_TOKEN_KEY:?đặt AUTH_TOKEN_KEY (STORAGE_KEY_TOKEN của web Tri thức) trong .env}
+        VITE_AUTH_USER_CLAIM: ${AUTH_USER_CLAIM:-}
+    image: mep-gateway:latest
+    environment:
+      PUBLIC_PREFIX: ${PUBLIC_PREFIX:-/thongtinduan}
+      ALLOW_FROM: ${ALLOW_FROM:-10.34.91.6}
+    ports: ["${GATEWAY_PORT:-8090}:8090"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  qdrantdata:
+  appdata:
+  artifacts:
+  models:
