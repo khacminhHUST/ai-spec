@@ -32,9 +32,13 @@ OPTIONAL_FIELDS = ("revision", "issue_date", "stage", "title", "issuer")
 
 # ---------------------------------------------------------------- quy tắc thuần (unit test không cần DB)
 
-def base_doc_code(project_id: str, building: str, stream: str, disciplines: list[str], doc_type: str) -> str:
-    """Như DocMeta.doc_code: project_building_stream_primaryDiscipline_doctype."""
-    return "_".join([project_id, building, stream, disciplines[0], doc_type])
+def base_doc_code(project_id: str, building: str | None, stream: str, disciplines: list[str] | None,
+                  doc_type: str | None) -> str:
+    """Đủ công trình + phân hệ + loại tài liệu → như DocMeta.doc_code (project_building_stream_discipline_doctype).
+    Upload gọn (chỉ dự án + luồng, phân loại để worker tự nhận) → project_stream; trùng thì next_doc_code thêm _2…"""
+    if building and disciplines and doc_type:
+        return "_".join([project_id, building, stream, disciplines[0], doc_type])
+    return f"{project_id}_{stream}"
 
 
 def next_doc_code(base: str, existing: set[str]) -> str:
@@ -57,25 +61,32 @@ def check_transition(status: str, action: str) -> str:
     return new
 
 
-def validate_metadata(md: dict[str, Any], doc_types: list[str] | None = None) -> dict[str, Any]:
-    """Kiểm tra form upload (không cần DB) → metadata đã chuẩn hóa."""
+def clean_classification(md: dict[str, Any], doc_types: list[str] | None = None) -> dict[str, Any]:
+    """doc_type / disciplines (tùy chọn) → chuẩn hóa; giá trị lạ → KnowledgeError. Thiếu → None / []."""
     doc_types = doc_types if doc_types is not None else list(load_yaml("headings").get("profiles") or {})
+    out: dict[str, Any] = {"doc_type": str(md.get("doc_type") or "").strip() or None}
+    if out["doc_type"] and out["doc_type"] not in doc_types:
+        raise KnowledgeError(f"loại tài liệu không hợp lệ: {out['doc_type']} (chọn: {', '.join(doc_types)})")
+    disc = list(dict.fromkeys(str(d).strip() for d in md.get("disciplines") or [] if str(d).strip()))
+    if bad := [d for d in disc if d not in Discipline.__members__]:
+        raise KnowledgeError(f"phân hệ không hợp lệ: {bad}")
+    out["disciplines"] = disc
+    return out
+
+
+def validate_metadata(md: dict[str, Any], doc_types: list[str] | None = None) -> dict[str, Any]:
+    """Kiểm tra form upload (không cần DB) → metadata đã chuẩn hóa.
+    Bắt buộc: dự án, luồng. Công trình, loại tài liệu, phân hệ tùy chọn (thiếu → worker tự nhận diện)."""
     out: dict[str, Any] = {}
-    for k in ("project_id", "building", "stream", "doc_type"):
+    for k in ("project_id", "stream"):
         v = str(md.get(k) or "").strip()
         if not v:
             raise KnowledgeError(f"thiếu trường bắt buộc: {k}")
         out[k] = v
     if out["stream"] not in Stream.__members__:
         raise KnowledgeError(f"luồng không hợp lệ: {out['stream']}")
-    if out["doc_type"] not in doc_types:
-        raise KnowledgeError(f"loại tài liệu không hợp lệ: {out['doc_type']} (chọn: {', '.join(doc_types)})")
-    disc = list(dict.fromkeys(str(d).strip() for d in md.get("disciplines") or [] if str(d).strip()))
-    if not disc:
-        raise KnowledgeError("cần chọn ít nhất 1 phân hệ")
-    if bad := [d for d in disc if d not in Discipline.__members__]:
-        raise KnowledgeError(f"phân hệ không hợp lệ: {bad}")
-    out["disciplines"] = disc
+    out["building"] = str(md.get("building") or "").strip() or None
+    out.update(clean_classification(md, doc_types))
     for k in OPTIONAL_FIELDS:
         v = md.get(k)
         out[k] = str(v).strip() if v not in (None, "") else None
@@ -125,11 +136,30 @@ def resolve_series(conn, md: dict[str, Any]) -> str:
     return next_doc_code(base, {r["c"] for r in rows})
 
 
+def inherit_series(conn, md: dict[str, Any]) -> None:
+    """Revision mới của bộ đã có: công trình / phân hệ / loại tài liệu còn trống → lấy theo bộ (không phải nhận diện
+    lại). Loại tài liệu chỉ có ở ingest_jobs (tài liệu nạp bằng CLI không có → để worker nhận diện)."""
+    if md["series"]["mode"] != "revision":
+        return
+    code = md["series"]["doc_code"]
+    d = conn.execute("SELECT building, disciplines FROM documents WHERE doc_code = %s ORDER BY is_latest DESC LIMIT 1",
+                     (code,)).fetchone()
+    if d:
+        md["building"] = md["building"] or d["building"]
+        md["disciplines"] = md["disciplines"] or list(d["disciplines"] or [])
+    if not md["doc_type"]:
+        j = conn.execute("SELECT doc_type FROM ingest_jobs WHERE series_doc_code = %s AND doc_type IS NOT NULL "
+                         "ORDER BY created_at DESC LIMIT 1", (code,)).fetchone()
+        md["doc_type"] = j["doc_type"] if j else None
+
+
 def create_job(conn, store: FileStore, *, file_name: str, src: Path, file_hash: str, size: int,
                metadata: dict[str, Any], user_id: str | None) -> dict[str, Any]:
     md = validate_metadata(metadata)
-    if not conn.execute("SELECT 1 FROM project_buildings WHERE project_id = %s AND building = %s",
-                        (md["project_id"], md["building"])).fetchone():
+    if not conn.execute("SELECT 1 FROM projects WHERE project_id = %s", (md["project_id"],)).fetchone():
+        raise KnowledgeError(f"không có dự án {md['project_id']}", 404)
+    if md["building"] and not conn.execute("SELECT 1 FROM project_buildings WHERE project_id = %s AND building = %s",
+                                           (md["project_id"], md["building"])).fetchone():
         raise KnowledgeError(f"không có công trình {md['building']} trong dự án {md['project_id']}", 404)
     if dup := find_duplicate(conn, file_hash):
         raise KnowledgeError(dup, 409)
@@ -137,6 +167,7 @@ def create_job(conn, store: FileStore, *, file_name: str, src: Path, file_hash: 
     job_id = "job_" + uuid.uuid4().hex[:12]
     with conn.transaction():
         code = resolve_series(conn, md)
+        inherit_series(conn, md)
         conn.execute(
             "INSERT INTO ingest_jobs (job_id, file_name, file_hash, storage_key, size, project_id, building, stream, "
             "disciplines, doc_type, revision, issue_date, stage, title, issuer, series_doc_code, status, uploaded_by) "
@@ -190,6 +221,38 @@ def transition(conn, job_id: str, action: str, user_id: str | None = None) -> di
         conn.execute(f"UPDATE ingest_jobs SET status = %(s)s, {sets}, updated_at = now() WHERE job_id = %(id)s",
                      {"s": new, "q": PUBLISH_QUEUED, "u": user_id, "id": job_id})
     if action in ("cancel", "retry") and row["artifact_dir"]:
+        remove_artifacts(Path(row["artifact_dir"]))
+    return get_job(conn, job_id)
+
+
+RECLASSIFY_FROM = frozenset({"DRAFT", "FAILED"})
+
+
+def reclassify(conn, job_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    """Bước duyệt: sửa loại tài liệu / phân hệ (/ luồng) mà worker nhận diện → xử lý lại (→ QUEUED, xóa nháp cũ).
+    Loại tài liệu quyết định cách đọc đề mục nên phải chạy lại; kết quả parse PDF có cache nên nhanh."""
+    upd: dict[str, Any] = {}
+    if "doc_type" in fields or "disciplines" in fields:
+        c = clean_classification(fields)
+        upd.update({k: c[k] for k in ("doc_type", "disciplines") if k in fields})
+    if "stream" in fields:
+        if fields["stream"] not in Stream.__members__:
+            raise KnowledgeError(f"luồng không hợp lệ: {fields['stream']}")
+        upd["stream"] = fields["stream"]
+    if not upd:
+        raise KnowledgeError("không có trường nào để sửa")
+    with conn.transaction():
+        row = conn.execute("SELECT status, artifact_dir FROM ingest_jobs WHERE job_id = %s FOR UPDATE",
+                           (job_id,)).fetchone()
+        if not row:
+            raise KnowledgeError(f"không có job {job_id}", 404)
+        if row["status"] not in RECLASSIFY_FROM:
+            raise KnowledgeError(f"chỉ sửa phân loại khi job ở trạng thái DRAFT/FAILED (hiện {row['status']})", 409)
+        sets = ", ".join(f"{k} = %({k})s" for k in upd)
+        conn.execute(f"UPDATE ingest_jobs SET {sets}, status = 'QUEUED', step = NULL, error = NULL, report = NULL, "
+                     "warnings = '{}', artifact_dir = NULL, updated_at = now() WHERE job_id = %(id)s",
+                     {**upd, "id": job_id})
+    if row["artifact_dir"]:
         remove_artifacts(Path(row["artifact_dir"]))
     return get_job(conn, job_id)
 

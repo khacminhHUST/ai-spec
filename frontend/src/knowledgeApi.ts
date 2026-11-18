@@ -25,6 +25,8 @@ export interface Project {
   owner_aliases: string[];
   source_priority: string[];
   governing_language: string;
+  start_date: string | null;
+  end_date: string | null;
   buildings: Building[];
 }
 
@@ -38,25 +40,32 @@ export interface RevisionBrief {
 export interface SeriesNode {
   doc_code: string;
   title: string | null;
+  building: string | null;
+  disciplines: string[];
   n_revisions: number;
   latest: RevisionBrief | null;
   unpublished: boolean;
+  issue_date: string | null;
+  updated_at: string;
 }
 
+/** Kho theo dự án (GET /knowledge/tree): dự án → luồng → bộ tài liệu. */
 export interface TreeProject {
   project_id: string;
   name: string;
-  buildings: {
-    building: string;
-    streams: { stream: string; disciplines: { discipline: string; series: SeriesNode[] }[] }[];
-  }[];
+  start_date: string | null;
+  end_date: string | null;
+  n_series: number;
+  n_documents: number;
+  active_jobs: number;
+  streams: { stream: string; series: SeriesNode[] }[];
 }
 
 export interface Revision {
   doc_id: string;
   doc_code: string;
   project_id: string;
-  building: string;
+  building: string | null;
   stream: string;
   disciplines: string[];
   title: string | null;
@@ -88,10 +97,10 @@ export interface Job {
   file_name: string;
   size: number;
   project_id: string;
-  building: string;
+  building: string | null;
   stream: string;
   disciplines: string[];
-  doc_type: string;
+  doc_type: string | null;
   revision: string | null;
   issue_date: string | null;
   stage?: string | null;
@@ -130,12 +139,13 @@ export interface SectionPreview {
   children: { child_id: string; type: string; topic: string | null; raw_text: string; page_start: number | null; page_end: number | null }[];
 }
 
+/** Upload gọn: chỉ dự án + luồng; loại tài liệu / phân hệ để trống → worker tự nhận diện (sửa ở bước duyệt). */
 export interface UploadMeta {
   project_id: string;
-  building: string;
   stream: string;
-  disciplines: string[];
-  doc_type: string;
+  building?: string;
+  disciplines?: string[];
+  doc_type?: string;
   revision?: string;
   issue_date?: string;
   stage?: string;
@@ -185,8 +195,10 @@ export const suggestFromName = (fileName: string) =>
 
 // ---- dự án
 export const listProjects = () => req<Project[]>("/projects");
-export const createProject = (p: Omit<Project, "buildings"> & { buildings?: Building[] }) =>
-  send<Project>("POST", "/projects", p);
+/** Chỉ bắt buộc `name`; mã dự án trống → server tự sinh từ tên. */
+export type ProjectInput = Partial<Omit<Project, "buildings">> & { name: string; buildings?: Building[] };
+export const createProject = (p: ProjectInput) => send<Project>("POST", "/projects", p);
+/** Gửi start_date / end_date = null để xóa ngày. */
 export const updateProject = (id: string, p: Partial<Omit<Project, "project_id" | "buildings">>) =>
   send<Project>("PATCH", `/projects/${enc(id)}`, p);
 export const addBuilding = (id: string, b: Building) => send<Project>("POST", `/projects/${enc(id)}/buildings`, b);
@@ -214,7 +226,7 @@ export interface DocumentPatch {
 }
 export interface SeriesPatch {
   project_id?: string;
-  building?: string;
+  building?: string | null;
   stream?: string;
   disciplines?: string[];
 }
@@ -225,7 +237,7 @@ export const updateSeries = (code: string, p: SeriesPatch) => send("PATCH", `/kn
 /** Mở form upload với thông tin điền sẵn (thêm tài liệu / revision mới từ kho). */
 export interface UploadPreset {
   project_id?: string;
-  building?: string;
+  stream?: string;
   doc_code?: string;
 }
 export const fileUrl = (docId: string) => `/knowledge/documents/${enc(docId)}/file`;
@@ -245,6 +257,9 @@ export const getSection = (id: string, lang: string, key: string) =>
   req<SectionPreview>(`/knowledge/jobs/${enc(id)}/sections/${enc(lang)}/${enc(key)}`);
 export const jobAction = (id: string, action: "publish" | "cancel" | "retry", userId: string) =>
   send<Job>("POST", `/knowledge/jobs/${enc(id)}/${action}`, { user_id: userId });
+/** Bước duyệt: sửa phân loại worker đã nhận diện → job xử lý lại (DRAFT/FAILED → QUEUED). */
+export const reclassifyJob = (id: string, p: { doc_type?: string; disciplines?: string[]; stream?: string }) =>
+  send<Job>("PATCH", `/knowledge/jobs/${enc(id)}`, p);
 
 export const STATUS_LABEL: Record<JobStatus, string> = {
   QUEUED: "Chờ xử lý",
@@ -255,6 +270,24 @@ export const STATUS_LABEL: Record<JobStatus, string> = {
   FAILED: "Lỗi",
   CANCELLED: "Đã hủy",
 };
+
+/** Tên luồng dễ hiểu (giá trị gốc giữ trong API). */
+export const STREAM_LABEL: Record<string, string> = {
+  CONTRACT: "Hợp đồng & phụ lục",
+  DESIGN_CONSULTANT: "Hồ sơ tư vấn thiết kế",
+  OPERATOR_STANDARD: "Tiêu chuẩn đơn vị vận hành",
+  LEGAL_STANDARD: "Tiêu chuẩn nhà nước (TCVN/QCVN)",
+};
+export const streamLabel = (s: string) => STREAM_LABEL[s] ?? s;
+
+/** Trạng thái dự án theo ngày (giống trang Quản lý dự án Hawee). */
+export function projectStatus(start: string | null, end: string | null): { label: string; tone: "ok" | "warn" | "muted" | "info" } {
+  const today = new Date().toISOString().slice(0, 10);
+  if (end && end < today) return { label: "Đã kết thúc", tone: "muted" };
+  if (start && start > today) return { label: "Sắp bắt đầu", tone: "info" };
+  if (end) return { label: "Đang thực hiện", tone: "ok" };
+  return { label: "Chưa có hạn", tone: "warn" };
+}
 
 export const fmtDate = (s: string | null | undefined) => (s ? new Date(s).toLocaleDateString("vi-VN") : "–");
 export const fmtTime = (s: string | null | undefined) => (s ? new Date(s).toLocaleString("vi-VN") : "–");

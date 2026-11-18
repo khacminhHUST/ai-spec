@@ -6,6 +6,27 @@ Mục tiêu: người dùng tự **upload, kiểm tra, phát hành và quản l�
 Dự án → Công trình → Luồng (stream) → Phân hệ (discipline) → Bộ tài liệu (doc_code) → Các revision theo thời gian
 ```
 
+> **Cập nhật 2026-11-18 – kho gọn theo dự án** (người dùng duyệt; ghi đè các mục bên dưới khi mâu thuẫn):
+> - Giao diện quản lý **theo dự án**: `Dự án → Luồng → Bộ tài liệu → revision`. Công trình và phân hệ không còn là tầng
+>   của cây (vẫn lưu trong dữ liệu).
+> - **Tạo dự án chỉ cần tên.** Mã dự án tự sinh từ tên (bỏ dấu, viết hoa, trùng → `-2`), có thể nhập tay ở phần nâng
+>   cao. Thêm `start_date`, `end_date` (dự kiến) – tùy chọn, sửa sau được. Công trình không bắt buộc; ưu tiên nguồn
+>   không khai → mặc định như `config/projects.yaml`.
+> - **Upload chỉ cần File + Dự án + Luồng.** Công trình, loại tài liệu, phân hệ tùy chọn. Thiếu loại tài liệu / phân
+>   hệ → worker **tự nhận diện** (bước `classify`, `app/services/knowledge/classify.py`: tên file + 3 trang đầu → LLM
+>   `chunking_llm`; lỗi → dự phòng: loại theo luồng, phân hệ `GENERAL`), ghi vào job, rồi mới chạy ingestion với
+>   metadata ghi đè (ingestion không đổi). Kết quả hiện ở trang duyệt kèm nguồn (AI / dự phòng); sửa được →
+>   `PATCH /knowledge/jobs/{id}` → xử lý lại (DRAFT/FAILED → QUEUED; parse PDF có cache).
+> - **Mã bộ khi upload gọn**: `<project>_<stream>` (+ `_2`, `_3`…). Gửi đủ công trình + phân hệ + loại tài liệu → mã như
+>   cũ. "Revision mới của bộ X" là tùy chọn (mặc định tài liệu mới); khi chọn, công trình / phân hệ / loại tài liệu còn
+>   trống lấy theo bộ X.
+> - **Sửa / chuyển dự án ngay trong kho**: `PATCH /knowledge/series/{doc_code}` đổi dự án / luồng / phân hệ cho cả bộ
+>   (Postgres + payload Qdrant). Chuyển sang dự án không có công trình cũ → công trình để trống.
+> - Migration `005_knowledge_simple.sql`: `projects.start_date/end_date`; `ingest_jobs.building/doc_type` bỏ NOT NULL.
+>   Bảng `documents` và payload Qdrant giữ nguyên.
+> - `GET /knowledge/tree` trả `[{project_id, name, start_date, end_date, n_series, n_documents, active_jobs,
+>   streams: [{stream, series: [...]}]}]`.
+
 Nguyên tắc:
 - **Chưa có đăng nhập và phân quyền.** `user_id` vẫn do client gửi. Mọi user như nhau, ai cũng upload, phát hành, xóa được. `user_id` chỉ được ghi lại để truy vết (`uploaded_by`, `published_by`). Sau này SSO sẽ thay.
 - **Không đổi** schema `documents`, `parent_chunks`, payload Qdrant (hợp đồng dữ liệu trong `docs/ingestion.md`).

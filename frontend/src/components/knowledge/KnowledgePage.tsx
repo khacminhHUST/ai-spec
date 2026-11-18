@@ -1,19 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
-import { getOptions, listProjects, type KnowledgeOptions, type Project, type UploadPreset } from "../../knowledgeApi";
+import {
+  getOptions,
+  getTree,
+  listProjects,
+  type KnowledgeOptions,
+  type Project,
+  type TreeProject,
+  type UploadPreset,
+} from "../../knowledgeApi";
 import JobQueue from "./JobQueue";
 import JobReview from "./JobReview";
-import ProjectsView from "./ProjectsView";
-import RepoView from "./RepoView";
+import ProjectDetail from "./ProjectDetail";
+import ProjectsBoard from "./ProjectsBoard";
 import UploadForm from "./UploadForm";
 import "./knowledge.css";
 
-type View = "repo" | "upload" | "queue" | "projects";
+type View = "projects" | "upload" | "queue";
 
 const TABS: { id: View; label: string }[] = [
-  { id: "repo", label: "Kho tài liệu" },
-  { id: "upload", label: "Upload" },
-  { id: "queue", label: "Hàng chờ xử lý" },
   { id: "projects", label: "Dự án" },
+  { id: "upload", label: "Tải lên" },
+  { id: "queue", label: "Hàng chờ xử lý" },
 ];
 
 interface Props {
@@ -21,31 +28,39 @@ interface Props {
   onClose: () => void;
 }
 
-/** Tab "Kho tri thức": điều hướng bằng state (không router). */
+/** Tab "Kho tri thức" (docs/knowledge-admin.md mục 7): tài liệu quản lý theo dự án – lưới dự án → chi tiết dự án
+ *  (tài liệu theo luồng, sửa / chuyển dự án); tải lên gọn; hàng chờ xử lý + duyệt. Điều hướng bằng state. */
 export default function KnowledgePage({ userId }: Props) {
-  const [view, setView] = useState<View>("repo");
+  const [view, setView] = useState<View>("projects");
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [options, setOptions] = useState<KnowledgeOptions | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tree, setTree] = useState<TreeProject[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preset, setPreset] = useState<UploadPreset | null>(null);
 
   const onError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
-  const reloadProjects = useCallback(
-    () => listProjects().then(setProjects).catch(onError),
+  const reload = useCallback(
+    () =>
+      Promise.all([listProjects().then(setProjects), getTree().then(setTree)])
+        .catch(onError)
+        .finally(() => setLoading(false)),
     [onError],
   );
 
   useEffect(() => {
     getOptions().then(setOptions).catch(onError);
-    reloadProjects();
-  }, [onError, reloadProjects]);
+    void reload();
+  }, [onError, reload]);
 
   const go = (v: View) => {
     setError(null);
     setJobId(null);
     setPreset(null);
     setView(v);
+    if (v === "projects") void reload();
   };
   const openUpload = (p: UploadPreset) => {
     go("upload");
@@ -58,7 +73,14 @@ export default function KnowledgePage({ userId }: Props) {
         <span className="topbar-title">Kho tri thức</span>
         <nav className="kn-tabs">
           {TABS.map((t) => (
-            <button key={t.id} className={view === t.id && !jobId ? "active" : ""} onClick={() => go(t.id)}>
+            <button
+              key={t.id}
+              className={view === t.id && !jobId ? "active" : ""}
+              onClick={() => {
+                if (t.id === "projects") setProjectId(null);
+                go(t.id);
+              }}
+            >
               {t.label}
             </button>
           ))}
@@ -71,9 +93,39 @@ export default function KnowledgePage({ userId }: Props) {
       )}
       <div className="kn-body">
         {jobId ? (
-          <JobReview jobId={jobId} userId={userId} onBack={() => setJobId(null)} onError={onError} />
-        ) : view === "repo" ? (
-          <RepoView userId={userId} options={options} projects={projects} onAdd={openUpload} onError={onError} />
+          <JobReview
+            jobId={jobId}
+            userId={userId}
+            options={options}
+            projects={projects}
+            onBack={() => setJobId(null)}
+            onError={onError}
+          />
+        ) : view === "projects" ? (
+          projectId ? (
+            <ProjectDetail
+              project={projects.find((p) => p.project_id === projectId) ?? null}
+              node={tree.find((t) => t.project_id === projectId) ?? null}
+              userId={userId}
+              options={options}
+              projects={projects}
+              onBack={() => setProjectId(null)}
+              onUpload={openUpload}
+              onOpenQueue={() => go("queue")}
+              onChanged={() => void reload()}
+              onError={onError}
+            />
+          ) : (
+            <ProjectsBoard
+              tree={tree}
+              loading={loading}
+              onOpen={setProjectId}
+              onCreated={(p) => {
+                void reload().then(() => setProjectId(p.project_id));
+              }}
+              onError={onError}
+            />
+          )
         ) : view === "upload" ? (
           options && (
             <UploadForm
@@ -82,15 +134,13 @@ export default function KnowledgePage({ userId }: Props) {
               userId={userId}
               options={options}
               projects={projects}
-              onProjectsChanged={reloadProjects}
+              onProjectsChanged={reload}
               onUploaded={() => go("queue")}
               onError={onError}
             />
           )
-        ) : view === "queue" ? (
-          <JobQueue onOpen={setJobId} onError={onError} />
         ) : (
-          <ProjectsView projects={projects} streams={options?.streams ?? []} onChanged={reloadProjects} onError={onError} />
+          <JobQueue projects={projects} onOpen={setJobId} onError={onError} />
         )}
       </div>
     </main>

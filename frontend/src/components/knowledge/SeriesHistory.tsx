@@ -1,3 +1,4 @@
+import Icon from "../Icon";
 import { useCallback, useEffect, useState } from "react";
 import {
   deleteRevision,
@@ -7,6 +8,7 @@ import {
   fmtTime,
   getSeries,
   setLatest,
+  streamLabel,
   unpublishSeries,
   updateDocument,
   updateSeries,
@@ -25,6 +27,8 @@ interface Props {
   onAddRevision: (preset: UploadPreset) => void;
   onChanged: () => void;
   onDeleted: () => void;
+  onMoved?: () => void;
+  onClose?: () => void;
   onError: (e: unknown) => void;
 }
 
@@ -38,7 +42,6 @@ interface DocForm {
 
 interface SeriesForm {
   project_id: string;
-  building: string;
   stream: string;
   disciplines: string[];
 }
@@ -51,7 +54,8 @@ const toDocForm = (r: Revision): DocForm => ({
   issuer: r.issuer ?? "",
 });
 
-/** Lịch sử revision của 1 bộ: lọc; thêm revision; sửa metadata (từng revision / cả bộ); đặt hiệu lực, gỡ, xóa. */
+/** Lịch sử revision của 1 bộ: lọc; thêm revision; sửa metadata (từng revision / cả bộ: dự án, luồng, phân hệ –
+ *  đổi dự án = chuyển tài liệu sang dự án khác); đặt hiệu lực, gỡ, xóa. */
 export default function SeriesHistory({
   docCode,
   userId,
@@ -60,6 +64,8 @@ export default function SeriesHistory({
   onAddRevision,
   onChanged,
   onDeleted,
+  onMoved,
+  onClose,
   onError,
 }: Props) {
   const [data, setData] = useState<History | null>(null);
@@ -127,20 +133,25 @@ export default function SeriesHistory({
     head &&
     setSeriesForm({
       project_id: head.project_id,
-      building: head.building,
       stream: head.stream,
       disciplines: [...head.disciplines],
     });
-  const seriesProject = projects.find((p) => p.project_id === seriesForm?.project_id);
   const saveSeries = async () => {
     if (!seriesForm || !head) return;
     const patch: Record<string, unknown> = {};
-    if (seriesForm.project_id !== head.project_id) patch.project_id = seriesForm.project_id;
-    if (seriesForm.building !== head.building) patch.building = seriesForm.building;
+    const moving = seriesForm.project_id !== head.project_id;
+    if (moving) patch.project_id = seriesForm.project_id;
     if (seriesForm.stream !== head.stream) patch.stream = seriesForm.stream;
     if (seriesForm.disciplines.join() !== head.disciplines.join()) patch.disciplines = seriesForm.disciplines;
     if (Object.keys(patch).length === 0) return setSeriesForm(null);
-    if (await act(() => updateSeries(docCode, patch))) setSeriesForm(null);
+    if (moving) {
+      const to = projects.find((p) => p.project_id === seriesForm.project_id)?.name ?? seriesForm.project_id;
+      if (!window.confirm(`Chuyển ${data.n_revisions} revision của tài liệu này sang dự án "${to}"?`)) return;
+    }
+    if (await act(() => updateSeries(docCode, patch))) {
+      setSeriesForm(null);
+      if (moving) onMoved?.();
+    }
   };
   const toggleDisc = (d: string) =>
     seriesForm &&
@@ -168,10 +179,10 @@ export default function SeriesHistory({
   return (
     <div className="kn-card">
       <div className="kn-row">
-        <div>
-          <div className="kn-code">{docCode}</div>
+        <div className="kp-series-head">
+          <strong className="kp-series-title">{head?.title || docCode}</strong>
           <div className="small muted">
-            {head && `${head.project_id} / ${head.building} · ${head.stream} · ${head.disciplines.join(", ")} · `}
+            {head && `${streamLabel(head.stream)} · ${head.disciplines.join(", ") || "chưa có phân hệ"} · `}
             {data.n_revisions} revision{" "}
             {data.unpublished && <span className="kn-tag warn">Đã gỡ khỏi tìm kiếm – đặt bản hiệu lực để khôi phục</span>}
           </div>
@@ -180,12 +191,12 @@ export default function SeriesHistory({
           <button
             className="kn-btn small primary"
             disabled={busy || !head}
-            onClick={() => head && onAddRevision({ project_id: head.project_id, building: head.building, doc_code: docCode })}
+            onClick={() => head && onAddRevision({ project_id: head.project_id, stream: head.stream, doc_code: docCode })}
           >
             + Thêm revision
           </button>
           <button className="kn-btn small" disabled={busy || !head} onClick={startEditSeries}>
-            Sửa thông tin bộ
+            Sửa / chuyển dự án
           </button>
           {!data.unpublished && (
             <button
@@ -199,34 +210,25 @@ export default function SeriesHistory({
           <button className="kn-btn small danger" disabled={busy} onClick={removeSeries}>
             Xóa cả bộ
           </button>
+          {onClose && (
+            <button className="icon-btn" onClick={onClose} aria-label="Đóng">
+              <Icon name="x" />
+            </button>
+          )}
         </div>
       </div>
 
       {seriesForm && (
         <div className="kn-card kn-inline kn-form">
-          <strong>Sửa thông tin bộ (áp cho cả {data.n_revisions} revision)</strong>
+          <strong>Sửa thông tin tài liệu (áp cho cả {data.n_revisions} revision)</strong>
           <div className="kn-grid">
             <label className="kn-field">
-              <span>Dự án</span>
-              <select
-                value={seriesForm.project_id}
-                onChange={(e) => {
-                  const p = projects.find((x) => x.project_id === e.target.value);
-                  setSeriesForm({ ...seriesForm, project_id: e.target.value, building: p?.buildings[0]?.building ?? "" });
-                }}
-              >
+              <span>Dự án (đổi = chuyển tài liệu sang dự án khác)</span>
+              <select value={seriesForm.project_id} onChange={(e) => setSeriesForm({ ...seriesForm, project_id: e.target.value })}>
                 {projects.map((p) => (
                   <option key={p.project_id} value={p.project_id}>
-                    {p.project_id} – {p.name}
+                    {p.name}
                   </option>
-                ))}
-              </select>
-            </label>
-            <label className="kn-field">
-              <span>Công trình</span>
-              <select value={seriesForm.building} onChange={(e) => setSeriesForm({ ...seriesForm, building: e.target.value })}>
-                {(seriesProject?.buildings ?? []).map((b) => (
-                  <option key={b.building}>{b.building}</option>
                 ))}
               </select>
             </label>
@@ -235,7 +237,7 @@ export default function SeriesHistory({
               <select value={seriesForm.stream} onChange={(e) => setSeriesForm({ ...seriesForm, stream: e.target.value })}>
                 {(options?.streams ?? []).map((s) => (
                   <option key={s.value} value={s.value} title={s.label}>
-                    {s.value}
+                    {streamLabel(s.value)}
                   </option>
                 ))}
               </select>
@@ -259,7 +261,7 @@ export default function SeriesHistory({
               </button>
               <button
                 className="kn-btn small primary"
-                disabled={busy || !seriesForm.building || seriesForm.disciplines.length === 0}
+                disabled={busy || seriesForm.disciplines.length === 0}
                 onClick={saveSeries}
               >
                 Lưu

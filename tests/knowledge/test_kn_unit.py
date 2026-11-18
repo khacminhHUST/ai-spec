@@ -38,10 +38,65 @@ def test_doc_code_revision_moi_dung_ma_cua_bo():
 def test_validate_metadata():
     md = validate_metadata(SPEC_META, doc_types=["SPEC"])
     assert md["issue_date"] == date(2026, 10, 20) and md["stage"] is None and md["disciplines"] == ["ELECTRICAL"]
-    for bad in ({"stream": "X"}, {"disciplines": []}, {"disciplines": ["NOPE"]}, {"doc_type": "MEMO"},
-                {"issue_date": "20/10/2026"}, {"building": ""}):
+    for bad in ({"stream": "X"}, {"stream": ""}, {"project_id": ""}, {"disciplines": ["NOPE"]}, {"doc_type": "MEMO"},
+                {"issue_date": "20/10/2026"}):
         with pytest.raises(KnowledgeError):
             validate_metadata({**SPEC_META, **bad}, doc_types=["SPEC"])
+
+
+def test_upload_gon_chi_can_du_an_va_luong():
+    """Form mới: công trình / loại tài liệu / phân hệ để trống → worker nhận diện; mã bộ = dựán_luồng[_n]."""
+    md = validate_metadata({"project_id": "26DA06", "stream": "DESIGN_CONSULTANT"}, doc_types=["SPEC"])
+    assert (md["building"], md["doc_type"], md["disciplines"]) == (None, None, [])
+    assert md["series"] == {"mode": "new", "doc_code": None}
+    base = base_doc_code("26DA06", None, "DESIGN_CONSULTANT", [], None)
+    assert base == "26DA06_DESIGN_CONSULTANT" and next_doc_code(base, {base}) == base + "_2"
+    # đủ thông tin (CLI / form cũ) → mã như cũ
+    assert base_doc_code("26DA06", "S5", "DESIGN_CONSULTANT", ["ELECTRICAL"], "SPEC") == BASE_CODE
+
+
+def test_ma_du_an_tu_sinh_tu_ten():
+    from app.services.knowledge.projects import slug_id
+
+    assert slug_id("Quảng Trường Biển (88ha)", set()) == "QUANG-TRUONG-BIEN-88HA"
+    assert slug_id("Đại An", {"DAI-AN"}) == "DAI-AN-2"
+    assert slug_id("Đại An", {"dai-an", "DAI-AN-2"}) == "DAI-AN-3"
+    assert slug_id("!!!", set()) == "DA"
+    assert len(slug_id("x" * 80, set())) <= 40
+
+
+def test_nhan_dien_loai_tai_lieu_va_phan_he():
+    """LLM trả JSON hợp lệ → dùng; lạ / lỗi → dự phòng (loại theo luồng, phân hệ GENERAL – luôn tìm thấy được)."""
+    from types import SimpleNamespace
+
+    from app.services.knowledge.classify import classify, parse_answer
+
+    got = parse_answer('```json\n{"doc_type": "spec", "disciplines": ["ELECTRICAL", "elv", "XYZ"]}\n```',
+                       "DESIGN_CONSULTANT")
+    assert got == {"doc_type": "SPEC", "disciplines": ["ELECTRICAL", "ELV"], "source": "llm"}
+    assert parse_answer("không biết", "OPERATOR_STANDARD") == {
+        "doc_type": "BRAND_STANDARD", "disciplines": ["GENERAL"], "source": "fallback"}
+    assert parse_answer('{"doc_type": "MEMO", "disciplines": ["HVAC"]}', "LEGAL_STANDARD")["doc_type"] == \
+        "LEGAL_STANDARD"
+
+    blocks = [SimpleNamespace(page=1, kind="text", text="CHỈ DẪN KỸ THUẬT PCCC", rows=None),
+              SimpleNamespace(page=9, kind="text", text="trang sau – bỏ", rows=None)]
+
+    class LLM:
+        def __init__(self, reply):
+            self.reply, self.seen = reply, None
+
+        def invoke(self, msgs):
+            self.seen = msgs[-1].content
+            if isinstance(self.reply, Exception):
+                raise self.reply
+            return SimpleNamespace(content=self.reply)
+
+    ok = LLM([{"type": "text", "text": '{"doc_type": "TECH_INSTRUCTION", "disciplines": ["FIRE"]}'}])
+    assert classify(blocks, "S5_CHI DAN.pdf", "DESIGN_CONSULTANT", ok)["doc_type"] == "TECH_INSTRUCTION"
+    assert "PCCC" in ok.seen and "trang sau" not in ok.seen
+    assert classify(blocks, "x.pdf", "CONTRACT", LLM(RuntimeError("402")))["source"] == "fallback"
+    assert classify([], "x.pdf", "CONTRACT", ok)["doc_type"] == "CONTRACT"      # PDF không có chữ → dự phòng
 
 
 # ---------------------------------------------------------------- 2. ghi đè metadata

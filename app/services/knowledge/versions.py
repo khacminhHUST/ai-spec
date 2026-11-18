@@ -20,54 +20,55 @@ DOC_FIELDS = ("doc_id, doc_code, project_id, building, stream, disciplines, titl
 
 # ---------------------------------------------------------------- cây kho
 
+STREAM_ORDER = ("CONTRACT", "DESIGN_CONSULTANT", "OPERATOR_STANDARD", "LEGAL_STANDARD")
+
+
 def tree(conn, project_id: str | None = None) -> list[dict[str, Any]]:
-    """Dự án → công trình → luồng → phân hệ (chính) → bộ tài liệu {doc_code, title, n_revisions, latest}."""
+    """Kho theo dự án: [{project_id, name, start_date, end_date, n_series, n_documents, active_jobs,
+    streams: [{stream, series: [{doc_code, title, building, disciplines, n_revisions, latest, unpublished,
+    issue_date, updated_at}]}]}]. Luồng theo STREAM_ORDER; bộ mới cập nhật trước."""
     projects = db_projects(conn, [project_id] if project_id else None)
     args: tuple = (project_id,) if project_id else ()
-    docs = conn.execute(f"SELECT {DOC_FIELDS} FROM documents {'WHERE project_id = %s' if project_id else ''} "
+    where = "WHERE project_id = %s" if project_id else ""
+    docs = conn.execute(f"SELECT {DOC_FIELDS} FROM documents {where} "
                         "ORDER BY doc_code, issue_date NULLS FIRST, ingested_at", args).fetchall()
+    jobs = {r["project_id"]: r["n"] for r in conn.execute(
+        f"SELECT project_id, count(*) AS n FROM ingest_jobs {where} {'AND' if where else 'WHERE'} "
+        "status IN ('QUEUED','PROCESSING','DRAFT','PUBLISHING','FAILED') GROUP BY project_id", args)}
     series: dict[str, list[dict]] = {}
     for d in docs:
         series.setdefault(d["doc_code"] or f"(không mã) {d['doc_id']}", []).append(d)
-    nodes: dict[tuple, dict] = {}
-    out = []
+    out: dict[str, dict] = {}
     for p in projects:
-        pn = {"project_id": p["project_id"], "name": p["name"], "buildings": []}
-        out.append(pn)
-        for b in p["buildings"]:
-            bn = {"building": b["building"], "streams": []}
-            pn["buildings"].append(bn)
-            nodes[(p["project_id"], b["building"])] = bn
+        out[p["project_id"]] = {"project_id": p["project_id"], "name": p["name"], "start_date": p.get("start_date"),
+                                "end_date": p.get("end_date"), "streams": {}}
     for code, revs in series.items():
-        first = revs[-1]
-        bn = nodes.get((first["project_id"], first["building"]))
-        if bn is None:  # công trình không còn trong DB (VD tài liệu cũ) → vẫn hiện
-            pn = next((x for x in out if x["project_id"] == first["project_id"]), None)
-            if pn is None:
-                if project_id:
-                    continue
-                pn = {"project_id": first["project_id"], "name": first["project_id"], "buildings": []}
-                out.append(pn)
-            bn = {"building": first["building"], "streams": []}
-            pn["buildings"].append(bn)
-            nodes[(first["project_id"], first["building"])] = bn
+        head = next((r for r in revs if r["is_latest"]), None) or max(revs, key=_version_key)
+        pn = out.get(head["project_id"])
+        if pn is None:  # dự án không còn trong DB (VD tài liệu CLI cũ) → vẫn hiện
+            if project_id:
+                continue
+            pn = out[head["project_id"]] = {"project_id": head["project_id"], "name": head["project_id"],
+                                            "start_date": None, "end_date": None, "streams": {}}
         latest = next((r for r in revs if r["is_latest"]), None)
-        newest = max(revs, key=_version_key)
-        sn = _child(bn["streams"], "stream", first["stream"] or "?", "disciplines")
-        dn = _child(sn["disciplines"], "discipline", (first["disciplines"] or ["?"])[0], "series")
-        dn["series"].append({
-            "doc_code": code, "title": (latest or newest)["title"], "n_revisions": len(revs),
+        pn["streams"].setdefault(head["stream"] or "?", []).append({
+            "doc_code": code, "title": head["title"], "building": head["building"],
+            "disciplines": list(head["disciplines"] or []), "n_revisions": len(revs),
             "latest": _brief(latest) if latest else None, "unpublished": latest is None,
+            "issue_date": head["issue_date"], "updated_at": max(r["ingested_at"] for r in revs),
         })
-    return out
-
-
-def _child(items: list[dict], key: str, value: str, sub: str) -> dict:
-    node = next((x for x in items if x[key] == value), None)
-    if node is None:
-        node = {key: value, sub: []}
-        items.append(node)
-    return node
+    result = []
+    for pn in out.values():
+        streams = pn.pop("streams")
+        for items in streams.values():
+            items.sort(key=lambda x: x["updated_at"], reverse=True)
+        order = [s for s in STREAM_ORDER if s in streams] + sorted(set(streams) - set(STREAM_ORDER))
+        pn["streams"] = [{"stream": s, "series": streams[s]} for s in order]
+        pn["n_series"] = sum(len(v) for v in streams.values())
+        pn["n_documents"] = sum(x["n_revisions"] for v in streams.values() for x in v)
+        pn["active_jobs"] = jobs.get(pn["project_id"], 0)
+        result.append(pn)
+    return result
 
 
 def _brief(d: dict) -> dict:
@@ -219,6 +220,7 @@ def update_document(conn, s: Settings, doc_id: str, fields: dict[str, Any]) -> d
 
 def update_series(conn, s: Settings, doc_code: str, fields: dict[str, Any]) -> dict[str, Any]:
     """Sửa thông tin chung của bộ cho mọi revision: dự án, công trình, luồng, phân hệ (Postgres + payload Qdrant).
+    Chuyển sang dự án khác: công trình cũ không thuộc dự án mới → để trống (công trình không bắt buộc).
     doc_code giữ nguyên (khóa của bộ – revision mới vẫn nối đúng bộ)."""
     from app.models.document import Discipline, Stream
 
@@ -238,11 +240,15 @@ def update_series(conn, s: Settings, doc_code: str, fields: dict[str, Any]) -> d
         cur = conn.execute("SELECT project_id, building FROM documents WHERE doc_code = %s LIMIT 1",
                            (doc_code,)).fetchone()
         pid, bld = upd.get("project_id", cur["project_id"]), upd.get("building", cur["building"])
-        if "project_id" in upd or "building" in upd:
-            ok = conn.execute("SELECT 1 FROM project_buildings WHERE project_id = %s AND building = %s",
-                              (pid, bld)).fetchone()
-            if not ok:
-                raise KnowledgeError(f"dự án {pid} không có công trình {bld}", 400)
+        if "project_id" in upd and not conn.execute("SELECT 1 FROM projects WHERE project_id = %s",
+                                                    (pid,)).fetchone():
+            raise KnowledgeError(f"không có dự án {pid}", 400)
+        has_b = bld and conn.execute("SELECT 1 FROM project_buildings WHERE project_id = %s AND building = %s",
+                                     (pid, bld)).fetchone()
+        if "building" in upd and bld and not has_b:
+            raise KnowledgeError(f"dự án {pid} không có công trình {bld}", 400)
+        if "project_id" in upd and "building" not in upd and bld and not has_b:
+            upd["building"] = None
         conn.execute(f"UPDATE documents SET {', '.join(f'{k} = %s' for k in upd)} WHERE doc_code = %s",
                      (*upd.values(), doc_code))
     ids = [r["doc_id"] for r in rows]

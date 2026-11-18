@@ -172,6 +172,18 @@ def get_job(job_id: str, conn=Depends(get_conn)):
     return job
 
 
+class JobPatch(BaseModel):
+    """Bước duyệt: sửa phân loại worker đã nhận diện (chỉ gửi trường cần sửa) → job xử lý lại."""
+    doc_type: str | None = None
+    disciplines: list[str] | None = None
+    stream: str | None = None
+
+
+@router.patch("/jobs/{job_id}")
+def reclassify_job(job_id: str, body: JobPatch, conn=Depends(get_conn)):
+    return call(jobs.reclassify, conn, job_id, body.model_dump(exclude_none=True))
+
+
 def _artifact_dir(conn, job_id: str) -> Path:
     job = call(jobs.get_job, conn, job_id)
     if not job["artifact_dir"] or not Path(job["artifact_dir"]).is_dir():

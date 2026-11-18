@@ -70,13 +70,33 @@ def job_overrides(conn, job: dict[str, Any]) -> dict[str, Any]:
             "revision": job["revision"], "issue_date": job["issue_date"], "stage": job["stage"]}
 
 
+def classify_job(conn, job: dict[str, Any], path: Path, llm=None) -> dict[str, Any] | None:
+    """Upload gọn để trống loại tài liệu / phân hệ → nhận diện (classify.py), ghi vào job (sửa được ở bước duyệt).
+    Parse PDF ở đây được cache theo file_hash → ingestion dùng lại, không parse 2 lần. Đã đủ → None."""
+    if job["doc_type"] and job["disciplines"]:
+        return None
+    from app.services.ingestion.parse import parse_pdf
+    from app.services.knowledge.classify import classify
+
+    _update(conn, job["job_id"], step="classify")
+    parsed = parse_pdf(path, job["file_hash"])
+    got = classify(parsed.blocks, job["file_name"], job["stream"], llm)
+    upd = {"doc_type": job["doc_type"] or got["doc_type"], "disciplines": list(job["disciplines"] or got["disciplines"])}
+    _update(conn, job["job_id"], **upd)
+    job.update(upd)
+    return {**got, **upd}
+
+
 def process_job(s: Settings, conn, job: dict[str, Any], store: FileStore, llm=None,
                 out_root: Path | None = None) -> None:
     from app.services.ingestion.pipeline import process
 
     path = store.local_path(job["storage_key"])
+    cls = classify_job(conn, job, path, llm)
     res = process(path, settings=s, llm=llm, overrides=job_overrides(conn, job),
                   on_step=lambda step: _update(conn, job["job_id"], step=step))
+    if cls:
+        res.report["classification"] = cls
     art = save_draft(res, (out_root or artifacts_dir()) / job["job_id"])
     _update(conn, job["job_id"], status="DRAFT", step=None, artifact_dir=str(art),
             report=Jsonb(res.report, dumps=_dumps), warnings=list(res.report["warnings"]))

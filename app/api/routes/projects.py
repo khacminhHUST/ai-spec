@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Callable, Iterator
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -44,12 +45,15 @@ class BuildingPatch(BaseModel):
 
 
 class ProjectIn(BaseModel):
-    project_id: str
+    """Chỉ bắt buộc `name`; project_id trống → tự sinh từ tên."""
+    project_id: str | None = None
     name: str
     aliases: list[str] = []
     owner_aliases: list[str] = []
     source_priority: list[str] = []
     governing_language: str = "vi"
+    start_date: date | None = None
+    end_date: date | None = None
     buildings: list[BuildingIn] = []
 
 
@@ -59,6 +63,8 @@ class ProjectPatch(BaseModel):
     owner_aliases: list[str] | None = None
     source_priority: list[str] | None = None
     governing_language: str | None = None
+    start_date: date | None = None      # gửi null → xóa ngày
+    end_date: date | None = None
 
 
 @router.get("")
@@ -75,7 +81,7 @@ def create_project(body: ProjectIn, conn=Depends(get_conn), deps: Deps = Depends
 
 @router.patch("/{project_id}")
 def update_project(project_id: str, body: ProjectPatch, conn=Depends(get_conn), deps: Deps = Depends(get_deps)):
-    out = call(svc.update_project, conn, project_id, body.model_dump(exclude_none=True))
+    out = call(svc.update_project, conn, project_id, body.model_dump(exclude_unset=True))
     clear_profiles(deps)
     return out
 

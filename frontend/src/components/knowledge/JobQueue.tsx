@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { ACTIVE_STATUSES, fmtTime, listJobs, STATUS_LABEL, type Job, type JobStatus } from "../../knowledgeApi";
+import {
+  ACTIVE_STATUSES,
+  fmtTime,
+  listJobs,
+  STATUS_LABEL,
+  type Job,
+  type JobStatus,
+  type Project,
+} from "../../knowledgeApi";
 
 interface Props {
+  projects: Project[];
   onOpen: (jobId: string) => void;
   onError: (e: unknown) => void;
 }
@@ -9,9 +18,10 @@ interface Props {
 const POLL_MS = 3000;
 
 /** Hàng chờ xử lý: trạng thái + bước hiện tại; tự làm mới khi có job đang chạy. */
-export default function JobQueue({ onOpen, onError }: Props) {
+export default function JobQueue({ projects, onOpen, onError }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [status, setStatus] = useState("");
+  const projectName = (id: string) => projects.find((p) => p.project_id === id)?.name ?? id;
 
   const load = useCallback(() => {
     listJobs(status || undefined)
@@ -50,7 +60,7 @@ export default function JobQueue({ onOpen, onError }: Props) {
         <thead>
           <tr>
             <th>File</th>
-            <th>Dự án / CT</th>
+            <th>Dự án</th>
             <th>Bộ tài liệu</th>
             <th>Trạng thái</th>
             <th>Người upload</th>
@@ -68,8 +78,8 @@ export default function JobQueue({ onOpen, onError }: Props) {
           {jobs.map((j) => (
             <tr key={j.job_id} className="kn-click" onClick={() => onOpen(j.job_id)}>
               <td data-label="File" className="stack-title" title={j.job_id}>{j.file_name}</td>
-              <td data-label="Dự án / CT">
-                {j.project_id} / {j.building}
+              <td data-label="Dự án">
+                {projectName(j.project_id)}
               </td>
               <td data-label="Bộ tài liệu" className="small kn-break">
                 {j.series_doc_code} {j.revision && `· Rev ${j.revision}`}

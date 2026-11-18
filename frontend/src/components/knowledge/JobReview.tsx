@@ -10,8 +10,12 @@ import {
   getSection,
   getSections,
   jobAction,
+  reclassifyJob,
   STATUS_LABEL,
+  streamLabel,
   type Job,
+  type KnowledgeOptions,
+  type Project,
   type SectionPreview,
   type SectionRow,
 } from "../../knowledgeApi";
@@ -19,19 +23,28 @@ import {
 interface Props {
   jobId: string;
   userId: string;
+  options: KnowledgeOptions | null;
+  projects: Project[];
   onBack: () => void;
   onError: (e: unknown) => void;
 }
 
+const CLS_SOURCE: Record<string, string> = {
+  llm: "AI nhận diện",
+  llm_partial: "AI nhận diện một phần",
+  fallback: "mặc định theo luồng – nên kiểm tra",
+};
+
 const POLL_MS = 3000;
 
 /** Trang duyệt job (mục 2.3): metadata, thống kê report, cảnh báo, cây mục + xem trước, Phát hành / Hủy / Chạy lại. */
-export default function JobReview({ jobId, userId, onBack, onError }: Props) {
+export default function JobReview({ jobId, userId, options, projects, onBack, onError }: Props) {
   const [job, setJob] = useState<Job | null>(null);
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [lang, setLang] = useState("vi");
   const [preview, setPreview] = useState<SectionPreview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cls, setCls] = useState<{ stream: string; doc_type: string; disciplines: string[] } | null>(null);
 
   const load = useCallback(() => {
     getJob(jobId)
@@ -71,6 +84,33 @@ export default function JobReview({ jobId, userId, onBack, onError }: Props) {
     }
   };
 
+  const saveCls = async () => {
+    if (!cls || !job) return;
+    const patch: { stream?: string; doc_type?: string; disciplines?: string[] } = {};
+    if (cls.stream !== job.stream) patch.stream = cls.stream;
+    if (cls.doc_type !== job.doc_type) patch.doc_type = cls.doc_type;
+    if (cls.disciplines.join() !== job.disciplines.join()) patch.disciplines = cls.disciplines;
+    if (Object.keys(patch).length === 0) return setCls(null);
+    setBusy(true);
+    try {
+      setJob(await reclassifyJob(jobId, patch));
+      setCls(null);
+      setSections([]);
+      setPreview(null);
+      load();
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggleDisc = (d: string) =>
+    cls &&
+    setCls({
+      ...cls,
+      disciplines: cls.disciplines.includes(d) ? cls.disciplines.filter((x) => x !== d) : [...cls.disciplines, d],
+    });
+
   const open = (s: SectionRow) => getSection(jobId, s.lang, s.section_key).then(setPreview).catch(onError);
 
   if (!job) return <div className="muted pad">Đang tải…</div>;
@@ -84,7 +124,7 @@ export default function JobReview({ jobId, userId, onBack, onError }: Props) {
     <div className="kn-review">
       <div className="kn-row">
         <button className="kn-link" onClick={onBack}>
-          <Icon name="arrowLeft" size={16} /> Quay lại
+          <Icon name="arrow-left" size={16} /> Quay lại
         </button>
         <span>
           <span className={`kn-status ${job.status.toLowerCase()}`}>{STATUS_LABEL[job.status]}</span>
@@ -113,13 +153,28 @@ export default function JobReview({ jobId, userId, onBack, onError }: Props) {
       <div className="kn-card">
         <h3>{job.file_name}</h3>
         <dl className="kn-meta">
-          <dt>Dự án / công trình</dt>
+          <dt>Dự án</dt>
+          <dd>{projects.find((p) => p.project_id === job.project_id)?.name ?? job.project_id}</dd>
+          <dt>Luồng</dt>
+          <dd>{streamLabel(job.stream)}</dd>
+          <dt>Loại tài liệu · phân hệ</dt>
           <dd>
-            {job.project_id} / {job.building}
-          </dd>
-          <dt>Luồng · phân hệ · loại</dt>
-          <dd>
-            {job.stream} · {job.disciplines.join(", ")} · {job.doc_type}
+            {job.doc_type ?? (running ? "đang nhận diện…" : "?")} · {job.disciplines.join(", ") || (running ? "…" : "?")}
+            {rep?.classification?.source && (
+              <span className={`kn-tag ${rep.classification.source === "llm" ? "ok" : "warn"}`}>
+                {CLS_SOURCE[rep.classification.source] ?? rep.classification.source}
+              </span>
+            )}
+            {["DRAFT", "FAILED"].includes(job.status) && !cls && (
+              <button
+                className="kn-link small"
+                onClick={() =>
+                  setCls({ stream: job.stream, doc_type: job.doc_type ?? "", disciplines: [...job.disciplines] })
+                }
+              >
+                Sửa phân loại
+              </button>
+            )}
           </dd>
           <dt>Bộ tài liệu (doc_code)</dt>
           <dd className="kn-code">{job.series_doc_code}</dd>
@@ -150,6 +205,58 @@ export default function JobReview({ jobId, userId, onBack, onError }: Props) {
             </>
           )}
         </dl>
+        {cls && (
+          <div className="kn-card kn-inline kn-form">
+            <strong>Sửa phân loại → xử lý lại</strong>
+            <div className="kn-grid">
+              <label className="kn-field">
+                <span>Luồng</span>
+                <select value={cls.stream} onChange={(e) => setCls({ ...cls, stream: e.target.value })}>
+                  {(options?.streams ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {streamLabel(o.value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="kn-field">
+                <span>Loại tài liệu (quyết định cách đọc đề mục)</span>
+                <select value={cls.doc_type} onChange={(e) => setCls({ ...cls, doc_type: e.target.value })}>
+                  {(options?.doc_types ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="kn-field">
+              <span>Phân hệ (đầu tiên là phân hệ chính; GENERAL = chung)</span>
+              <div className="kn-checks">
+                {(options?.disciplines ?? []).map((d) => (
+                  <label key={d}>
+                    <input type="checkbox" checked={cls.disciplines.includes(d)} onChange={() => toggleDisc(d)} /> {d}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="kn-row">
+              <span className="small muted">Lưu sẽ xử lý lại file (bản nháp hiện tại bị thay).</span>
+              <span className="kn-actions">
+                <button className="kn-btn small" disabled={busy} onClick={() => setCls(null)}>
+                  Hủy
+                </button>
+                <button
+                  className="kn-btn small primary"
+                  disabled={busy || !cls.doc_type || cls.disciplines.length === 0}
+                  onClick={saveCls}
+                >
+                  Lưu & xử lý lại
+                </button>
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {rep && (

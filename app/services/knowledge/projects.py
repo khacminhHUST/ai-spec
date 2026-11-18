@@ -1,18 +1,60 @@
-"""Dự án / công trình (bảng projects, project_buildings). Mỗi lần sửa → sinh lại project_aliases của dự án."""
+"""Dự án / công trình (bảng projects, project_buildings). Mỗi lần sửa → sinh lại project_aliases của dự án.
+
+Tạo dự án chỉ cần tên: mã dự án tự sinh từ tên (slug_id), ngày bắt đầu / kết thúc dự kiến tùy chọn, công trình không
+bắt buộc (docs/knowledge-admin.md mục 1).
+"""
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Any
 
 from app.db.migrate import project_alias_rows, replace_aliases
 from app.models.document import Stream
 from app.repositories.postgres import db_projects
 from app.services.knowledge.errors import KnowledgeError
+from app.utils.keys import strip_accents
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,39}$")   # project_id / building: dùng trong doc_code (nối '_')
 PROJECT_FIELDS = ("name", "aliases", "owner_aliases", "source_priority", "governing_language")
+DATE_FIELDS = ("start_date", "end_date")
+# Thứ tự ưu tiên nguồn mặc định khi tạo dự án không khai (giống config/projects.yaml)
+DEFAULT_PRIORITY = ["CONTRACT", "DESIGN_CONSULTANT", "OPERATOR_STANDARD", "LEGAL_STANDARD"]
 
 
+def slug_id(name: str, taken: set[str]) -> str:
+    """Mã dự án từ tên: bỏ dấu, viết hoa, ký tự khác chữ/số → '-'; trùng → thêm -2, -3…
+    'Quảng Trường Biển (88ha)' → 'QUANG-TRUONG-BIEN-88HA'."""
+    base = re.sub(r"[^A-Z0-9]+", "-", strip_accents(name).upper()).strip("-")[:36].strip("-") or "DA"
+    taken_up = {t.upper() for t in taken}
+    code, n = base, 2
+    while code.upper() in taken_up:
+        code, n = f"{base}-{n}", n + 1
+    return code
+
+
+def _dates(fields: dict[str, Any]) -> dict[str, date | None]:
+    """start_date / end_date có trong fields (None = xóa) → date; kết thúc trước bắt đầu → lỗi."""
+    out: dict[str, date | None] = {}
+    for k in DATE_FIELDS:
+        if k not in fields:
+            continue
+        v = fields[k]
+        if v in (None, ""):
+            out[k] = None
+        elif isinstance(v, date):
+            out[k] = v
+        else:
+            try:
+                out[k] = date.fromisoformat(str(v))
+            except ValueError:
+                raise KnowledgeError(f"ngày không hợp lệ: {v} (YYYY-MM-DD)") from None
+    return out
+
+
+def _check_range(start: date | None, end: date | None) -> None:
+    if start and end and end < start:
+        raise KnowledgeError("ngày kết thúc dự kiến phải sau ngày bắt đầu")
 
 
 def _clean_list(v: Any) -> list[str]:
@@ -64,16 +106,23 @@ def list_projects(conn) -> list[dict[str, Any]]:
 
 
 def create_project(conn, data: dict[str, Any]) -> dict[str, Any]:
-    pid = _check_id(data.get("project_id", ""), "mã dự án")
+    """Chỉ bắt buộc `name`. Không gửi mã dự án → tự sinh từ tên; không gửi ưu tiên nguồn → DEFAULT_PRIORITY."""
     f = _validate({"name": data.get("name") or "", **{k: data.get(k) for k in PROJECT_FIELDS if k != "name"}})
+    d = _dates(data)
+    _check_range(d.get("start_date"), d.get("end_date"))
     with conn.transaction():
-        if conn.execute("SELECT 1 FROM projects WHERE project_id = %s", (pid,)).fetchone():
-            raise KnowledgeError(f"dự án {pid} đã có", 409)
+        if (data.get("project_id") or "").strip():
+            pid = _check_id(data["project_id"], "mã dự án")
+            if conn.execute("SELECT 1 FROM projects WHERE project_id = %s", (pid,)).fetchone():
+                raise KnowledgeError(f"dự án {pid} đã có", 409)
+        else:
+            pid = slug_id(f["name"], {r["project_id"] for r in conn.execute("SELECT project_id FROM projects")})
         conn.execute(
-            "INSERT INTO projects (project_id, name, aliases, owner_aliases, source_priority, governing_language) "
-            "VALUES (%s,%s,%s,%s,%s,%s)",
-            (pid, f["name"], f.get("aliases", []), f.get("owner_aliases", []), f.get("source_priority", []),
-             f.get("governing_language", "vi")))
+            "INSERT INTO projects (project_id, name, aliases, owner_aliases, source_priority, governing_language, "
+            "start_date, end_date) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            (pid, f["name"], f.get("aliases", []), f.get("owner_aliases", []),
+             f.get("source_priority") or DEFAULT_PRIORITY, f.get("governing_language", "vi"),
+             d.get("start_date"), d.get("end_date")))
         for b in data.get("buildings") or []:
             _insert_building(conn, pid, b)
         regenerate_aliases(conn, pid)
@@ -81,9 +130,11 @@ def create_project(conn, data: dict[str, Any]) -> dict[str, Any]:
 
 
 def update_project(conn, project_id: str, data: dict[str, Any]) -> dict[str, Any]:
-    f = _validate(data)
+    """Sửa các trường có trong `data`; start_date / end_date = None → xóa ngày."""
+    f = {**_validate(data), **_dates(data)}
     with conn.transaction():
-        get_project(conn, project_id)
+        cur = get_project(conn, project_id)
+        _check_range(f.get("start_date", cur.get("start_date")), f.get("end_date", cur.get("end_date")))
         if f:
             sets = ", ".join(f"{k} = %({k})s" for k in f)
             conn.execute(f"UPDATE projects SET {sets}, updated_at = now() WHERE project_id = %(pid)s",

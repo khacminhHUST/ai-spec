@@ -165,7 +165,7 @@ def test_upload_nhap_phat_hanh_revision(env, tmp_path):
     assert qdrant_latest(s, doc_a) == qdrant_latest(s, doc_b) == {False}
     assert not pg_latest(s, doc_a) and not pg_latest(s, doc_b)
     tree = client.get("/knowledge/tree", params={"project_id": PROJECT}).json()
-    ser = tree[0]["buildings"][0]["streams"][0]["disciplines"][0]["series"][0]
+    ser = tree[0]["streams"][0]["series"][0]
     assert ser["unpublished"] and ser["n_revisions"] == 2
     assert load_profiles(deps, [PROJECT])[PROJECT]["docs"] == {}
 
@@ -223,3 +223,66 @@ def test_du_an_alias_moi_dung_ngay(env):
     assert {p["project_id"] for p in client.get("/projects").json()} == {PROJECT, "27DA01"}
     bad = upload(client, SPEC_PDF, project_id="27DA01", building="S5")
     assert bad.status_code == 404
+
+
+def test_upload_gon_tu_nhan_dien_sua_va_chuyen_du_an(env, monkeypatch):
+    """Kho gọn (2026-11-18): dự án chỉ cần tên (+ ngày tùy chọn); upload chỉ dự án + luồng → worker tự nhận diện
+    loại tài liệu / phân hệ → sửa ở bước duyệt (xử lý lại) → phát hành → kho theo dự án → chuyển sang dự án khác."""
+    s, client, _, store = env
+    seen: list[str] = []
+
+    def fake_classify(blocks, file_name, stream, llm=None):
+        seen.append(file_name)
+        return {"doc_type": "SPEC", "disciplines": ["ELECTRICAL"], "source": "llm"}
+
+    monkeypatch.setattr("app.services.knowledge.classify.classify", fake_classify)
+
+    # ---- dự án chỉ có tên + ngày
+    r = client.post("/projects", json={"name": "Dự án Gọn", "start_date": "2026-01-01", "end_date": "2026-12-31"})
+    assert r.status_code == 201, r.text
+    p = r.json()
+    assert (p["project_id"], p["start_date"], p["end_date"]) == ("DU-AN-GON", "2026-01-01", "2026-12-31")
+    assert p["source_priority"] and p["buildings"] == []
+    assert client.post("/projects", json={"name": "Dự án Gọn"}).json()["project_id"] == "DU-AN-GON-2"
+    assert client.patch("/projects/DU-AN-GON", json={"end_date": None}).json()["end_date"] is None
+    assert client.patch("/projects/DU-AN-GON", json={"start_date": "2026-05-01", "end_date": "2026-04-01"}
+                        ).status_code == 400
+
+    # ---- upload chỉ dự án + luồng
+    with open(SPEC_PDF, "rb") as f:
+        r = client.post("/knowledge/uploads", files={"file": (SPEC_PDF.name, f, "application/pdf")},
+                        data={"metadata": json.dumps({"project_id": PROJECT, "stream": "DESIGN_CONSULTANT"}),
+                              "user_id": "kysu_a"})
+    assert r.status_code == 201, r.text
+    job = r.json()
+    assert (job["doc_type"], job["disciplines"], job["series_doc_code"]) == (None, [], f"{PROJECT}_DESIGN_CONSULTANT")
+    run_worker(s, store)
+    j = client.get(f"/knowledge/jobs/{job['job_id']}").json()
+    assert j["status"] == "DRAFT", j["error"]
+    assert (j["doc_type"], j["disciplines"]) == ("SPEC", ["ELECTRICAL"]) and seen == [SPEC_PDF.name]
+    assert j["report"]["classification"]["source"] == "llm"
+
+    # ---- bước duyệt: sửa phân hệ → xử lý lại (không nhận diện lại vì đã đủ)
+    r = client.patch(f"/knowledge/jobs/{job['job_id']}", json={"disciplines": ["ELECTRICAL", "ELV"]})
+    assert r.json()["status"] == "QUEUED"
+    assert client.patch(f"/knowledge/jobs/{job['job_id']}", json={"doc_type": "MEMO"}).status_code == 400
+    run_worker(s, store)
+    j = client.get(f"/knowledge/jobs/{job['job_id']}").json()
+    assert j["status"] == "DRAFT" and j["disciplines"] == ["ELECTRICAL", "ELV"] and len(seen) == 1
+    client.post(f"/knowledge/jobs/{job['job_id']}/publish", json={"user_id": "kysu_b"})
+    run_worker(s, store)
+    j = client.get(f"/knowledge/jobs/{job['job_id']}").json()
+    assert j["status"] == "PUBLISHED", j["error"]
+    assert client.patch(f"/knowledge/jobs/{job['job_id']}", json={"disciplines": ["HVAC"]}).status_code == 409
+
+    # ---- kho theo dự án → chuyển sang dự án khác (Postgres + payload Qdrant)
+    code = j["series_doc_code"]
+    tree = {t["project_id"]: t for t in client.get("/knowledge/tree").json()}
+    assert tree[PROJECT]["streams"][0]["series"][0]["doc_code"] == code and tree["DU-AN-GON"]["n_series"] == 0
+    assert client.patch(f"/knowledge/series/{code}", json={"project_id": "DU-AN-GON"}).status_code == 200
+    tree = {t["project_id"]: t for t in client.get("/knowledge/tree").json()}
+    assert tree["DU-AN-GON"]["n_series"] == 1 and tree[PROJECT]["n_series"] == 0
+    flt = qm.Filter(must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=j["doc_id"]))])
+    pts, _ = qdrant(s).scroll(s.collection("vi"), scroll_filter=flt, limit=500, with_payload=["project_id", "building"])
+    assert pts and {(p.payload["project_id"], p.payload["building"]) for p in pts} == {("DU-AN-GON", None)}
+    assert client.patch(f"/knowledge/series/{code}", json={"project_id": "KHONG-CO"}).status_code == 400

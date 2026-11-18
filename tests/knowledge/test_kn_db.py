@@ -12,6 +12,7 @@ from app.db.client import pg_connect, qdrant
 from app.models.document import ChildChunk, Document, ParentChunk
 from app.repositories.index_store import save_document
 from app.services.knowledge import projects, versions
+from app.services.knowledge.projects import DEFAULT_PRIORITY
 from app.services.knowledge.errors import KnowledgeError
 from app.services.knowledge.worker import INTERRUPTED, claim_next, recover_interrupted
 from app.utils.keys import make_child_id, make_parent_id
@@ -69,7 +70,7 @@ def test_sua_alias_sinh_lai_project_aliases(conn, kn_ns):
         assert repo.user_projects("bat_ky") == ["26DA06", "27DA01"]
         assert PgRepo(kn_ns, pool, mode="config").user_projects("test_engineer") == ["26DA06"]
         info = repo.project_info(["27DA01"])["27DA01"]
-        assert info == {"name": "Dự án Thử", "aliases": ["T1", "Khu Mới"], "source_priority": [],
+        assert info == {"name": "Dự án Thử", "aliases": ["T1", "Khu Mới"], "source_priority": DEFAULT_PRIORITY,
                         "governing_language": "vi"}
     finally:
         pool.close()
@@ -164,9 +165,10 @@ def test_dat_hieu_luc_go_xoa(conn, kn_ns):
 
     versions.unpublish(conn, s, CODE)                                # gỡ khỏi tìm kiếm
     assert all(v == (False, {False}) for v in latest_state(s, conn).values())
-    tree = versions.tree(conn, "26DA06")
-    ser = tree[0]["buildings"][0]["streams"][0]["disciplines"][0]["series"][0]
+    tree = versions.tree(conn, "26DA06")                             # kho theo dự án → luồng → bộ
+    ser = tree[0]["streams"][0]["series"][0]
     assert ser["doc_code"] == CODE and ser["unpublished"] and ser["n_revisions"] == 3
+    assert tree[0]["n_series"] == 1 and tree[0]["n_documents"] == 3
 
     versions.set_latest(conn, s, CODE, ids[2])                       # khôi phục
     versions.delete_revision(conn, s, ids[2])                        # xóa bản đang hiệu lực → B lên thay
