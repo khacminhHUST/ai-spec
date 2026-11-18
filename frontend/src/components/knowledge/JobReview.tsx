@@ -122,7 +122,7 @@ export default function JobReview({ jobId, userId, options, projects, onBack, on
 
   return (
     <div className="kn-review">
-      <div className="kn-row">
+      <div className="kn-row kq-actionbar">
         <button className="kn-link" onClick={onBack}>
           <Icon name="arrow-left" size={16} /> Quay lại
         </button>
@@ -133,7 +133,7 @@ export default function JobReview({ jobId, userId, options, projects, onBack, on
         <span className="kn-actions">
           {job.status === "DRAFT" && (
             <button className="kn-btn primary" disabled={busy} onClick={() => act("publish")}>
-              Phát hành
+              Duyệt & phát hành
             </button>
           )}
           {job.status === "FAILED" && (

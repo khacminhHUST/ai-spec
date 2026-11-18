@@ -1123,3 +1123,119 @@ input[type="radio"] {
     flex-wrap: wrap;
   }
 }
+
+/* ---------- hàng chờ: lọc nhanh, phát hành trên dòng / hàng loạt ---------- */
+.kq-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.kq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--fg-2);
+  font-size: 14px;
+  font-weight: 500;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.kq-chip:hover {
+  border-color: var(--accent);
+}
+
+.kq-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.kq-num {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.kq-chip.hot .kq-num {
+  background: var(--secondary);
+  color: #fff;
+}
+
+.kq-bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.kq-pick {
+  width: 36px;
+}
+
+.kq-pick input,
+.kq-bulk input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-solid);
+}
+
+.kq-actions {
+  white-space: nowrap;
+}
+
+.kq-tabnum {
+  margin-left: 6px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--secondary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  display: inline-block;
+  text-align: center;
+}
+
+/* Trang duyệt: thanh nút luôn hiện khi cuộn */
+.kq-actionbar {
+  position: sticky;
+  top: -20px;
+  z-index: 5;
+  margin: -20px -24px 0;
+  padding: 12px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .kq-actionbar {
+    top: -14px;
+    margin: -14px -12px 0;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+  }
+
+  .kq-pick {
+    width: auto;
+  }
+}

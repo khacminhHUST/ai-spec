@@ -55,6 +55,8 @@ export default function KnowledgePage({ userId }: Props) {
     void reload();
   }, [onError, reload]);
 
+  const pending = tree.reduce((n, p) => n + p.active_jobs, 0); // job chưa xong (chờ / đang xử lý / chờ duyệt / lỗi)
+
   const go = (v: View) => {
     setError(null);
     setJobId(null);
@@ -82,6 +84,7 @@ export default function KnowledgePage({ userId }: Props) {
               }}
             >
               {t.label}
+              {t.id === "queue" && pending > 0 && <span className="kq-tabnum">{pending}</span>}
             </button>
           ))}
         </nav>
@@ -98,7 +101,10 @@ export default function KnowledgePage({ userId }: Props) {
             userId={userId}
             options={options}
             projects={projects}
-            onBack={() => setJobId(null)}
+            onBack={() => {
+              setJobId(null);
+              void reload();
+            }}
             onError={onError}
           />
         ) : view === "projects" ? (
@@ -140,7 +146,7 @@ export default function KnowledgePage({ userId }: Props) {
             />
           )
         ) : (
-          <JobQueue projects={projects} onOpen={setJobId} onError={onError} />
+          <JobQueue userId={userId} projects={projects} onOpen={setJobId} onChanged={() => void reload()} onError={onError} />
         )}
       </div>
     </main>
