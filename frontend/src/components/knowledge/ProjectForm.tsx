@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { createProject, updateProject, type Project } from "../../knowledgeApi";
+import Modal from "./Modal";
 
 interface Props {
   project?: Project | null; // có → sửa; không → tạo mới
   onSaved: (p: Project) => void;
   onCancel: () => void;
-  onError: (e: unknown) => void;
+  onError?: (e: unknown) => void;
 }
 
 const split = (s: string) =>
@@ -14,19 +15,21 @@ const split = (s: string) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
-/** Tạo / sửa dự án: chỉ bắt buộc tên; ngày bắt đầu / kết thúc dự kiến tùy chọn (sửa sau được).
+/** Hộp thoại tạo / sửa dự án: chỉ bắt buộc tên; ngày bắt đầu / kết thúc dự kiến tùy chọn (sửa sau được).
  *  Nâng cao (thu gọn): mã dự án (trống → tự sinh từ tên), tên gọi khác để chat nhận ra dự án. */
-export default function ProjectForm({ project, onSaved, onCancel, onError }: Props) {
+export default function ProjectForm({ project, onSaved, onCancel }: Props) {
   const [name, setName] = useState(project?.name ?? "");
   const [start, setStart] = useState(project?.start_date ?? "");
   const [end, setEnd] = useState(project?.end_date ?? "");
   const [code, setCode] = useState("");
   const [aliases, setAliases] = useState((project?.aliases ?? []).join(", "));
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null); // lỗi hiện trong hộp thoại (banner trang bị nền mờ che)
 
   const badRange = !!start && !!end && end < start;
   const save = async () => {
     setBusy(true);
+    setErr(null);
     try {
       const dates = { start_date: start || null, end_date: end || null };
       const saved = project
@@ -39,21 +42,21 @@ export default function ProjectForm({ project, onSaved, onCancel, onError }: Pro
           });
       onSaved(saved);
     } catch (e) {
-      onError(e);
+      setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   };
 
   return (
+    <Modal title={project ? "Sửa dự án" : "Dự án mới"} onClose={onCancel}>
     <form
-      className="kn-card kn-form kp-form"
+      className="kn-form kp-form"
       onSubmit={(e) => {
         e.preventDefault();
         if (name.trim() && !badRange) void save();
       }}
     >
-      <h3>{project ? "Sửa dự án" : "Dự án mới"}</h3>
       <label className="kn-field">
         <span>Tên dự án *</span>
         <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="VD DA Song Việt P1.14" />
@@ -84,7 +87,12 @@ export default function ProjectForm({ project, onSaved, onCancel, onError }: Pro
           <input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Song Việt, P1.14" />
         </label>
       </details>
-      <div className="kn-row">
+      {err && (
+        <div className="kn-err small" role="alert">
+          {err}
+        </div>
+      )}
+      <div className="kn-row kp-modal-actions">
         <span className="small muted">Ngày để trống được, cập nhật sau.</span>
         <span className="kn-actions">
           <button type="button" className="kn-btn" disabled={busy} onClick={onCancel}>
@@ -96,5 +104,6 @@ export default function ProjectForm({ project, onSaved, onCancel, onError }: Pro
         </span>
       </div>
     </form>
+    </Modal>
   );
 }
