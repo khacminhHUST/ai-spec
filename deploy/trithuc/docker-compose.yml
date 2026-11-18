@@ -40,6 +40,8 @@ services:
     build:
       context: ../..
       dockerfile: deploy/trithuc/Dockerfile.app
+      args:
+        TORCH_INDEX: ${TORCH_INDEX-https://download.pytorch.org/whl/cpu}   # rỗng → torch từ PyPI
     environment:
       <<: *app-env
       MEP_AUTH_MODE: trusted_proxy                 # user_id lấy từ token web Tri thức (app/api/trusted_proxy.py)

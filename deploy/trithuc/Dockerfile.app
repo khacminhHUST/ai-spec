@@ -19,8 +19,11 @@ WORKDIR /app
 COPY requirements.txt .
 # torch bản CPU trước: requirements.txt ghim torch PyPI, trên Linux bản đó kéo theo CUDA (vài GB).
 # "==2.11.0" trong requirements khớp luôn "2.11.0+cpu" nên pip không cài lại.
-# Server có GPU NVIDIA: đổi index sang https://download.pytorch.org/whl/cu128.
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0 \
+# Server có GPU NVIDIA: TORCH_INDEX=https://download.pytorch.org/whl/cu128.
+# Server không ra được download.pytorch.org: TORCH_INDEX rỗng → torch lấy từ PyPI (bản kèm CUDA, image nặng hơn
+# vài GB, vẫn chạy CPU bình thường).
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
+RUN if [ -n "$TORCH_INDEX" ]; then pip install --index-url "$TORCH_INDEX" torch==2.11.0 torchvision==0.26.0; fi \
  && pip install -r requirements.txt
 
 COPY app ./app

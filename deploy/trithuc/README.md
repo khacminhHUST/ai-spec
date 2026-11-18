@@ -78,6 +78,18 @@ rồi `docker compose up -d gateway`.
 `MEP_SECRET_KEY`: sinh bằng
 `docker compose run --rm api python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
 
+### Server không tải được mô hình HuggingFace (vd `srv-ai-tools`: `huggingface.co` mở nhưng CDN `*.cdn.hf.co` chặn)
+Đóng gói trên máy có internet rồi nạp vào volume `mep_models` **trước** `docker compose up`:
+```bash
+# máy dev (cùng phiên bản thư viện với requirements.txt): HF_HOME=<pkg>/hf, tải tokenizer Qwen3-Embedding-8B,
+#   snapshot Qwen3-Reranker-0.6B, chạy converter Docling 1 PDF (tải layout + tableformer đúng revision);
+#   chép ~/.EasyOCR/model/*.pth vào <pkg>/easyocr → tar -cf mep-models.tar -C <pkg> hf easyocr   (~1,8 GB)
+# server: tải file lên ~/ (SFTP) rồi
+docker volume create --label com.docker.compose.project=mep --label com.docker.compose.volume=models mep_models
+docker run --rm -v mep_models:/models -v ~/mep-models.tar:/pkg.tar:ro --entrypoint tar nginx:1.28-alpine -xf /pkg.tar -C /models
+```
+và đặt `HF_HUB_OFFLINE=1` trong `.env` (không gọi CDN; thiếu file thì báo lỗi ngay thay vì treo).
+
 ### Chuyển dữ liệu từ máy hiện tại (thay cho ingest lại)
 ```bash
 # máy cũ
