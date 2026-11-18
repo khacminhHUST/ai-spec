@@ -4,6 +4,16 @@ App MEP chạy trên **server 2**, hiện ra ở `https://trithuc.hawee.com.vn/t
 `/#/thong-tin-du-an` của web Tri thức (iframe). Web Tri thức ở **server 1** (`10.34.91.6`) chỉ thêm cấu hình
 nginx và 1 iframe; không thêm container, không sửa backend Tri thức.
 
+**Thông số thực tế (18/11/2026)**
+| | Giá trị |
+|---|---|
+| Server 1 (web Tri thức, `nginx_proxy`) | `10.34.91.6` |
+| Server 2 (app MEP) | `10.34.91.10` – `srv-ai-tools`, Ubuntu 24.04, 16 GB RAM, **dùng chung** với các app khác (elec-qto, revit-mcp, catalogue, pdf_parse – chiếm cổng 80/443/441/442/555) |
+| Thư mục cài trên S2 | `~/mep` (user `ai-tool`) |
+| Repo | `https://github.com/khacminhHUST/ai-spec.git`, branch `main` (public) |
+| `AUTH_TOKEN_KEY` | `hawee_auth_token` (`frontend/services/userService.ts` của web Tri thức) |
+| Cổng gateway | `8090` |
+
 Phía repo này không sửa code lõi: backend chạy bằng điểm khởi chạy riêng `app.trithuc_main:app` (bọc `app.main`,
 thêm `/healthz` + middleware `app/api/trusted_proxy.py`); frontend chỉ thêm `src/deploy.ts` (gọi 1 dòng trong
 `main.tsx`) và `base` trong `vite.config.ts` – không đặt biến môi trường thì chạy local như cũ.
@@ -48,8 +58,8 @@ SERVER 2  docker compose "mep" (thư mục này)
 Build cần internet (Docker Hub, PyPI, npm); lần chạy đầu tải thêm mô hình HuggingFace/EasyOCR (~3 GB) vào volume `models`.
 
 ```bash
-sudo mkdir -p /opt/mep && sudo chown $USER /opt/mep
-git clone -b feat/deploy-trithuc <repo ai-spec> /opt/mep && cd /opt/mep
+cd ~
+git clone https://github.com/khacminhHUST/ai-spec.git mep && cd mep
 sh sandbox/build.sh                                   # image mep-sandbox:latest (agent xuất file)
 cd deploy/trithuc
 cp .env.example .env && nano .env                     # AUTH_TOKEN_KEY, POSTGRES_PASSWORD (chỉ chữ+số), GOOGLE_API_KEY, MEP_SECRET_KEY
@@ -83,8 +93,8 @@ docker compose cp mep_ingest.dump postgres:/tmp/ && \
 Tên collection theo `MEP_NS` (tiền tố) – kiểm bằng `GET /collections` trước khi chụp.
 
 ## 4. Nối server 1
-1. Lấy tên khóa token: `grep -n "STORAGE_KEY_TOKEN\s*=" -r /opt/ai_trithuc/ai_trithuc_frontend/services` → điền
-   `AUTH_TOKEN_KEY` (rồi `docker compose build gateway && docker compose up -d gateway`).
+1. Tên khóa token: `hawee_auth_token` (`frontend/services/userService.ts` của web Tri thức) – đã đặt sẵn trong
+   `.env.example`. Đổi thì sửa `AUTH_TOKEN_KEY` rồi `docker compose build gateway && docker compose up -d gateway`.
 2. Dán khối trong [`server1-nginx.conf`](server1-nginx.conf) vào `/home/ai-trithuc/hawee-deploy/nginx.conf`
    (file thật đang mount vào `nginx_proxy`; deploy của web Tri thức không ghi đè file này), làm theo các bước ở đầu file.
 3. Repo `ai_trithuc_frontend`, `pages/ThongTinDuAnThuNghiem.tsx` – thay khu vực placeholder:
@@ -107,7 +117,7 @@ Tên collection theo `MEP_NS` (tiền tố) – kiểm bằng `GET /collections`
 | Đăng xuất web Tri thức rồi thao tác trong iframe | Báo "phiên đã hết hạn" |
 
 ## 6. Vận hành
-- Cập nhật: `cd /opt/mep && git pull && cd deploy/trithuc && docker compose up -d --build` (server 1 không đổi).
+- Cập nhật: `cd ~/mep && git pull && cd deploy/trithuc && docker compose up -d --build` (server 1 không đổi).
 - Log: `docker compose logs -f api worker gateway`. Sandbox: `docker events --filter label=mep.sandbox`.
 - Sao lưu: volume `pgdata`, `qdrantdata`, `appdata` (file gốc upload).
 - Gỡ khỏi web Tri thức: chép lại `nginx.conf.bak-*` trên server 1 rồi `nginx -s reload`.
