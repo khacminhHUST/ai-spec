@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ConversationSummary } from "../types";
 import Icon from "./Icon";
-import type { ThemePref } from "../theme";
+import { followsHost, type ThemePref } from "../theme";
+import { authMode } from "../deploy";
 
 export type AppView = "chat" | "connectors" | "knowledge";
 
@@ -105,30 +106,45 @@ export default function Sidebar(p: Props) {
           ))}
         </nav>
 
-        <form
-          className="user-box"
-          onSubmit={(e) => {
-            e.preventDefault();
-            commit();
-          }}
-        >
-          <span className="avatar" aria-hidden>
-            {(userId[0] ?? "?").toUpperCase()}
-          </span>
-          <label className="user-field">
-            <span>User ID</span>
-            <input value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
-          </label>
-        </form>
+        {authMode ? (
+          // Nhúng trong web Tri thức: tài khoản lấy từ token đăng nhập, không sửa tay
+          <div className="user-box">
+            <span className="avatar" aria-hidden>
+              {(userId[0] ?? "?").toUpperCase()}
+            </span>
+            <div className="user-field">
+              <span>Tài khoản Tri thức</span>
+              <strong title={userId}>{userId}</strong>
+            </div>
+          </div>
+        ) : (
+          <form
+            className="user-box"
+            onSubmit={(e) => {
+              e.preventDefault();
+              commit();
+            }}
+          >
+            <span className="avatar" aria-hidden>
+              {(userId[0] ?? "?").toUpperCase()}
+            </span>
+            <label className="user-field">
+              <span>User ID</span>
+              <input value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
+            </label>
+          </form>
+        )}
 
-        <div className="theme-switch" role="group" aria-label="Giao diện">
-          {THEMES.map((t) => (
-            <button key={t.id} aria-pressed={theme === t.id} onClick={() => onTheme(t.id)} title={`Giao diện ${t.label}`}>
-              <Icon name={t.icon} size={14} />
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {!followsHost && (
+          <div className="theme-switch" role="group" aria-label="Giao diện">
+            {THEMES.map((t) => (
+              <button key={t.id} aria-pressed={theme === t.id} onClick={() => onTheme(t.id)} title={`Giao diện ${t.label}`}>
+                <Icon name={t.icon} size={14} />
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
       </aside>
     </>
   );

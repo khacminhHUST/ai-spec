@@ -6,7 +6,7 @@ import KnowledgePage from "./components/knowledge/KnowledgePage";
 import Icon from "./components/Icon";
 import Sidebar, { type AppView } from "./components/Sidebar";
 import ConnectorsView from "./components/connectors/ConnectorsView";
-import { isDarkNow, useTheme } from "./theme";
+import { followsHost, isDarkNow, useTheme } from "./theme";
 import type { ConversationSummary, Message } from "./types";
 
 const USER_KEY = "mep.user_id";
@@ -208,14 +208,16 @@ export default function App() {
             <Icon name="menu" />
           </button>
           <span className="mobilebar-title">{title}</span>
-          <button
-            className="icon-btn"
-            onClick={() => setTheme(isDarkNow(theme) ? "light" : "dark")}
-            aria-label={isDarkNow(theme) ? "Chuyển giao diện sáng" : "Chuyển giao diện tối"}
-            title={isDarkNow(theme) ? "Giao diện sáng" : "Giao diện tối"}
-          >
-            <Icon name={isDarkNow(theme) ? "sun" : "moon"} />
-          </button>
+          {!followsHost && (
+            <button
+              className="icon-btn"
+              onClick={() => setTheme(isDarkNow(theme) ? "light" : "dark")}
+              aria-label={isDarkNow(theme) ? "Chuyển giao diện sáng" : "Chuyển giao diện tối"}
+              title={isDarkNow(theme) ? "Giao diện sáng" : "Giao diện tối"}
+            >
+              <Icon name={isDarkNow(theme) ? "sun" : "moon"} />
+            </button>
+          )}
           {view === "chat" && (
             <button className="icon-btn" onClick={newConversation} aria-label="Hội thoại mới">
               <Icon name="plus" />

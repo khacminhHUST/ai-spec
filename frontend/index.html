@@ -3,19 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1d4ed8" />
+    <meta name="theme-color" content="#243F8F" />
     <script>
-      try {
-        var t = localStorage.getItem("mep.theme");
-        if (t !== "system") document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "light");
-      }
+      // Đặt theme trước khi vẽ (tránh nháy). Nhúng trong web Tri thức (iframe cùng origin) → theo class "dark" của trang cha.
+      (function () {
+        var root = document.documentElement;
+        try {
+          if (window.parent !== window) {
+            var host = window.parent.document.documentElement;
+            root.setAttribute("data-theme", host.classList.contains("dark") ? "dark" : "light");
+            return;
+          }
+        } catch (e) {
+          /* khác origin → như chạy độc lập */
+        }
+        try {
+          var t = localStorage.getItem("mep.theme");
+          if (t !== "system") root.setAttribute("data-theme", t === "dark" ? "dark" : "light");
+        } catch (e) {
+          root.setAttribute("data-theme", "light");
+        }
+      })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap&subset=vietnamese"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap&subset=vietnamese"
       rel="stylesheet"
     />
     <title>MEP Project Assistant</title>

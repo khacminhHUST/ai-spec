@@ -141,6 +141,12 @@ export function installDeployAdapter() {
         /* bỏ qua */
       }
     });
+    // Trang Tri thức đã làm mới token sau "mep:auth-expired" (FE/pages/ThongTinDuAnThuNghiem.tsx) → ẩn thông báo;
+    // request sau tự đọc token mới.
+    window.addEventListener("message", (e) => {
+      if (e.origin === window.location.origin && e.source === window.parent && e.data?.type === "mep:auth-refreshed")
+        document.getElementById("mep-auth-banner")?.remove();
+    });
   }
   const orig = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
