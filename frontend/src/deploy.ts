@@ -34,9 +34,13 @@ export function apiUrl(path: string): string {
 /** Token của web Tri thức: sessionStorage (không "ghi nhớ") trước, rồi localStorage. */
 export function readToken(): string | null {
   if (!TOKEN_KEY) return null;
+  // Như Tri thức (FE/services/authService.ts › khoPhien, coGiaTri): "Ghi nhớ" → localStorage, không → sessionStorage
+  // của tab; bỏ giá trị rác "undefined"/"null".
+  const ok = (v: string | null): v is string => !!v && v !== "undefined" && v !== "null";
   try {
-    const raw = sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
-    if (!raw) return null;
+    const s = sessionStorage.getItem(TOKEN_KEY);
+    const raw = ok(s) ? s : localStorage.getItem(TOKEN_KEY);
+    if (!ok(raw)) return null;
     return raw.startsWith('"') ? (JSON.parse(raw) as string) : raw;
   } catch {
     return null;
@@ -76,8 +80,14 @@ function syncUser() {
   } catch {
     /* bỏ qua */
   }
-  if (!u) showBanner("Chưa đăng nhập web Tri thức – đăng nhập rồi tải lại trang.");
+  if (!u) showBanner(NO_SESSION);
 }
+
+// Tab mới mở thẳng /thongtinduan/ không thấy phiên "không ghi nhớ" (sessionStorage chỉ thuộc tab đã đăng nhập)
+const NO_SESSION =
+  "Chưa thấy phiên đăng nhập Tri thức ở tab này – mở từ mục Thông tin dự án trên web Tri thức " +
+  "(hoặc đăng nhập có tick “Ghi nhớ”) rồi tải lại trang.";
+const EXPIRED = "Phiên đăng nhập web Tri thức đã hết hạn – đăng nhập lại rồi tải lại trang.";
 
 function showBanner(text: string) {
   let el = document.getElementById("mep-auth-banner");
@@ -96,7 +106,7 @@ function showBanner(text: string) {
 }
 
 function notifyExpired() {
-  showBanner("Phiên đăng nhập web Tri thức đã hết hạn – đăng nhập lại rồi tải lại trang.");
+  showBanner(readToken() ? EXPIRED : NO_SESSION);
   window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
   // Trang cha (web Tri thức) có thể làm mới token rồi app đọc lại ở request sau.
   if (window.parent !== window) window.parent.postMessage({ type: AUTH_EXPIRED_EVENT }, window.location.origin);
@@ -155,7 +165,14 @@ export function installDeployAdapter() {
     const token = readToken();
     if (token) headers.set("Authorization", `Bearer ${token}`);
     const r = await orig(apiUrl(input), { ...init, headers });
-    if (r.status === 401 && authMode) notifyExpired();
+    if (r.status === 401 && authMode) {
+      notifyExpired();
+      // nginx server 1 trả trang HTML 401 → thay bằng câu ngắn để giao diện không in nguyên HTML
+      return new Response(token ? "Phiên đăng nhập Tri thức đã hết hạn" : "Chưa đăng nhập web Tri thức", {
+        status: 401,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
     return r;
   };
   document.addEventListener(
