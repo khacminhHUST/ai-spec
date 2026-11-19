@@ -42,6 +42,9 @@ jobs:
           path: ~/.cache/huggingface
           key: hf-${{ hashFiles('requirements.txt') }}
       - name: Unit test
+        # conftest mặc định HF_HUB_OFFLINE=1 (máy dev có sẵn mô hình) – CI phải cho tải mô hình Docling lần đầu
+        env:
+          HF_HUB_OFFLINE: "0"
         # test_data_root_has_samples cần bộ tài liệu S5 trên máy dev (không có trong git)
         run: >-
           python -m pytest -m unit -q
