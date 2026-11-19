@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
             print(job_id)
         return 0
     try:
-        run_forever(s)
+        run_forever(s, hard_cancel=True)   # tiến trình riêng: hủy job đang chạy → thoát, Docker bật lại
     except KeyboardInterrupt:
         pass
     return 0

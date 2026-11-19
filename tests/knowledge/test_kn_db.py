@@ -131,6 +131,33 @@ def test_worker_tu_phat_hanh(conn, kn_ns, monkeypatch):
     assert conn.execute("SELECT status FROM ingest_jobs WHERE job_id = 'job_tay'").fetchone()["status"] == "DRAFT"
 
 
+def test_huy_job_dang_xu_ly(conn, kn_ns, monkeypatch, tmp_path):
+    """Hủy khi PROCESSING: API cho hủy; worker dừng ở bước kế tiếp, không ghi đè CANCELLED, không phát hành;
+    PUBLISHING đang ghi (step != queued) → 409."""
+    from app.services.knowledge import jobs, worker
+
+    def fake_process(path, settings, llm, overrides, on_step):
+        jobs.transition(conn, "job_h", "cancel")   # người dùng bấm Hủy giữa chừng
+        on_step("chunk_vi")
+        raise AssertionError("không được chạy tiếp sau khi hủy")
+
+    monkeypatch.setattr("app.services.ingestion.pipeline.process", fake_process)
+    monkeypatch.setattr(worker, "classify_job", lambda *a, **k: None)
+    monkeypatch.setattr(worker, "job_overrides", lambda *a, **k: {})
+    _job(conn, "job_h")
+    store = type("S", (), {"local_path": lambda self, k: tmp_path / "x.pdf"})()
+    assert worker.run_once(kn_ns, store, out_root=tmp_path, auto_publish=True) == "job_h"
+    r = conn.execute("SELECT status, step, error FROM ingest_jobs WHERE job_id = 'job_h'").fetchone()
+    assert (r["status"], r["step"], r["error"]) == ("CANCELLED", None, None)
+
+    _job(conn, "job_pq", status="PUBLISHING", step="queued")
+    assert jobs.transition(conn, "job_pq", "cancel")["status"] == "CANCELLED"
+    _job(conn, "job_pe", status="PUBLISHING", step="embed")
+    with pytest.raises(KnowledgeError) as e:
+        jobs.transition(conn, "job_pe", "cancel")
+    assert e.value.status == 409
+
+
 def test_mot_file_mot_job_hieu_luc(conn):
     _job(conn, "job_x", h="hash1")
     with pytest.raises(psycopg.errors.UniqueViolation):

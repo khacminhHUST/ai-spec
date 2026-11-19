@@ -155,6 +155,10 @@ export interface UploadMeta {
 }
 
 export const ACTIVE_STATUSES: JobStatus[] = ["QUEUED", "PROCESSING", "PUBLISHING"];
+/** Hủy được: chờ/đang xử lý/chờ duyệt/lỗi; đang phát hành chỉ khi còn chờ worker (step=queued). */
+export const canCancel = (j: { status: JobStatus; step?: string | null }) =>
+  ["QUEUED", "PROCESSING", "DRAFT", "FAILED"].includes(j.status) || (j.status === "PUBLISHING" && j.step === "queued");
+export const CANCEL_CONFIRM = "Hủy job? Nếu đang xử lý, worker sẽ dừng ngay; kết quả nháp bị xóa (giữ file gốc).";
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, init);

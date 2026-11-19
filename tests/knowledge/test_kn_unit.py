@@ -191,10 +191,10 @@ def test_draft_ghi_va_doc_lai(spec_result, tmp_path):
 def test_chuyen_trang_thai():
     assert check_transition("DRAFT", "publish") == "PUBLISHING"
     assert check_transition("FAILED", "retry") == "QUEUED"
-    for st in ("QUEUED", "DRAFT", "FAILED"):
+    for st in ("QUEUED", "PROCESSING", "DRAFT", "PUBLISHING", "FAILED"):
         assert check_transition(st, "cancel") == "CANCELLED"
     for st, action in (("QUEUED", "publish"), ("PROCESSING", "publish"), ("PUBLISHED", "publish"),
-                       ("PROCESSING", "cancel"), ("PUBLISHED", "cancel"), ("DRAFT", "retry"),
+                       ("PUBLISHED", "cancel"), ("CANCELLED", "cancel"), ("DRAFT", "retry"),
                        ("CANCELLED", "retry")):
         with pytest.raises(KnowledgeError) as e:
             check_transition(st, action)

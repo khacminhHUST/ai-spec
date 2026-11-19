@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ACTIVE_STATUSES,
+  CANCEL_CONFIRM,
+  canCancel,
   fmtTime,
   jobAction,
   listJobs,
@@ -84,6 +86,10 @@ export default function JobQueue({ userId, projects, onOpen, onChanged, onError 
   };
   const publish = (j: Job) => run(j.job_id, () => jobAction(j.job_id, "publish", userId));
   const retry = (j: Job) => run(j.job_id, () => jobAction(j.job_id, "retry", userId));
+  const cancel = (j: Job) => {
+    if (!window.confirm(`${CANCEL_CONFIRM}\n\n${j.file_name}`)) return;
+    return run(j.job_id, () => jobAction(j.job_id, "cancel", userId));
+  };
   const publishPicked = () => {
     if (!window.confirm(`Phát hành ${pickedDrafts.length} tài liệu đã chọn vào kho tìm kiếm?`)) return;
     return run("bulk", async () => {
@@ -217,6 +223,11 @@ export default function JobQueue({ userId, projects, onOpen, onChanged, onError 
                   <button className="kn-btn small" onClick={() => onOpen(j.job_id)}>
                     {j.status === "DRAFT" ? "Xem & sửa" : "Xem"}
                   </button>
+                  {canCancel(j) && (
+                    <button className="kn-btn small danger" disabled={busy !== null} onClick={() => cancel(j)}>
+                      Hủy
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

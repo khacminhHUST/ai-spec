@@ -21,7 +21,8 @@ STATUSES = ("QUEUED", "PROCESSING", "DRAFT", "PUBLISHING", "PUBLISHED", "FAILED"
 ACTIVE = ("QUEUED", "PROCESSING", "DRAFT", "PUBLISHING", "FAILED")   # còn giữ file_hash (khớp index unique)
 ACTIONS: dict[str, tuple[frozenset[str], str]] = {
     "publish": (frozenset({"DRAFT"}), "PUBLISHING"),
-    "cancel": (frozenset({"QUEUED", "DRAFT", "FAILED"}), "CANCELLED"),
+    # PROCESSING: worker thấy CANCELLED thì dừng (worker.py); PUBLISHING chỉ khi còn chờ (step=queued)
+    "cancel": (frozenset({"QUEUED", "PROCESSING", "DRAFT", "PUBLISHING", "FAILED"}), "CANCELLED"),
     "retry": (frozenset({"FAILED"}), "QUEUED"),
 }
 PUBLISH_QUEUED = "queued"
@@ -208,13 +209,16 @@ def list_jobs(conn, status: str | None = None, project_id: str | None = None, li
 
 
 def transition(conn, job_id: str, action: str, user_id: str | None = None) -> dict[str, Any]:
-    """publish (DRAFT → PUBLISHING, chờ worker) / cancel (→ CANCELLED, xóa artifact) / retry (FAILED → QUEUED)."""
+    """publish (DRAFT → PUBLISHING, chờ worker) / cancel (→ CANCELLED, xóa artifact; job đang chạy: worker tự dừng)
+    / retry (FAILED → QUEUED)."""
     with conn.transaction():
-        row = conn.execute("SELECT status, artifact_dir FROM ingest_jobs WHERE job_id = %s FOR UPDATE",
+        row = conn.execute("SELECT status, step, artifact_dir FROM ingest_jobs WHERE job_id = %s FOR UPDATE",
                            (job_id,)).fetchone()
         if not row:
             raise KnowledgeError(f"không có job {job_id}", 404)
         new = check_transition(row["status"], action)
+        if action == "cancel" and row["status"] == "PUBLISHING" and row["step"] != PUBLISH_QUEUED:
+            raise KnowledgeError("job đang ghi vào kho tìm kiếm – không hủy được, chờ xong rồi gỡ phiên bản", 409)
         sets = {"publish": "step = %(q)s, error = NULL, published_by = %(u)s",
                 "cancel": "step = NULL",
                 "retry": "step = NULL, error = NULL, report = NULL, warnings = '{}', artifact_dir = NULL"}[action]

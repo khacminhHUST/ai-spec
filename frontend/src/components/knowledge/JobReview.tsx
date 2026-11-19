@@ -4,6 +4,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ACTIVE_STATUSES,
+  CANCEL_CONFIRM,
+  canCancel,
   fmtDate,
   fmtTime,
   getJob,
@@ -71,7 +73,7 @@ export default function JobReview({ jobId, userId, options, projects, onBack, on
   }, [running, load]);
 
   const act = async (action: "publish" | "cancel" | "retry") => {
-    if (action === "cancel" && !window.confirm("Hủy job? Kết quả nháp sẽ bị xóa (giữ file gốc).")) return;
+    if (action === "cancel" && !window.confirm(CANCEL_CONFIRM)) return;
     setBusy(true);
     try {
       setJob(await jobAction(jobId, action, userId));
@@ -141,7 +143,7 @@ export default function JobReview({ jobId, userId, options, projects, onBack, on
               Chạy lại
             </button>
           )}
-          {["QUEUED", "DRAFT", "FAILED"].includes(job.status) && (
+          {canCancel(job) && (
             <button className="kn-btn danger" disabled={busy} onClick={() => act("cancel")}>
               Hủy
             </button>

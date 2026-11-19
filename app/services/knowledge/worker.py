@@ -6,11 +6,16 @@
 - auto_publish (config/knowledge.yaml › worker.auto_publish): xử lý xong phát hành luôn, không dừng ở DRAFT.
 - Chạy kèm server (worker.embedded): app/main.py bật run_forever trong 1 thread nền, dừng theo `stop`.
 - Lỗi → FAILED + thông báo ngắn (traceback ghi log). Khởi động: job dở dang của lần trước → FAILED.
+- Hủy job đang PROCESSING (giao diện → CANCELLED): worker dừng ở bước kế tiếp (on_step) và không ghi đè trạng thái.
+  Worker tiến trình riêng (hard_cancel): thread canh hủy thoát hẳn tiến trình để cắt ngang bước parse dài;
+  Docker (restart: unless-stopped) tự bật lại worker. Worker nhúng trong server không thoát được → chỉ dừng mềm.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
 import threading
 from pathlib import Path
 from typing import Any
@@ -30,6 +35,22 @@ def _dumps(obj: Any) -> str:
 
 
 INTERRUPTED = "bị gián đoạn (worker dừng giữa chừng) – bấm Chạy lại"
+CANCEL_POLL_S = 5.0
+CANCEL_EXIT_CODE = 3
+
+
+class JobCancelled(Exception):
+    """Job bị hủy từ giao diện trong lúc worker đang xử lý."""
+
+
+def is_cancelled(conn, job_id: str) -> bool:
+    r = conn.execute("SELECT status FROM ingest_jobs WHERE job_id = %s", (job_id,)).fetchone()
+    return r is None or r["status"] == "CANCELLED"
+
+
+def _check_cancel(conn, job_id: str) -> None:
+    if is_cancelled(conn, job_id):
+        raise JobCancelled(job_id)
 
 
 def recover_interrupted(conn) -> int:
@@ -56,10 +77,12 @@ def claim_next(conn) -> dict[str, Any] | None:
     return {**row, "status": status, "step": step}
 
 
-def _update(conn, job_id: str, **fields: Any) -> None:
+def _update(conn, job_id: str, *, only_if: str | None = None, **fields: Any) -> int:
+    """only_if: chỉ ghi khi job còn ở trạng thái này (job bị hủy giữa chừng → không ghi đè). → số dòng ghi."""
     sets = ", ".join(f"{k} = %({k})s" for k in fields)
-    conn.execute(f"UPDATE ingest_jobs SET {sets}, updated_at = now() WHERE job_id = %(job_id)s",
-                 {**fields, "job_id": job_id})
+    cond = " AND status = %(only_if)s" if only_if else ""
+    return conn.execute(f"UPDATE ingest_jobs SET {sets}, updated_at = now() WHERE job_id = %(job_id)s{cond}",
+                        {**fields, "job_id": job_id, "only_if": only_if}).rowcount
 
 
 def job_overrides(conn, job: dict[str, Any]) -> dict[str, Any]:
@@ -80,7 +103,7 @@ def classify_job(conn, job: dict[str, Any], path: Path, llm=None) -> dict[str, A
     from app.services.ingestion.parse import parse_pdf
     from app.services.knowledge.classify import classify
 
-    _update(conn, job["job_id"], step="classify")
+    _update(conn, job["job_id"], only_if="PROCESSING", step="classify")
     parsed = parse_pdf(path, job["file_hash"])
     got = classify(parsed.blocks, job["file_name"], job["stream"], llm)
     upd = {"doc_type": job["doc_type"] or got["doc_type"], "disciplines": list(job["disciplines"] or got["disciplines"])}
@@ -93,15 +116,23 @@ def process_job(s: Settings, conn, job: dict[str, Any], store: FileStore, llm=No
                 out_root: Path | None = None) -> None:
     from app.services.ingestion.pipeline import process
 
+    job_id = job["job_id"]
+
+    def on_step(step: str) -> None:
+        _check_cancel(conn, job_id)
+        _update(conn, job_id, only_if="PROCESSING", step=step)
+
     path = store.local_path(job["storage_key"])
     cls = classify_job(conn, job, path, llm)
-    res = process(path, settings=s, llm=llm, overrides=job_overrides(conn, job),
-                  on_step=lambda step: _update(conn, job["job_id"], step=step))
+    _check_cancel(conn, job_id)
+    res = process(path, settings=s, llm=llm, overrides=job_overrides(conn, job), on_step=on_step)
     if cls:
         res.report["classification"] = cls
-    art = save_draft(res, (out_root or artifacts_dir()) / job["job_id"])
-    _update(conn, job["job_id"], status="DRAFT", step=None, artifact_dir=str(art),
-            report=Jsonb(res.report, dumps=_dumps), warnings=list(res.report["warnings"]))
+    art = save_draft(res, (out_root or artifacts_dir()) / job_id)
+    if not _update(conn, job_id, only_if="PROCESSING", status="DRAFT", step=None, artifact_dir=str(art),
+                   report=Jsonb(res.report, dumps=_dumps), warnings=list(res.report["warnings"])):
+        shutil.rmtree(art, ignore_errors=True)
+        raise JobCancelled(job_id)
 
 
 def publish_job(s: Settings, conn, job: dict[str, Any]) -> None:
@@ -123,29 +154,58 @@ def auto_publish_job(s: Settings, conn, job_id: str) -> None:
     publish_job(s, conn, job)
 
 
+def _watch_cancel(s: Settings, job_id: str, done: threading.Event, art: Path) -> None:
+    """Thread canh hủy (chỉ worker tiến trình riêng): job PROCESSING bị hủy → xóa nháp dở, thoát tiến trình
+    (bước parse Docling/OCR không ngắt giữa chừng được). Docker tự khởi động lại worker."""
+    try:
+        with pg_connect(s, autocommit=True) as conn:
+            while not done.wait(CANCEL_POLL_S):
+                if is_cancelled(conn, job_id):
+                    log.warning("Job %s bị hủy khi đang xử lý → thoát worker (Docker sẽ bật lại)", job_id)
+                    shutil.rmtree(art, ignore_errors=True)
+                    logging.shutdown()
+                    os._exit(CANCEL_EXIT_CODE)
+    except Exception as e:  # noqa: BLE001 – mất kết nối: bỏ canh, job vẫn dừng mềm ở bước kế tiếp
+        log.warning("Canh hủy job %s lỗi: %s", job_id, e)
+
+
 def run_once(s: Settings, store: FileStore | None = None, llm=None, out_root: Path | None = None,
-             auto_publish: bool = False) -> str | None:
-    """Xử lý tối đa 1 job → job_id (None nếu hàng chờ rỗng). auto_publish: xong nháp → phát hành luôn."""
+             auto_publish: bool = False, hard_cancel: bool = False) -> str | None:
+    """Xử lý tối đa 1 job → job_id (None nếu hàng chờ rỗng). auto_publish: xong nháp → phát hành luôn.
+    hard_cancel: job bị hủy giữa chừng → thoát tiến trình (chỉ dùng cho worker tiến trình riêng)."""
     store = store or LocalFileStore()
     with pg_connect(s, autocommit=True) as conn:
         job = claim_next(conn)
         if not job:
             return None
+        job_id = job["job_id"]
+        done = threading.Event()
         try:
             if job["status"] == "PROCESSING":
+                if hard_cancel:
+                    threading.Thread(target=_watch_cancel, args=(s, job_id, done, (out_root or artifacts_dir()) / job_id),
+                                     daemon=True, name=f"cancel-{job_id}").start()
                 process_job(s, conn, job, store, llm, out_root)
-                if auto_publish:
-                    auto_publish_job(s, conn, job["job_id"])
+                done.set()
+                st = conn.execute("SELECT status FROM ingest_jobs WHERE job_id = %s", (job_id,)).fetchone()
+                if auto_publish and st and st["status"] == "DRAFT":
+                    auto_publish_job(s, conn, job_id)
             else:
                 publish_job(s, conn, job)
+        except JobCancelled:
+            log.info("Job %s đã hủy – dừng xử lý", job_id)
         except Exception as e:  # noqa: BLE001
-            log.exception("Job %s lỗi", job["job_id"])
-            _update(conn, job["job_id"], status="FAILED", error=f"{type(e).__name__}: {e}"[:500])
-        return job["job_id"]
+            log.exception("Job %s lỗi", job_id)
+            if not is_cancelled(conn, job_id):
+                _update(conn, job_id, status="FAILED", error=f"{type(e).__name__}: {e}"[:500])
+        finally:
+            done.set()
+        return job_id
 
 
 def run_forever(s: Settings, store: FileStore | None = None, poll_interval_s: float | None = None,
-                stop: threading.Event | None = None, auto_publish: bool | None = None) -> None:
+                stop: threading.Event | None = None, auto_publish: bool | None = None,
+                hard_cancel: bool = False) -> None:
     wcfg = knowledge_cfg()["worker"]
     interval = float(poll_interval_s or wcfg["poll_interval_s"])
     auto = bool(wcfg.get("auto_publish")) if auto_publish is None else auto_publish
@@ -157,7 +217,7 @@ def run_forever(s: Settings, store: FileStore | None = None, poll_interval_s: fl
     log.info("Worker chạy (ns=%s, poll %.1fs, tự phát hành: %s)", s.pg_schema, interval, auto)
     while not stop.is_set():
         try:
-            done = run_once(s, store, auto_publish=auto)
+            done = run_once(s, store, auto_publish=auto, hard_cancel=hard_cancel)
         except Exception as e:  # noqa: BLE001 – lỗi kết nối DB…: chờ rồi thử lại, không dừng worker
             log.warning("Worker lỗi: %s", e)
             done = None
