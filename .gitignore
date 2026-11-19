@@ -14,3 +14,13 @@ S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/
 
 # Cài đặt Claude Code cá nhân
 .claude/settings.local.json
+
+# Dữ liệu – không commit (tải lên server riêng)
+.ruff_cache/
+/*.docx
+/*.xlsx
+*.dump
+*.snapshot
+*.tar
+mep-models*/
+data/uploads/

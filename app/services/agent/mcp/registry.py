@@ -24,7 +24,7 @@ NAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 AUTH_TYPES = ("oauth", "none", "headers")
 TRANSPORTS = ("streamable_http", "sse")
 YAML_PREFIX = "yaml:"
-DESCRIPTION_MAX = 500
+DESCRIPTION_MAX = 300                 # = describe.DESC_MAX_CHARS (mô tả tự sinh)
 EDITABLE = ("name", "display_name", "description", "url", "transport", "auth_type", "enabled", "headers", "client_id", "client_secret")
 
 

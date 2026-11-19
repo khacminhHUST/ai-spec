@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from app.api.deps import check_owner, get_deps, get_runtime
 from app.models.agent import UploadedFile
 from app.services.agent.runtime import AgentRuntime
-from app.services.agent.sandbox import INPUT_DIR, OUTPUT_DIR, SandboxError, workspace_path
+from app.services.agent.sandbox import INPUT_DIR, OUTPUT_DIR, SandboxBusy, SandboxError, workspace_path
 from app.services.query.deps import Deps
 
 router = APIRouter(prefix="/conversations", tags=["files"])
@@ -34,6 +34,8 @@ def upload(conversation_id: str, user_id: str = Query(...), file: UploadFile = F
     deps.repo.upsert_conversation(conversation_id, user_id, f"File: {name}")   # giữ quyền sở hữu hội thoại mới
     try:
         runtime.manager.get(conversation_id).put_file(f"{INPUT_DIR}/{name}", data)
+    except SandboxBusy as e:
+        raise HTTPException(503, str(e)) from None
     except SandboxError as e:
         raise HTTPException(400, str(e)) from None
     return UploadedFile(name=name, size=len(data))

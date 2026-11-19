@@ -12,3 +12,5 @@ max_upload_mb: 200
 
 worker:
   poll_interval_s: 3
+  auto_publish: true   # xử lý xong phát hành luôn (không dừng ở bước duyệt); sửa sau trong trang dự án
+  embedded: true       # server (uvicorn) tự chạy worker trong thread nền – không cần `python -m app.cli.worker`

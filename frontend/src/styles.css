@@ -1041,6 +1041,39 @@ a {
   color: var(--fg-2);
 }
 
+/* bước tool đã xong: thu gọn thành 1 dòng, bấm để xổ ra */
+.tools-done {
+  margin: 0 0 8px;
+}
+
+.tools-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tools-toggle:hover {
+  color: var(--fg-2);
+}
+
+.tools-toggle svg {
+  transition: transform 0.15s var(--ease);
+}
+
+.tools-toggle.open svg {
+  transform: rotate(90deg);
+}
+
+.tools-done .tools {
+  margin-top: 6px;
+}
+
 .tool-summary {
   color: var(--muted);
 }

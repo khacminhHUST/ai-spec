@@ -220,12 +220,13 @@ Fixture: `tests/fixtures/agent_scenarios.yaml`.
 | A3 | Đính kèm file mẫu xlsx + "điền thời gian bảo hành và bán kính uốn cáp vào mẫu này" | giữ sheet/tiêu đề; có 24 tháng, 6 lần |
 | A4 | "So sánh yêu cầu gió tươi của Thuyết minh S5 với Westin, xuất bảng Excel" | nhiều lần tra; có cả 2 nguồn |
 | A5 | "Xuất Excel giá trị hợp đồng gói thầu cơ điện" | không bịa số |
-| A6 | Câu hỏi vàng #1 | chỉ gọi `search_project_docs`; TTFT < 10s; có "6 lần" |
+| A6 | Câu hỏi vàng #1 | chỉ gọi `search_project_docs`; TTFT < 13s; có "6 lần" |
 | A7 | Yêu cầu dùng 1 tool `write` của nguồn ngoài | mở nguồn; có `confirm_required`; từ chối → không thực thi |
 | A8 | Lượt 2 sau A1: "thêm cột Ghi chú và tô vàng dòng gym" | file mới giữ dữ liệu cũ + thay đổi đúng |
 
 ### Tiêu chí nghiệm thu
-- Bộ câu hỏi vàng qua agent: điểm giá trị ≥ 85% (như trước), TTFT p50 < 10s.
+- Bộ câu hỏi vàng qua agent: điểm giá trị ≥ 85% (như trước), TTFT p50 < 13s (nới từ 10s ngày 2026-11-19 khi reranker
+  chuyển sang Gemini chấm điểm – server triển khai không có GPU; người dùng duyệt).
 - File tạo ra đúng định dạng ≥ 90% kịch bản; A5 không bịa; không kịch bản nào vượt `max_steps`; tạo file p50 < 90s.
 - 100% test bảo mật sandbox pass.
 

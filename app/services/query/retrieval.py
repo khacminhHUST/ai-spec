@@ -66,7 +66,9 @@ def rerank(deps: Deps, question: str, candidates: list[dict[str, Any]]) -> tuple
     except Exception as e:  # noqa: BLE001 – reranker lỗi → dùng thứ tự fusion (score 0 → sẽ bị lọc)
         log.error("rerank lỗi: %s", e)
         scores = [0.0] * len(uniq)
-    min_score, max_per_doc = float(cfg.get("min_score", 0.3)), int(cfg.get("max_per_doc", 5))
+    # reranker có thang điểm riêng (VD Gemini 0–10 → /10) tự mang ngưỡng; còn lại dùng rerank.min_score
+    min_score = float(getattr(deps.reranker, "min_score", None) or cfg.get("min_score", 0.3))
+    max_per_doc = int(cfg.get("max_per_doc", 5))
     by_doc: dict[str, list[dict[str, Any]]] = {}
     for c, s in zip(uniq, scores):
         if s >= min_score:

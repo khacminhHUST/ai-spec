@@ -1,6 +1,7 @@
 """Cấu hình kho tri thức: config/knowledge.yaml (+ danh mục stream / discipline / doc_type / stage cho form)."""
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ DEFAULTS: dict[str, Any] = {
     "uploads_dir": "data/uploads",
     "artifacts_dir": "artifacts/jobs",
     "max_upload_mb": 200,
-    "worker": {"poll_interval_s": 3},
+    "worker": {"poll_interval_s": 3, "auto_publish": False, "embedded": False},
 }
 
 # Mô tả ngắn cho form upload (doc_type = profile trong config/headings.yaml)
@@ -37,6 +38,9 @@ STREAMS: dict[str, str] = {
 def knowledge_cfg() -> dict[str, Any]:
     cfg = {**DEFAULTS, **load_yaml("knowledge")}
     cfg["worker"] = {**DEFAULTS["worker"], **(cfg.get("worker") or {})}
+    # Triển khai có container worker riêng (deploy/trithuc) → tắt worker chạy kèm server: MEP_WORKER_EMBEDDED=0
+    if (env := os.environ.get("MEP_WORKER_EMBEDDED")) is not None:
+        cfg["worker"]["embedded"] = env.strip().lower() in ("1", "true", "yes")
     return cfg
 
 

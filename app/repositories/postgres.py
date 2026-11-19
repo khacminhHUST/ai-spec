@@ -67,6 +67,13 @@ class Repo(ABC):
     @abstractmethod
     def get_conversation(self, conversation_id: str) -> dict[str, Any] | None: ...
 
+    @abstractmethod
+    def stale_conversations(self, days: int) -> list[str]:
+        """Mã hội thoại không hoạt động quá `days` ngày (theo updated_at)."""
+
+    @abstractmethod
+    def delete_conversation(self, conversation_id: str) -> None: ...
+
 
 ACCESS_MODES = ("open", "config")
 
@@ -205,3 +212,12 @@ class PgRepo(Repo):
         rows = self._q("SELECT conversation_id, user_id, title, created_at, updated_at FROM conversations "
                        "WHERE conversation_id = %s", (conversation_id,))
         return rows[0] if rows else None
+
+    def stale_conversations(self, days: int) -> list[str]:
+        rows = self._q("SELECT conversation_id FROM conversations WHERE updated_at < now() - make_interval(days => %s)",
+                       (int(days),))
+        return [r["conversation_id"] for r in rows]
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        with self.pool.connection() as conn:
+            conn.execute("DELETE FROM conversations WHERE conversation_id = %s", (conversation_id,))

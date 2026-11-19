@@ -1,4 +1,5 @@
-"""Vòng đời sandbox: 1 sandbox / conversation, tạo khi cần, hủy khi idle > idle_ttl_s hoặc khi xóa conversation."""
+"""Vòng đời sandbox: 1 sandbox / conversation, tạo khi cần, hủy khi idle > idle_ttl_s hoặc khi xóa conversation.
+Trần max_sandboxes (0 = không giới hạn): đủ trần → SandboxBusy, không tạo thêm (tránh hết RAM server)."""
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from app.services.agent.sandbox.base import SandboxBackend
+from app.services.agent.sandbox.base import SandboxBackend, SandboxBusy
 
 log = logging.getLogger(__name__)
 
@@ -14,9 +15,11 @@ Factory = Callable[[str], SandboxBackend]
 
 
 class SandboxManager:
-    def __init__(self, factory: Factory, idle_ttl_s: float, clock: Callable[[], float] = time.monotonic):
+    def __init__(self, factory: Factory, idle_ttl_s: float, clock: Callable[[], float] = time.monotonic,
+                 max_sandboxes: int = 0):
         self.factory = factory
         self.idle_ttl_s = idle_ttl_s
+        self.max_sandboxes = max_sandboxes
         self.clock = clock
         self._items: dict[str, tuple[SandboxBackend, float]] = {}
         self._lock = threading.Lock()
@@ -26,6 +29,9 @@ class SandboxManager:
         self.reap_idle()
         with self._lock:
             item = self._items.get(conversation_id)
+            if not item and self.max_sandboxes and len(self._items) >= self.max_sandboxes:
+                log.warning("Đủ trần %d sandbox – từ chối hội thoại %s", self.max_sandboxes, conversation_id)
+                raise SandboxBusy("Hệ thống đang bận (đủ số phiên xử lý file cùng lúc). Vui lòng thử lại sau ít phút.")
             sbx = item[0] if item else self.factory(conversation_id)
             if not item:
                 sbx.create()
@@ -81,4 +87,4 @@ def build_manager(cfg: dict[str, Any]) -> SandboxManager:
         from app.services.agent.sandbox.docker_backend import DockerSandbox
 
         factory = lambda cid: DockerSandbox(cid, cfg)  # noqa: E731
-    return SandboxManager(factory, float(cfg.get("idle_ttl_s", 1800)))
+    return SandboxManager(factory, float(cfg.get("idle_ttl_s", 1800)), max_sandboxes=int(cfg.get("max_sandboxes", 0)))

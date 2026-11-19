@@ -127,12 +127,14 @@ def delete_series(doc_code: str, conn=Depends(get_conn), deps: Deps = Depends(ge
 
 
 @router.get("/documents/{doc_id}/file")
-def download(doc_id: str, conn=Depends(get_conn)):
+def download(doc_id: str, download: bool = False, conn=Depends(get_conn)):
     row = call(versions.source_file, conn, doc_id)
     path = Path(row["source_path"])
     if not path.is_file():
         raise HTTPException(404, "không còn file gốc")
-    return FileResponse(path, media_type="application/pdf", filename=row["file_name"] or path.name)
+    # mặc định inline (xem trực tiếp trong UI); ?download=1 → tải xuống
+    return FileResponse(path, media_type="application/pdf", filename=row["file_name"] or path.name,
+                        content_disposition_type="attachment" if download else "inline")
 
 
 # ---------------------------------------------------------------- upload / job

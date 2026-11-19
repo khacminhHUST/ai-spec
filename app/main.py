@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from app.api.routes import chat, confirm, conversations, files, knowledge, mcp, projects
 from app.services.agent.graph import build_assistant_graph
+from app.services.agent.retention import purge_stale_conversations
 from app.services.agent.runtime import AgentRuntime, build_runtime
 from app.services.knowledge.cache import attach_store_version
 from app.services.query.deps import Deps
@@ -37,6 +39,23 @@ def _destroy_orphan_sandboxes(backend: str) -> None:
         DockerSandbox.destroy_all()
     except Exception as e:  # noqa: BLE001 – Docker chưa chạy: agent vẫn tra cứu được, chỉ mất sandbox
         log.warning("Không dọn được sandbox cũ: %s", e)
+
+
+def _start_embedded_worker(settings, stop: threading.Event) -> None:
+    """Worker kho tri thức chạy kèm server (config/knowledge.yaml › worker.embedded): upload xong tự xử lý."""
+    from app.services.knowledge.config import knowledge_cfg
+    from app.services.knowledge.worker import run_forever
+
+    if not knowledge_cfg()["worker"].get("embedded"):
+        return
+
+    def run():
+        try:
+            run_forever(settings, stop=stop)
+        except Exception as e:  # noqa: BLE001 – worker hỏng không được làm sập server
+            log.error("Worker kho tri thức dừng: %s", e)
+
+    threading.Thread(target=run, name="knowledge-worker", daemon=True).start()
 
 
 def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntime | None = None) -> FastAPI:
@@ -70,11 +89,27 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
                 except Exception as e:  # noqa: BLE001
                     log.warning("Dọn sandbox idle lỗi: %s", e)
 
+        async def purge_loop():
+            conv_cfg = rt.cfg.get("conversations") or {}
+            days = int(conv_cfg.get("retention_days", 30))
+            while True:
+                try:
+                    await asyncio.to_thread(purge_stale_conversations, d.repo, cp, days)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Xóa hội thoại cũ lỗi: %s", e)
+                await asyncio.sleep(float(conv_cfg.get("purge_interval_s", 86400)))
+
         reaper = asyncio.create_task(reap_loop())
+        purger = asyncio.create_task(purge_loop())
+        worker_stop = threading.Event()
+        if deps is None:
+            _start_embedded_worker(d.settings, worker_stop)
         try:
             yield
         finally:
+            worker_stop.set()
             reaper.cancel()
+            purger.cancel()
             await asyncio.to_thread(rt.manager.close_all)
             if conn is not None:
                 conn.close()

@@ -309,6 +309,18 @@ def test_suggest_description_order():
     assert suggest_description(row, ServerListing(), None) == ""
 
 
+def test_suggest_description_long_intro_never_cut_mid_sentence():
+    row = {"name": "nhansu", "display_name": "Nhân sự"}
+    intro = "Kho tool nhân sự HAWEE: truy vấn dữ liệu nhân sự và dự án. " + "Cách dùng: ưu tiên tool chuyên dụng. " * 20
+    tools = _tools(("search_employees", None))
+    llm = MockChatModel(responses=["Tra cứu nhân viên, hồ sơ và dự án của HAWEE."], calls=[])
+    got = suggest_description(row, ServerListing(tools=tools, instructions=intro), llm)
+    assert got == "Tra cứu nhân viên, hồ sơ và dự án của HAWEE."
+    assert "Kho tool nhân sự HAWEE" in str(llm.calls[0][-1].content)          # LLM tóm tắt từ phần giới thiệu
+    text = suggest_description(row, ServerListing(tools=tools, instructions=intro), None)   # không LLM
+    assert len(text) <= 300 and text.endswith(".") and "…" not in text
+
+
 # ------------------------------------------------------------------ 7. tool write → confirm_required; resume khi tool mất
 
 CREATED = []

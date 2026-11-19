@@ -44,7 +44,8 @@ Lưu trữ dùng chung:
 - Namespace `MEP_NS` → schema Postgres + tiền tố collection Qdrant. Dữ liệu S5 thật nằm ở `MEP_NS=ingest`.
 
 ## Tech stack
-Python 3.11+, Docling, Embedding qua API (VN: Qwen3-Embedding-8B, EN: gemini-embedding-2), Reranker Qwen3-Reranker-8B, LLM Gemini (3.5-flash-lite / 3.8-flash), Qdrant, PostgreSQL, underthesea, lingua,
+Python 3.11+, Docling, Embedding qua API (VN + EN: gemini-embedding-2 – từ 2026-10-28), Reranker: Gemini 3.8-flash chấm điểm
+(từ 2026-11-19, server không GPU; dự phòng: Qwen3-Reranker-0.6B cục bộ / 8B DeepInfra), LLM Gemini (3.5-flash-lite / 3.8-flash), Qdrant, PostgreSQL, underthesea, lingua,
 LLM qua interface chung (không khóa provider),
 LangGraph (query pipeline + assistant graph).
 Agent (chốt 2026-10-29): langgraph 1.2.18 · langchain 1.4.7 · langchain-core 1.7.0 · deepagents 0.7.32 (chỉ dùng
@@ -97,7 +98,7 @@ Việc còn mở:
 Còn thiếu so với production (ưu tiên trên xuống):
 1. Xác thực: `user_id` hiện do client tự gửi, nên ai cũng mạo danh được.
 2. Lưu file output bền vững (object storage): hiện file chỉ nằm trong sandbox, mất sau 30 phút idle hoặc khi restart app.
-3. Rate limit, quota, trần số sandbox, theo dõi chi phí token.
+3. Rate limit, quota, theo dõi chi phí token (trần số sandbox đã có: `max_sandboxes`).
 4. Sandbox chạy `runsc` (gVisor) thay `runc`.
 5. Trace/log theo request, metrics, cảnh báo.
 6. Scale ngang: hiện chỉ chạy được 1 worker vì SandboxManager nằm trong tiến trình. Cần tách thành dịch vụ riêng + hàng đợi.
@@ -116,7 +117,8 @@ $env:MEP_NS="ingest"; uvicorn app.main:app --port 8000
 cd frontend; npm run dev                      # http://localhost:5173
 ```
 Sandbox: mỗi hội thoại có 1 container + 1 volume (label `mep.sandbox`, không có mạng, rootfs chỉ đọc, uid 1000). App tự dọn khi
-khởi động và khi idle quá `idle_ttl_s`. Theo dõi: `docker events --filter label=mep.sandbox`.
+khởi động và khi idle quá `idle_ttl_s`. Mỗi sandbox 512 MB, trần `max_sandboxes: 12` (server đích 15 GB / 8 nhân, không GPU);
+đủ trần → báo "hệ thống bận". Theo dõi: `docker events --filter label=mep.sandbox`.
 
 ## Lịch sử triển khai (đã xong)
 Giai đoạn 1 `shared-v1` → Giai đoạn 2 `feat/ingestion` + `feat/query` → Giai đoạn 3 ghép + nghiệm thu →

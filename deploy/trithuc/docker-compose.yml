@@ -45,6 +45,7 @@ services:
     environment:
       <<: *app-env
       MEP_AUTH_MODE: trusted_proxy                 # user_id lấy từ token web Tri thức (app/api/trusted_proxy.py)
+      MEP_WORKER_EMBEDDED: "0"                     # đã có container worker riêng – api không chạy thêm worker
       MEP_AUTH_USER_CLAIM: ${AUTH_USER_CLAIM:-}
     volumes:
       # Agent tạo/dọn container sandbox qua Docker của máy chủ (sandbox chỉ dùng named volume, không bind thư mục)
@@ -57,7 +58,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 900s                           # lần đầu tải reranker (~1,2 GB) từ HuggingFace vào volume models
+      start_period: 900s                           # lần đầu tải mô hình (tokenizer, Docling) vào volume models
 
   worker:
     <<: *app

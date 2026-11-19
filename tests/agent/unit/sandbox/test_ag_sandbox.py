@@ -61,6 +61,19 @@ def test_manager_one_sandbox_per_conversation_and_idle_ttl():
     assert m.destroy("a") and a1.destroyed and not m.destroy("a")
 
 
+def test_manager_tran_so_sandbox():
+    from app.services.agent.sandbox import SandboxBusy
+
+    clock = Clock()
+    m = SandboxManager(lambda cid: MockSandbox(), idle_ttl_s=100, clock=clock, max_sandboxes=2)
+    m.get("a"), m.get("b")
+    assert m.get("a")                                   # hội thoại đã có sandbox → vẫn dùng được
+    with pytest.raises(SandboxBusy):
+        m.get("c")
+    clock.t = 150                                       # a, b idle quá TTL → được dọn → c tạo được
+    assert m.get("c") and m.peek("a") is None
+
+
 def test_build_manager_mock():
-    m = build_manager({"backend": "mock", "idle_ttl_s": 5})
-    assert isinstance(m.get("x"), MockSandbox) and m.idle_ttl_s == 5
+    m = build_manager({"backend": "mock", "idle_ttl_s": 5, "max_sandboxes": 3})
+    assert isinstance(m.get("x"), MockSandbox) and m.idle_ttl_s == 5 and m.max_sandboxes == 3

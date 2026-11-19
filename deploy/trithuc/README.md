@@ -67,7 +67,7 @@ sh preflight.sh                                       # kiểm Docker, RAM, ổ,
 docker compose build
 docker compose up -d postgres qdrant
 docker compose run --rm api python -m app.cli.migrate  # schema + collection + checkpoint + seed dự án theo MEP_NS
-docker compose up -d                                  # lần đầu api có thể mất vài phút (tải reranker)
+docker compose up -d                                  # lần đầu api có thể mất vài phút (tải mô hình)
 docker compose ps                                     # api: healthy; worker, gateway: running
 curl -s http://127.0.0.1:8090/healthz                 # {"ok":true}
 # Thiếu khóa API thì app TỰ CHUYỂN SANG MOCK (không báo lỗi) – phải thấy google: False:
@@ -82,7 +82,7 @@ rồi `docker compose up -d gateway`.
 Đóng gói trên máy có internet rồi nạp vào volume `mep_models` **trước** `docker compose up`:
 ```bash
 # máy dev (cùng phiên bản thư viện với requirements.txt): HF_HOME=<pkg>/hf, tải tokenizer Qwen3-Embedding-8B,
-#   snapshot Qwen3-Reranker-0.6B, chạy converter Docling 1 PDF (tải layout + tableformer đúng revision);
+#   chạy converter Docling 1 PDF (tải layout + tableformer đúng revision);
 #   chép ~/.EasyOCR/model/*.pth vào <pkg>/easyocr → tar -cf mep-models.tar -C <pkg> hf easyocr   (~1,8 GB)
 # server: tải file lên ~/ (SFTP) rồi
 docker volume create --label com.docker.compose.project=mep --label com.docker.compose.volume=models mep_models
@@ -138,4 +138,5 @@ Tên collection theo `MEP_NS` (tiền tố) – kiểm bằng `GET /collections`
 - `api` mount `docker.sock` = quyền root trên server 2 → server 2 chỉ chạy app này; sandbox nên chuyển `runsc`.
 - 1 tiến trình `api` (SandboxManager trong tiến trình); file agent xuất mất khi restart / idle 30 phút.
 - Upload multipart: `uploaded_by` lấy từ form (frontend gửi email trong token), middleware không sửa body multipart.
-- Reranker chạy CPU nếu server 2 không có GPU (chậm hơn máy dev).
+- Reranker: Gemini 3.8-flash chấm điểm qua API (2026-11-19) – không cần GPU, không tải mô hình reranker.
+- Sandbox: 512 MB / cái, tối đa 12 cái cùng lúc (`config/agent.yaml`) – tính cho server 15 GB / 8 nhân.

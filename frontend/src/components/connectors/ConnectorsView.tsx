@@ -10,23 +10,40 @@ import {
   type Connector,
   type OAuthMessage,
 } from "../../mcpApi";
+import Icon from "../Icon";
 import ConnectorForm from "./ConnectorForm";
 import ToolList from "./ToolList";
+import "../knowledge/knowledge.css"; // kiểu hộp thoại nổi (.kp-modal)
 import "./connectors.css";
 
 const STATUS_LABEL: Record<ConnStatus, string> = {
   not_connected: "Chưa kết nối",
   connected: "Đã kết nối",
-  needs_reauth: "Cần kết nối lại",
+  needs_reauth: "Hết hạn đăng nhập",
   forbidden: "Chưa được cấp quyền",
   ready: "Sẵn sàng",
 };
-const AUTH_LABEL: Record<string, string> = { oauth: "OAuth", none: "Không xác thực", headers: "Header tĩnh" };
+
+/** Tên hiển thị; bỏ qua giá trị trình duyệt tự điền nhầm (email) → dùng mã connector */
+function title(c: Connector): string {
+  const d = c.display_name?.trim();
+  return d && !d.includes("@") ? d : c.name;
+}
+
+function host(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
 
 export default function ConnectorsView({ userId }: { userId: string }) {
   const [items, setItems] = useState<Connector[]>([]);
   const [form, setForm] = useState<{ editing: Connector | null } | null>(null);
   const [openTools, setOpenTools] = useState<string | null>(null);
+  const [menu, setMenu] = useState<string | null>(null);
+  const [checking, setChecking] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +57,31 @@ export default function ConnectorsView({ userId }: { userId: string }) {
   }, [userId]);
   useEffect(load, [load]);
 
+  /** Kiểm tra kết nối thật (server cập nhật trạng thái: hết hạn / bị chặn / đã kết nối) rồi tải lại danh sách */
+  const recheck = useCallback(
+    (c: Connector) => {
+      setChecking((x) => [...x, c.connector_id]);
+      testConnector(c.connector_id, userId)
+        .catch(() => undefined)
+        .finally(() => {
+          setChecking((x) => x.filter((id) => id !== c.connector_id));
+          load();
+        });
+    },
+    [userId, load],
+  );
+
+  // Mở trang: tự kiểm tra các connector đang bật và đã kết nối (hoặc không cần đăng nhập)
+  useEffect(() => {
+    listConnectors(userId)
+      .then((list) =>
+        list
+          .filter((c) => !c.readonly && c.enabled && (c.auth_type !== "oauth" || c.status !== "not_connected"))
+          .forEach(recheck),
+      )
+      .catch(() => undefined);
+  }, [userId, recheck]);
+
   // Trang callback OAuth (popup) báo kết quả qua postMessage
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -51,6 +93,14 @@ export default function ConnectorsView({ userId }: { userId: string }) {
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [load]);
+
+  // Đóng menu "…" khi bấm ra ngoài
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menu]);
 
   const act = async (f: () => Promise<string | void>) => {
     setError(null);
@@ -64,15 +114,15 @@ export default function ConnectorsView({ userId }: { userId: string }) {
     load();
   };
 
-  const doConnect = (c: Connector) => {
-    // Mở popup ngay trong sự kiện click (tránh bị chặn), điều hướng sau khi có authorize_url
-    const popup = window.open("about:blank", "mep-oauth", "width=520,height=720");
+  /** popup: mở sẵn trong sự kiện bấm (tránh bị chặn), điều hướng sau khi có authorize_url */
+  const doConnect = (c: Connector, opened?: Window | null) => {
+    const popup = opened ?? window.open("about:blank", "mep-oauth", "width=520,height=720");
     act(async () => {
       try {
         const { authorize_url } = await connect(c.connector_id, userId);
         if (popup) popup.location.href = authorize_url;
         else window.location.href = authorize_url;
-        return "Đăng nhập và đồng ý ở cửa sổ mới (Server A có thể yêu cầu đăng nhập lại – bình thường).";
+        return "Đăng nhập và đồng ý ở cửa sổ mới.";
       } catch (e) {
         popup?.close();
         throw e;
@@ -83,15 +133,10 @@ export default function ConnectorsView({ userId }: { userId: string }) {
   return (
     <div className="cn-view">
       <div className="cn-head">
-        <h2>Kết nối MCP</h2>
+        <h2>Kết nối</h2>
         <button className="cn-primary" onClick={() => setForm({ editing: null })}>
-          + Thêm connector
+          <Icon name="plus" /> Thêm
         </button>
-      </div>
-      <div className="cn-note small">
-        Chưa có đăng nhập: trạng thái kết nối OAuth gắn với <b>User ID</b> ở thanh bên ({userId}). Ai biết User ID của người
-        khác thì dùng được kết nối OAuth của người đó – rủi ro đã biết, chấp nhận trong giai đoạn này. Mọi người đều
-        thêm/sửa được connector. Connector từ <code>config/mcp.yaml</code> chỉ đọc.
       </div>
       {notice && <div className="cn-ok">{notice}</div>}
       {error && <div className="banner-error">{error}</div>}
@@ -99,126 +144,106 @@ export default function ConnectorsView({ userId }: { userId: string }) {
         <ConnectorForm
           userId={userId}
           editing={form.editing}
+          existingNames={items.map((c) => c.name)}
           onCancel={() => setForm(null)}
-          onSaved={() => {
+          onSaved={(c, popup) => {
             setForm(null);
-            load();
+            if (c && popup) doConnect(c, popup);
+            else load();
           }}
         />
       )}
-      <div className="table-wrap">
-      <table className="cn-table stack">
-        <thead>
-          <tr>
-            <th>Tên</th>
-            <th>URL</th>
-            <th>Xác thực</th>
-            <th>Bật</th>
-            <th>Trạng thái của tôi</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {items.length === 0 && (
-            <tr>
-              <td colSpan={6} className="muted small stack-full">
-                Chưa có connector
-              </td>
-            </tr>
-          )}
-          {items.map((c) => (
-            <ConnectorRow
-              key={c.connector_id}
-              c={c}
-              userId={userId}
-              toolsOpen={openTools === c.connector_id}
-              onToggleTools={() => setOpenTools(openTools === c.connector_id ? null : c.connector_id)}
-              onConnect={() => doConnect(c)}
-              onDisconnect={() => act(async () => (await disconnect(c.connector_id, userId)).message)}
-              onTest={() => act(async () => (await testConnector(c.connector_id, userId)).message)}
-              onToggleEnabled={() => act(async () => void (await updateConnector(c.connector_id, { enabled: !c.enabled })))}
-              onEdit={() => setForm({ editing: c })}
-              onDelete={() => {
-                if (window.confirm(`Xóa connector ${c.name}? Token và cấu hình tool đi kèm cũng bị xóa.`))
-                  act(() => deleteConnector(c.connector_id));
-              }}
-            />
-          ))}
-        </tbody>
-      </table>
-      </div>
+      <ul className="cn-list">
+        {items.length === 0 && <li className="muted small cn-empty">Chưa có connector</li>}
+        {items.map((c) => {
+          const oauth = c.auth_type === "oauth" && !c.readonly;
+          const linked = c.status !== "not_connected";
+          const canTools = !oauth || linked;
+          return (
+            <li key={c.connector_id} className={c.enabled ? "" : "cn-disabled"}>
+              <div className="cn-item">
+                <span className="cn-icon">
+                  <Icon name="plug" />
+                </span>
+                <div className="cn-main">
+                  <div className="cn-name">{title(c)}</div>
+                  <div className="cn-sub" title={c.description || undefined}>
+                    {host(c.url)}
+                    {c.description && <> · {c.description}</>}
+                  </div>
+                </div>
+                <div className="cn-side">
+                  {checking.includes(c.connector_id) ? (
+                    <span className="cn-badge">Đang kiểm tra…</span>
+                  ) : (
+                    <span className={`cn-badge cn-${c.enabled ? c.status : "off"}`}>
+                      {c.enabled ? STATUS_LABEL[c.status] ?? c.status : "Đã tắt"}
+                    </span>
+                  )}
+                  {oauth && c.enabled && c.status !== "connected" && (
+                    <button onClick={() => doConnect(c)}>{linked ? "Kết nối lại" : "Kết nối"}</button>
+                  )}
+                  <div className="cn-menu-wrap">
+                    <button
+                      className="cn-more"
+                      aria-label="Tùy chọn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenu(menu === c.connector_id ? null : c.connector_id);
+                      }}
+                    >
+                      ⋯
+                    </button>
+                    {menu === c.connector_id && (
+                      <div className="cn-menu" role="menu">
+                        {canTools && (
+                          <button onClick={() => setOpenTools(openTools === c.connector_id ? null : c.connector_id)}>
+                            {openTools === c.connector_id ? "Ẩn quyền tool" : "Quyền tool"}
+                          </button>
+                        )}
+                        {!c.readonly && canTools && (
+                          <button onClick={() => act(async () => (await testConnector(c.connector_id, userId)).message)}>
+                            Kiểm tra kết nối
+                          </button>
+                        )}
+                        {!c.readonly && <button onClick={() => setForm({ editing: c })}>Sửa</button>}
+                        {!c.readonly && (
+                          <button
+                            onClick={() => act(async () => void (await updateConnector(c.connector_id, { enabled: !c.enabled })))}
+                          >
+                            {c.enabled ? "Tắt" : "Bật"}
+                          </button>
+                        )}
+                        {oauth && linked && (
+                          <button onClick={() => act(async () => (await disconnect(c.connector_id, userId)).message)}>
+                            Ngắt kết nối
+                          </button>
+                        )}
+                        {!c.readonly && (
+                          <button
+                            className="cn-danger"
+                            onClick={() => {
+                              if (window.confirm(`Xóa connector ${title(c)}?`))
+                                act(() => deleteConnector(c.connector_id));
+                            }}
+                          >
+                            Xóa
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {openTools === c.connector_id && (
+                <div className="cn-tools-wrap">
+                  <ToolList connector={c} userId={userId} onFail={() => recheck(c)} />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
-  );
-}
-
-interface RowProps {
-  c: Connector;
-  userId: string;
-  toolsOpen: boolean;
-  onToggleTools: () => void;
-  onConnect: () => void;
-  onDisconnect: () => void;
-  onTest: () => void;
-  onToggleEnabled: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
-function ConnectorRow({ c, userId, toolsOpen, ...h }: RowProps) {
-  const oauth = c.auth_type === "oauth" && !c.readonly;
-  const linked = c.status !== "not_connected";
-  return (
-    <>
-      <tr className={c.enabled ? "" : "cn-disabled"}>
-        <td data-label="Tên" className="stack-title">
-          <b>{c.display_name || c.name}</b>
-          <div className="muted small">
-            {c.name}
-            {c.readonly && <span className="chip">yaml · chỉ đọc</span>}
-          </div>
-          {c.description ? (
-            <div className="cn-desc small">{c.description}</div>
-          ) : (
-            <div className="muted small">Chưa có mô tả – agent khó biết khi nào dùng nguồn này</div>
-          )}
-        </td>
-        <td data-label="URL" className="cn-url small">{c.url}</td>
-        <td data-label="Xác thực">
-          {AUTH_LABEL[c.auth_type] ?? c.auth_type}
-          {c.header_names.length > 0 && <div className="muted small">{c.header_names.join(", ")}</div>}
-        </td>
-        <td data-label="Bật">
-          {c.readonly ? (
-            "Có"
-          ) : (
-            <input type="checkbox" checked={c.enabled} onChange={h.onToggleEnabled} title="Bật/tắt connector" />
-          )}
-        </td>
-        <td data-label="Trạng thái">
-          <span className={`cn-status cn-${c.status}`}>{STATUS_LABEL[c.status] ?? c.status}</span>
-        </td>
-        <td className="cn-actions">
-          {oauth && c.enabled && (
-            <button onClick={h.onConnect}>{c.status === "connected" ? "Kết nối lại" : "Kết nối"}</button>
-          )}
-          {oauth && linked && <button onClick={h.onDisconnect}>Ngắt</button>}
-          {!c.readonly && (!oauth || linked) && <button onClick={h.onTest}>Thử</button>}
-          {(!oauth || linked) && <button onClick={h.onToggleTools}>{toolsOpen ? "Ẩn tool" : "Tool"}</button>}
-          {!c.readonly && <button onClick={h.onEdit}>Sửa</button>}
-          {!c.readonly && (
-            <button className="cn-danger" onClick={h.onDelete}>
-              Xóa
-            </button>
-          )}
-        </td>
-      </tr>
-      {toolsOpen && (
-        <tr className="stack-sub">
-          <td colSpan={6} className="stack-full">
-            <ToolList connector={c} userId={userId} />
-          </td>
-        </tr>
-      )}
-    </>
   );
 }

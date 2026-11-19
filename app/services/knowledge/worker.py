@@ -3,13 +3,15 @@
 - Nhận job bằng SELECT … FOR UPDATE SKIP LOCKED: QUEUED → PROCESSING; PUBLISHING (step=queued) → step=embed.
 - PROCESSING: bước 1–5 ingestion (process) với metadata ghi đè từ form → artifact nháp → DRAFT. Không ghi DB tìm kiếm.
 - PUBLISHING: đọc lại nháp → save_document (embed + Postgres + Qdrant, versioning theo doc_code) → PUBLISHED.
+- auto_publish (config/knowledge.yaml › worker.auto_publish): xử lý xong phát hành luôn, không dừng ở DRAFT.
+- Chạy kèm server (worker.embedded): app/main.py bật run_forever trong 1 thread nền, dừng theo `stop`.
 - Lỗi → FAILED + thông báo ngắn (traceback ghi log). Khởi động: job dở dang của lần trước → FAILED.
 """
 from __future__ import annotations
 
 import json
 import logging
-import time
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -114,8 +116,16 @@ def publish_job(s: Settings, conn, job: dict[str, Any]) -> None:
             published_at=draft.document.ingested_at)
 
 
-def run_once(s: Settings, store: FileStore | None = None, llm=None, out_root: Path | None = None) -> str | None:
-    """Xử lý tối đa 1 job → job_id (None nếu hàng chờ rỗng)."""
+def auto_publish_job(s: Settings, conn, job_id: str) -> None:
+    """Nháp vừa xong → phát hành ngay (người upload là người phát hành)."""
+    job = dict(conn.execute("SELECT * FROM ingest_jobs WHERE job_id = %s", (job_id,)).fetchone())
+    _update(conn, job_id, status="PUBLISHING", step="embed", published_by=job["uploaded_by"])
+    publish_job(s, conn, job)
+
+
+def run_once(s: Settings, store: FileStore | None = None, llm=None, out_root: Path | None = None,
+             auto_publish: bool = False) -> str | None:
+    """Xử lý tối đa 1 job → job_id (None nếu hàng chờ rỗng). auto_publish: xong nháp → phát hành luôn."""
     store = store or LocalFileStore()
     with pg_connect(s, autocommit=True) as conn:
         job = claim_next(conn)
@@ -124,6 +134,8 @@ def run_once(s: Settings, store: FileStore | None = None, llm=None, out_root: Pa
         try:
             if job["status"] == "PROCESSING":
                 process_job(s, conn, job, store, llm, out_root)
+                if auto_publish:
+                    auto_publish_job(s, conn, job["job_id"])
             else:
                 publish_job(s, conn, job)
         except Exception as e:  # noqa: BLE001
@@ -132,13 +144,22 @@ def run_once(s: Settings, store: FileStore | None = None, llm=None, out_root: Pa
         return job["job_id"]
 
 
-def run_forever(s: Settings, store: FileStore | None = None, poll_interval_s: float | None = None) -> None:
-    interval = float(poll_interval_s or knowledge_cfg()["worker"]["poll_interval_s"])
+def run_forever(s: Settings, store: FileStore | None = None, poll_interval_s: float | None = None,
+                stop: threading.Event | None = None, auto_publish: bool | None = None) -> None:
+    wcfg = knowledge_cfg()["worker"]
+    interval = float(poll_interval_s or wcfg["poll_interval_s"])
+    auto = bool(wcfg.get("auto_publish")) if auto_publish is None else auto_publish
+    stop = stop or threading.Event()
     with pg_connect(s, autocommit=True) as conn:
         n = recover_interrupted(conn)
     if n:
         log.warning("%d job dở dang → FAILED", n)
-    log.info("Worker chạy (ns=%s, poll %.1fs)", s.pg_schema, interval)
-    while True:
-        if run_once(s, store) is None:
-            time.sleep(interval)
+    log.info("Worker chạy (ns=%s, poll %.1fs, tự phát hành: %s)", s.pg_schema, interval, auto)
+    while not stop.is_set():
+        try:
+            done = run_once(s, store, auto_publish=auto)
+        except Exception as e:  # noqa: BLE001 – lỗi kết nối DB…: chờ rồi thử lại, không dừng worker
+            log.warning("Worker lỗi: %s", e)
+            done = None
+        if done is None:
+            stop.wait(interval)

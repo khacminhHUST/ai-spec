@@ -111,6 +111,26 @@ def test_worker_job_do_dang_thanh_failed(conn):
     assert st["job_3"][0] == "PUBLISHING" and st["job_4"][0] == "DRAFT"
 
 
+def test_worker_tu_phat_hanh(conn, kn_ns, monkeypatch):
+    """auto_publish: xử lý xong (DRAFT) → phát hành luôn, người upload là người phát hành; tắt → dừng ở DRAFT."""
+    from app.services.knowledge import worker
+
+    published = []
+    monkeypatch.setattr(worker, "process_job", lambda s, c, job, *a, **k: worker._update(
+        c, job["job_id"], status="DRAFT", step=None, artifact_dir="nhap"))
+    monkeypatch.setattr(worker, "publish_job", lambda s, c, job: (
+        published.append((job["job_id"], job["artifact_dir"])),
+        worker._update(c, job["job_id"], status="PUBLISHED", step=None)))
+    _job(conn, "job_auto")
+    conn.execute("UPDATE ingest_jobs SET uploaded_by = 'u1' WHERE job_id = 'job_auto'")
+    assert worker.run_once(kn_ns, auto_publish=True) == "job_auto"
+    r = conn.execute("SELECT status, published_by FROM ingest_jobs WHERE job_id = 'job_auto'").fetchone()
+    assert (r["status"], r["published_by"]) == ("PUBLISHED", "u1") and published == [("job_auto", "nhap")]
+    _job(conn, "job_tay")
+    assert worker.run_once(kn_ns) == "job_tay"
+    assert conn.execute("SELECT status FROM ingest_jobs WHERE job_id = 'job_tay'").fetchone()["status"] == "DRAFT"
+
+
 def test_mot_file_mot_job_hieu_luc(conn):
     _job(conn, "job_x", h="hash1")
     with pytest.raises(psycopg.errors.UniqueViolation):

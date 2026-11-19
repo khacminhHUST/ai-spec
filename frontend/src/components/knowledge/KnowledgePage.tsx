@@ -6,20 +6,17 @@ import {
   type KnowledgeOptions,
   type Project,
   type TreeProject,
-  type UploadPreset,
 } from "../../knowledgeApi";
 import JobQueue from "./JobQueue";
 import JobReview from "./JobReview";
 import ProjectDetail from "./ProjectDetail";
 import ProjectsBoard from "./ProjectsBoard";
-import UploadForm from "./UploadForm";
 import "./knowledge.css";
 
-type View = "projects" | "upload" | "queue";
+type View = "projects" | "queue";
 
 const TABS: { id: View; label: string }[] = [
   { id: "projects", label: "Dự án" },
-  { id: "upload", label: "Tải lên" },
   { id: "queue", label: "Hàng chờ xử lý" },
 ];
 
@@ -29,7 +26,7 @@ interface Props {
 }
 
 /** Tab "Kho tri thức" (docs/knowledge-admin.md mục 7): tài liệu quản lý theo dự án – lưới dự án → chi tiết dự án
- *  (tài liệu theo luồng, sửa / chuyển dự án); tải lên gọn; hàng chờ xử lý + duyệt. Điều hướng bằng state. */
+ *  (tài liệu theo luồng, sửa / chuyển dự án, tải lên ở khung bên cạnh); hàng chờ xử lý + duyệt. Điều hướng bằng state. */
 export default function KnowledgePage({ userId }: Props) {
   const [view, setView] = useState<View>("projects");
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -39,7 +36,6 @@ export default function KnowledgePage({ userId }: Props) {
   const [tree, setTree] = useState<TreeProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preset, setPreset] = useState<UploadPreset | null>(null);
 
   const onError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
   const reload = useCallback(
@@ -60,13 +56,8 @@ export default function KnowledgePage({ userId }: Props) {
   const go = (v: View) => {
     setError(null);
     setJobId(null);
-    setPreset(null);
     setView(v);
     if (v === "projects") void reload();
-  };
-  const openUpload = (p: UploadPreset) => {
-    go("upload");
-    setPreset(p);
   };
 
   return (
@@ -116,7 +107,6 @@ export default function KnowledgePage({ userId }: Props) {
               options={options}
               projects={projects}
               onBack={() => setProjectId(null)}
-              onUpload={openUpload}
               onOpenQueue={() => go("queue")}
               onChanged={() => void reload()}
               onError={onError}
@@ -129,19 +119,6 @@ export default function KnowledgePage({ userId }: Props) {
               onCreated={(p) => {
                 void reload().then(() => setProjectId(p.project_id));
               }}
-              onError={onError}
-            />
-          )
-        ) : view === "upload" ? (
-          options && (
-            <UploadForm
-              key={JSON.stringify(preset)}
-              preset={preset}
-              userId={userId}
-              options={options}
-              projects={projects}
-              onProjectsChanged={reload}
-              onUploaded={() => go("queue")}
               onError={onError}
             />
           )

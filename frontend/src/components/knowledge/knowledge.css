@@ -1239,3 +1239,87 @@ input[type="radio"] {
     width: auto;
   }
 }
+
+/* ---------- lịch sử revision (SeriesHistory) + xem PDF ---------- */
+.kn-revs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.kn-rev {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kn-rev-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kn-series {
+  position: relative;
+}
+
+.kn-series .kp-series-head {
+  padding-right: 36px; /* chừa chỗ nút đóng */
+}
+
+.kn-series-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.kn-pdf-msg {
+  display: grid;
+  place-items: center;
+}
+
+.kn-rev-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.kn-rev-title {
+  overflow-wrap: anywhere;
+}
+
+.kn-rev:hover {
+  background: var(--bg-subtle);
+}
+
+.kn-rev .kn-actions {
+  flex-shrink: 0;
+}
+
+.kp-modal.kp-modal-pdf {
+  width: min(1100px, calc(100vw - 32px));
+}
+
+.kn-pdf {
+  width: 100%;
+  height: calc(100dvh - 140px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+@media (max-width: 640px) {
+  .kn-rev {
+    flex-wrap: wrap;
+  }
+
+  .kn-pdf {
+    height: 75dvh;
+  }
+}

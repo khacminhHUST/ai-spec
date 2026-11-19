@@ -241,6 +241,14 @@ export interface UploadPreset {
   doc_code?: string;
 }
 export const fileUrl = (docId: string) => `/knowledge/documents/${enc(docId)}/file`;
+export const fileDownloadUrl = (docId: string) => `${fileUrl(docId)}?download=1`;
+/** PDF dạng blob URL để xem trong khung (không phụ thuộc header tải xuống của server). Người gọi revoke khi xong. */
+export async function filePreviewUrl(docId: string): Promise<string> {
+  const r = await fetch(fileUrl(docId));
+  if (!r.ok) throw new Error(r.status === 404 ? "không còn file gốc" : `lỗi tải file (${r.status})`);
+  const blob = await r.blob();
+  return URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+}
 
 // ---- upload / job
 export function uploadDocument(file: File, meta: UploadMeta, userId: string) {

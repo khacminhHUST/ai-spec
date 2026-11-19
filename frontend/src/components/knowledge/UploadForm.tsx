@@ -1,54 +1,42 @@
 import { useEffect, useMemo, useState } from "react";
+import Icon from "../Icon";
 import {
-  createProject,
   getTree,
   streamLabel,
   uploadDocument,
   type KnowledgeOptions,
-  type Project,
   type SeriesNode,
   type UploadMeta,
   type UploadPreset,
 } from "../../knowledgeApi";
 
 interface Props {
+  projectId: string;
   preset?: UploadPreset | null;
   userId: string;
   options: KnowledgeOptions;
-  projects: Project[];
-  onProjectsChanged: () => Promise<unknown>;
   onUploaded: () => void;
+  onClose: () => void;
   onError: (e: unknown) => void;
 }
 
-const NEW = "__new__";
-
-/** Upload gọn (docs/knowledge-admin.md mục 2.1): File + Dự án + Luồng. Loại tài liệu, phân hệ, revision, ngày ban
- *  hành… hệ thống tự nhận diện khi xử lý, kiểm tra / sửa ở bước duyệt. Mặc định là tài liệu mới; tùy chọn chọn
- *  "bản sửa đổi của tài liệu đã có" để bản mới thay bản cũ. */
-export default function UploadForm({ preset, userId, options, projects, onProjectsChanged, onUploaded, onError }: Props) {
+/** Tải tài liệu lên 1 dự án (khung bên cạnh trong trang dự án, docs/knowledge-admin.md mục 2.1): File + Luồng;
+ *  phân hệ tùy chọn (để trống → hệ thống tự nhận diện). Loại tài liệu, revision, ngày ban hành… tự nhận diện,
+ *  sửa ở bước duyệt. Mặc định là tài liệu mới; chọn "bản sửa đổi" để bản mới thay bản cũ. */
+export default function UploadForm({ projectId, preset, userId, options, onUploaded, onClose, onError }: Props) {
   const [file, setFile] = useState<File | null>(null);
-  const [projectId, setProjectId] = useState(preset?.project_id ?? projects[0]?.project_id ?? "");
   const [stream, setStream] = useState(preset?.stream ?? "DESIGN_CONSULTANT");
+  const [disciplines, setDisciplines] = useState<string[]>([]);
   const [isRevision, setIsRevision] = useState(!!preset?.doc_code);
   const [seriesCode, setSeriesCode] = useState(preset?.doc_code ?? "");
   const [series, setSeries] = useState<(SeriesNode & { stream: string })[]>([]);
-  const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const creating = projectId === NEW;
   useEffect(() => {
-    if (!projectId && projects[0]) setProjectId(projects[0].project_id);
-  }, [projects, projectId]);
-  useEffect(() => {
-    if (!projectId || creating) {
-      setSeries([]);
-      return;
-    }
     getTree(projectId)
       .then((t) => setSeries((t[0]?.streams ?? []).flatMap((st) => st.series.map((s) => ({ ...s, stream: st.stream })))))
       .catch(onError);
-  }, [projectId, creating, onError]);
+  }, [projectId, onError]);
 
   const chosen = useMemo(() => series.find((s) => s.doc_code === seriesCode), [series, seriesCode]);
   useEffect(() => {
@@ -61,26 +49,10 @@ export default function UploadForm({ preset, userId, options, projects, onProjec
     if (!f.name.toLowerCase().endsWith(".pdf")) onError("Chỉ nhận file PDF.");
     else if (f.size > options.max_upload_mb * 1024 * 1024) onError(`File vượt giới hạn ${options.max_upload_mb} MB.`);
   };
+  const toggleDisc = (d: string) =>
+    setDisciplines((v) => (v.includes(d) ? v.filter((x) => x !== d) : [...v, d]));
 
-  const createNew = async () => {
-    setBusy(true);
-    try {
-      const p = await createProject({ name: newName.trim() });
-      await onProjectsChanged();
-      setProjectId(p.project_id);
-      setNewName("");
-    } catch (e) {
-      onError(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const missing = [
-    !file && "file PDF",
-    (!projectId || creating) && "dự án",
-    isRevision && !seriesCode && "tài liệu cần thay",
-  ].filter(Boolean) as string[];
+  const missing = [!file && "file PDF", isRevision && !seriesCode && "tài liệu cần thay"].filter(Boolean) as string[];
 
   const submit = async () => {
     if (!file || missing.length) return;
@@ -89,6 +61,7 @@ export default function UploadForm({ preset, userId, options, projects, onProjec
       stream,
       series: isRevision ? { mode: "revision", doc_code: seriesCode } : { mode: "new" },
     };
+    if (!isRevision && disciplines.length) meta.disciplines = disciplines; // bản sửa đổi: lấy phân hệ theo bộ
     setBusy(true);
     try {
       await uploadDocument(file, meta, userId);
@@ -102,66 +75,20 @@ export default function UploadForm({ preset, userId, options, projects, onProjec
 
   return (
     <form
-      className="kn-card kn-form kp-upload"
+      className="kn-card kn-form kp-upload kn-series"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
       }}
     >
-      <h3>Tải tài liệu lên</h3>
+      <button type="button" className="icon-btn kn-series-close" onClick={onClose} aria-label="Đóng">
+        <Icon name="x" />
+      </button>
+      <h3 className="kp-series-head">{isRevision ? "Thêm revision" : "Tải tài liệu lên"}</h3>
       <label className="kn-field">
         <span>File PDF *</span>
         <input type="file" accept="application/pdf,.pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
       </label>
-      <div className="kn-grid">
-        <label className="kn-field">
-          <span>Dự án *</span>
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            {projects.length === 0 && <option value="">(chưa có dự án)</option>}
-            {projects.map((p) => (
-              <option key={p.project_id} value={p.project_id}>
-                {p.name}
-              </option>
-            ))}
-            <option value={NEW}>+ Tạo dự án mới…</option>
-          </select>
-        </label>
-        <label className="kn-field">
-          <span>Luồng xử lý *</span>
-          <select value={stream} disabled={isRevision && !!chosen} onChange={(e) => setStream(e.target.value)}>
-            {options.streams.map((s) => (
-              <option key={s.value} value={s.value}>
-                {streamLabel(s.value)}
-              </option>
-            ))}
-          </select>
-          <small className="muted">{options.streams.find((s) => s.value === stream)?.label}</small>
-        </label>
-      </div>
-
-      {creating && (
-        <div className="kn-card kn-inline">
-          <strong>Tạo dự án mới</strong>
-          <div className="kn-row">
-            <input
-              value={newName}
-              placeholder="Tên dự án"
-              aria-label="Tên dự án mới"
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (newName.trim()) void createNew();
-                }
-              }}
-            />
-            <button type="button" className="kn-btn small primary" disabled={busy || !newName.trim()} onClick={createNew}>
-              Tạo
-            </button>
-          </div>
-          <span className="small muted">Ngày bắt đầu / kết thúc dự kiến bổ sung sau ở trang dự án.</span>
-        </div>
-      )}
 
       <div className="kn-field">
         <label className="kp-check">
@@ -171,9 +98,9 @@ export default function UploadForm({ preset, userId, options, projects, onProjec
             disabled={series.length === 0}
             onChange={(e) => setIsRevision(e.target.checked)}
           />
-          Đây là bản sửa đổi (revision mới) của tài liệu đã có trong dự án
+          Bản sửa đổi (revision mới) của tài liệu đã có
         </label>
-        {isRevision && (
+        {isRevision ? (
           <select value={seriesCode} onChange={(e) => setSeriesCode(e.target.value)} aria-label="Tài liệu cần thay">
             <option value="">(chọn tài liệu cần thay)</option>
             {series.map((s) => (
@@ -182,13 +109,39 @@ export default function UploadForm({ preset, userId, options, projects, onProjec
               </option>
             ))}
           </select>
+        ) : (
+          <small className="muted">Không chọn → lưu thành tài liệu mới.</small>
         )}
-        {!isRevision && <small className="muted">Không chọn → lưu thành tài liệu mới.</small>}
       </div>
 
+      <label className="kn-field">
+        <span>Luồng *</span>
+        <select value={stream} disabled={isRevision && !!chosen} onChange={(e) => setStream(e.target.value)}>
+          {options.streams.map((s) => (
+            <option key={s.value} value={s.value}>
+              {streamLabel(s.value)}
+            </option>
+          ))}
+        </select>
+        <small className="muted">{options.streams.find((s) => s.value === stream)?.label}</small>
+      </label>
+
+      {!isRevision && (
+        <div className="kn-field">
+          <span>Phân hệ (tùy chọn – để trống thì hệ thống tự nhận diện)</span>
+          <div className="kn-checks">
+            {options.disciplines.map((d) => (
+              <label key={d}>
+                <input type="checkbox" checked={disciplines.includes(d)} onChange={() => toggleDisc(d)} /> {d}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p className="small muted">
-        Loại tài liệu, phân hệ, revision, ngày ban hành, tiêu đề: hệ thống tự nhận diện khi xử lý. Kiểm tra và sửa ở
-        bước duyệt (Hàng chờ xử lý) trước khi phát hành; sau khi phát hành vẫn sửa được trong dự án.
+        Tải lên xong hệ thống tự xử lý và đưa vào kho (theo dõi ở Hàng chờ xử lý). Loại tài liệu, revision, ngày ban
+        hành, tiêu đề được tự nhận diện; nếu sai thì sửa trong trang dự án.
       </p>
       <div className="kn-row">
         <span className="small muted">{missing.length > 0 && `Còn thiếu: ${missing.join(", ")}`}</span>

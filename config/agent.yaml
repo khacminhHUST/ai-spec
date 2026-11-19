@@ -20,9 +20,10 @@ sandbox:
   image: mep-sandbox:latest
   runtime: runc             # runsc khi production
   cpus: 1
-  memory: 1g
+  memory: 512m              # đo 2026-11-19: xuất Excel 20k dòng + Word 2k đoạn ≈ 170 MB đỉnh
+  max_sandboxes: 12         # trần số sandbox cùng lúc (server 15 GB, 8 nhân: ~6 GB cho sandbox); 0 = không giới hạn
   pids_limit: 128
-  tmp_size: 256m            # tmpfs /tmp
+  tmp_size: 128m            # tmpfs /tmp (tính vào RAM của sandbox)
   exec_timeout_s: 60        # mặc định mỗi lần run_code
   max_exec_timeout_s: 120   # trần timeout_s mà agent được xin
   idle_ttl_s: 1800
@@ -30,4 +31,7 @@ sandbox:
   max_output_file_mb: 20
   output_max_chars: 4000    # cắt stdout/stderr trả về agent
   read_file_max_chars: 16000  # mỗi lần read_file (đọc tiếp bằng offset)
+conversations:
+  retention_days: 30        # xóa hội thoại không hoạt động quá N ngày (0 = giữ vĩnh viễn)
+  purge_interval_s: 86400   # chạy lúc khởi động rồi mỗi ngày 1 lần
 skills_dir: skills

@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Message } from "../types";
+import { useState } from "react";
+import type { Message, ToolRun } from "../types";
 import Citations from "./Citations";
 import Icon, { Spinner } from "./Icon";
 
@@ -38,6 +39,34 @@ function formatSize(n: number): string {
   return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** Các bước tool: đang chạy thì mở; xong thì thu gọn thành 1 dòng, bấm để xổ ra / ẩn đi */
+function ToolSteps({ tools, finished }: { tools: ToolRun[]; finished: boolean }) {
+  const [open, setOpen] = useState(false);
+  const list = (
+    <ul className="tools">
+      {tools.map((t, i) => (
+        <li key={i} className={t.done ? (t.ok ? "ok" : "fail") : "running"}>
+          <span className="tool-mark">
+            {t.done ? <Icon name={t.ok ? "check" : "x"} size={14} label={t.ok ? "Xong" : "Lỗi"} /> : <Spinner size={12} />}
+          </span>
+          {TOOL_LABEL[t.tool] ?? t.tool}
+          {t.summary && <span className="tool-summary"> – {t.summary}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+  if (!finished) return list;
+  return (
+    <div className="tools-done">
+      <button type="button" className={`tools-toggle${open ? " open" : ""}`} onClick={() => setOpen(!open)}>
+        <Icon name="chevron-right" size={14} />
+        Đã dùng {tools.length} công cụ
+      </button>
+      {open && list}
+    </div>
+  );
+}
+
 interface Props {
   m: Message;
   onConfirm?: (confirmId: string, approve: boolean) => void;
@@ -61,6 +90,8 @@ export default function MessageBubble({ m, onConfirm }: Props) {
     );
   const badge = m.status ? STATUS_LABEL[m.status] : undefined;
   const step = m.step ? (STEP_LABEL[m.step] ?? m.step) : null;
+  // Có câu trả lời cuối → thu gọn danh sách bước tool (giữ mở khi chờ xác nhận hoặc lỗi)
+  const finished = !m.step && !!m.content && m.status !== "WAITING_CONFIRM" && !m.error;
   return (
     <div className="msg assistant">
       <span className="msg-avatar" aria-hidden>
@@ -68,19 +99,7 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       </span>
       <div className="msg-body">
       {badge && <span className={"badge " + m.status}>{badge}</span>}
-      {m.tools && m.tools.length > 0 && (
-        <ul className="tools">
-          {m.tools.map((t, i) => (
-            <li key={i} className={t.done ? (t.ok ? "ok" : "fail") : "running"}>
-              <span className="tool-mark">
-                {t.done ? <Icon name={t.ok ? "check" : "x"} size={14} label={t.ok ? "Xong" : "Lỗi"} /> : <Spinner size={12} />}
-              </span>
-              {TOOL_LABEL[t.tool] ?? t.tool}
-              {t.summary && <span className="tool-summary"> – {t.summary}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+      {m.tools && m.tools.length > 0 && <ToolSteps tools={m.tools} finished={finished} />}
       {m.content && (
         <div className="md">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>

@@ -18,6 +18,10 @@ class SandboxError(Exception):
     """Lỗi thao tác sandbox (đường dẫn sai, file không có, quá cỡ…) – tool chuyển thành thông báo cho agent."""
 
 
+class SandboxBusy(SandboxError):
+    """Đã đủ trần số sandbox (agent.yaml › sandbox.max_sandboxes) – không tạo thêm, người dùng thử lại sau."""
+
+
 @dataclass
 class ExecResult:
     exit_code: int

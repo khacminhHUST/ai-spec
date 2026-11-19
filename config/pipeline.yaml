@@ -29,15 +29,19 @@ retrieval:
   branch_timeout_s: 5
 
 rerank:
-  # 2026-10-28: chạy cục bộ (GPU) thay DeepInfra Qwen3-Reranker-8B (cần nạp tiền).
-  # Quay lại: model: Qwen/Qwen3-Reranker-8B · provider: deepinfra
-  model: Qwen/Qwen3-Reranker-0.6B
-  provider: local                 # transformers, GPU nếu có
-  device: auto
-  batch_size: 32
-  max_length: 640             # child ≤ 400 token + breadcrumb + câu hỏi
+  # 2026-11-19: Gemini chấm điểm (server triển khai không có GPU: 0.6B trên CPU 8 nhân ≈ 83s / 50 đoạn).
+  # Câu hỏi vàng: 3.8-flash 100% (2 lần chạy), TTFT p50 8.2–9.0s; flash-lite chỉ 83% (bỏ sót bảng) → không dùng.
+  # Quay lại cục bộ: model: Qwen/Qwen3-Reranker-0.6B · provider: local · device: auto · batch_size: 32 · max_length: 640
+  # Hoặc API: model: Qwen/Qwen3-Reranker-8B · provider: deepinfra
+  model: gemini-3.8-flash
+  provider: gemini                # LLM chấm 0–10 / đoạn (app/providers/reranker.py › GeminiReranker)
+  thinking_level: low             # minimal nhanh hơn (50 đoạn: 1.7s vs ~6s) nhưng câu vàng #12 trả lời bịa thay vì NOT_FOUND
+  batch_size: 40                  # số đoạn / 1 lần gọi; nhiều hơn → chia lô gọi song song
+  max_chars: 2000                 # cắt mỗi đoạn (child ≤ 400 token)
+  gemini_min_score: 0.6           # ngưỡng riêng thang Gemini: ≥ 6/10 = chứa (một phần) câu trả lời; 3–5 chỉ cùng chủ đề
+                                  # (đoạn LLM bỏ sót / lô lỗi → điểm = ngưỡng này: vẫn giữ)
   instruction: "Given a question from an MEP engineer, judge whether the passage from project documents helps answer it"
-  min_score: 0.3
+  min_score: 0.3                  # ngưỡng cho reranker P(yes) (local / deepinfra / mock)
   max_per_doc: 5
 
 context:

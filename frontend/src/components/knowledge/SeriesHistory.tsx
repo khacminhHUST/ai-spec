@@ -1,16 +1,14 @@
 import Icon from "../Icon";
 import { useCallback, useEffect, useState } from "react";
 import {
-  deleteRevision,
   deleteSeries,
-  fileUrl,
+  fileDownloadUrl,
+  filePreviewUrl,
   fmtDate,
-  fmtTime,
   getSeries,
   setLatest,
   streamLabel,
   unpublishSeries,
-  updateDocument,
   updateSeries,
   type KnowledgeOptions,
   type Project,
@@ -18,6 +16,7 @@ import {
   type SeriesHistory as History,
   type UploadPreset,
 } from "../../knowledgeApi";
+import Modal from "./Modal";
 
 interface Props {
   docCode: string;
@@ -32,30 +31,14 @@ interface Props {
   onError: (e: unknown) => void;
 }
 
-interface DocForm {
-  revision: string;
-  issue_date: string;
-  stage: string;
-  title: string;
-  issuer: string;
-}
-
 interface SeriesForm {
   project_id: string;
   stream: string;
   disciplines: string[];
 }
 
-const toDocForm = (r: Revision): DocForm => ({
-  revision: r.revision ?? "",
-  issue_date: r.issue_date ?? "",
-  stage: r.stage ?? "",
-  title: r.title ?? "",
-  issuer: r.issuer ?? "",
-});
-
-/** Lịch sử revision của 1 bộ: lọc; thêm revision; sửa metadata (từng revision / cả bộ: dự án, luồng, phân hệ –
- *  đổi dự án = chuyển tài liệu sang dự án khác); đặt hiệu lực, gỡ, xóa. */
+/** Lịch sử revision của 1 bộ: lọc; xem PDF; thêm revision; sửa cả bộ (dự án, luồng, phân hệ – đổi dự án = chuyển
+ *  tài liệu sang dự án khác); đặt hiệu lực, gỡ, xóa. */
 export default function SeriesHistory({
   docCode,
   userId,
@@ -73,8 +56,7 @@ export default function SeriesHistory({
   const [to, setTo] = useState("");
   const [stage, setStage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [editDoc, setEditDoc] = useState<string | null>(null);
-  const [docForm, setDocForm] = useState<DocForm | null>(null);
+  const [preview, setPreview] = useState<Revision | null>(null);
   const [seriesForm, setSeriesForm] = useState<SeriesForm | null>(null);
 
   const load = useCallback(() => {
@@ -88,7 +70,7 @@ export default function SeriesHistory({
 
   useEffect(load, [load]);
   useEffect(() => {
-    setEditDoc(null);
+    setPreview(null);
     setSeriesForm(null);
   }, [docCode]);
 
@@ -111,23 +93,6 @@ export default function SeriesHistory({
   if (!data) return <div className="muted pad">Đang tải…</div>;
   const stages = Array.from(new Set(data.revisions.map((r) => r.stage).filter(Boolean))) as string[];
   const head = data.revisions.find((r) => r.is_latest) ?? data.revisions[0];
-
-  const startEditDoc = (r: Revision) => {
-    setEditDoc(r.doc_id);
-    setDocForm(toDocForm(r));
-  };
-  const saveDoc = async (r: Revision) => {
-    if (!docForm) return;
-    const old = toDocForm(r);
-    // chỉ gửi trường đã đổi; để trống = xóa giá trị
-    const patch = Object.fromEntries(
-      (Object.keys(docForm) as (keyof DocForm)[])
-        .filter((k) => docForm[k].trim() !== old[k])
-        .map((k) => [k, docForm[k].trim() || null]),
-    );
-    if (Object.keys(patch).length === 0) return setEditDoc(null);
-    if (await act(() => updateDocument(r.doc_id, patch))) setEditDoc(null);
-  };
 
   const startEditSeries = () =>
     head &&
@@ -177,7 +142,12 @@ export default function SeriesHistory({
   };
 
   return (
-    <div className="kn-card">
+    <div className="kn-card kn-series">
+      {onClose && (
+        <button className="icon-btn kn-series-close" onClick={onClose} aria-label="Đóng">
+          <Icon name="x" />
+        </button>
+      )}
       <div className="kn-row">
         <div className="kp-series-head">
           <strong className="kp-series-title">{head?.title || docCode}</strong>
@@ -210,11 +180,6 @@ export default function SeriesHistory({
           <button className="kn-btn small danger" disabled={busy} onClick={removeSeries}>
             Xóa cả bộ
           </button>
-          {onClose && (
-            <button className="icon-btn" onClick={onClose} aria-label="Đóng">
-              <Icon name="x" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -223,7 +188,7 @@ export default function SeriesHistory({
           <strong>Sửa thông tin tài liệu (áp cho cả {data.n_revisions} revision)</strong>
           <div className="kn-grid">
             <label className="kn-field">
-              <span>Dự án (đổi = chuyển tài liệu sang dự án khác)</span>
+              <span>Dự án</span>
               <select value={seriesForm.project_id} onChange={(e) => setSeriesForm({ ...seriesForm, project_id: e.target.value })}>
                 {projects.map((p) => (
                   <option key={p.project_id} value={p.project_id}>
@@ -254,7 +219,7 @@ export default function SeriesHistory({
             </div>
           </div>
           <div className="kn-row">
-            <span className="small muted">Mã bộ ({docCode}) giữ nguyên để revision sau vẫn nối đúng bộ.</span>
+            <span className="small muted">Đổi dự án = chuyển cả bộ sang dự án đó.</span>
             <span className="kn-actions">
               <button className="kn-btn small" disabled={busy} onClick={() => setSeriesForm(null)}>
                 Hủy
@@ -288,121 +253,86 @@ export default function SeriesHistory({
           </select>
         </label>
       </div>
-      <div className="table-wrap">
-      <table className="kn-table stack">
-        <thead>
-          <tr>
-            <th>Revision</th>
-            <th>Ngày ban hành</th>
-            <th>Giai đoạn</th>
-            <th>Tiêu đề / Đơn vị ban hành</th>
-            <th>Phát hành vào hệ thống</th>
-            <th>Người phát hành</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.revisions.length === 0 && (
-            <tr>
-              <td colSpan={7} className="muted stack-full">
-                Không có revision khớp bộ lọc
-              </td>
-            </tr>
-          )}
-          {data.revisions.map((r) =>
-            editDoc === r.doc_id && docForm ? (
-              <tr key={r.doc_id} className="kn-editing">
-                <td data-label="Revision">
-                  <input value={docForm.revision} onChange={(e) => setDocForm({ ...docForm, revision: e.target.value })} />
-                </td>
-                <td data-label="Ngày ban hành">
-                  <input
-                    type="date"
-                    value={docForm.issue_date}
-                    onChange={(e) => setDocForm({ ...docForm, issue_date: e.target.value })}
-                  />
-                </td>
-                <td data-label="Giai đoạn">
-                  <select value={docForm.stage} onChange={(e) => setDocForm({ ...docForm, stage: e.target.value })}>
-                    <option value="">–</option>
-                    {Array.from(new Set([...(options?.stages ?? []), ...(docForm.stage ? [docForm.stage] : [])])).map(
-                      (s) => (
-                        <option key={s}>{s}</option>
-                      ),
-                    )}
-                  </select>
-                </td>
-                <td data-label="Tiêu đề / Đơn vị">
-                  <input
-                    value={docForm.title}
-                    placeholder="Tiêu đề"
-                    onChange={(e) => setDocForm({ ...docForm, title: e.target.value })}
-                  />
-                  <input
-                    value={docForm.issuer}
-                    placeholder="Đơn vị ban hành"
-                    onChange={(e) => setDocForm({ ...docForm, issuer: e.target.value })}
-                  />
-                </td>
-                <td colSpan={2} className="small muted stack-full">
-                  Đổi revision / ngày ban hành không tự đổi bản hiệu lực – dùng "Đặt hiệu lực".
-                </td>
-                <td className="kn-actions">
-                  <button className="kn-btn small primary" disabled={busy} onClick={() => saveDoc(r)}>
-                    Lưu
-                  </button>
-                  <button className="kn-btn small" disabled={busy} onClick={() => setEditDoc(null)}>
-                    Hủy
-                  </button>
-                </td>
-              </tr>
-            ) : (
-              <tr key={r.doc_id} className={r.is_latest ? "kn-latest" : ""}>
-                <td data-label="Revision" className="stack-title">
-                  {r.revision ?? "?"} {r.is_latest && <span className="kn-tag ok">Hiệu lực</span>}
-                </td>
-                <td data-label="Ngày ban hành">{fmtDate(r.issue_date)}</td>
-                <td data-label="Giai đoạn">{r.stage ?? "–"}</td>
-                <td data-label="Tiêu đề / Đơn vị" title={r.doc_id}>
-                  {r.title ?? "–"}
-                  {r.issuer && <div className="small muted">{r.issuer}</div>}
-                </td>
-                <td data-label="Phát hành">{fmtTime(r.published_at ?? r.ingested_at)}</td>
-                <td data-label="Người phát hành">{r.published_by ?? (r.job_id ? "–" : "(CLI)")}</td>
-                <td className="kn-actions">
-                  {!r.is_latest && (
-                    <button
-                      className="kn-btn small"
-                      disabled={busy}
-                      onClick={() => act(() => setLatest(docCode, r.doc_id, userId))}
-                    >
-                      Đặt hiệu lực
-                    </button>
-                  )}
-                  <button className="kn-btn small" disabled={busy} onClick={() => startEditDoc(r)}>
-                    Sửa
-                  </button>
-                  <a className="kn-btn small" href={fileUrl(r.doc_id)} target="_blank" rel="noreferrer">
-                    File gốc
-                  </a>
-                  <button
-                    className="kn-btn small danger"
-                    disabled={busy}
-                    onClick={() =>
-                      data.n_revisions === 1
-                        ? removeSeries() // revision cuối → bộ biến mất
-                        : act(() => deleteRevision(r.doc_id), `Xóa revision ${r.revision ?? r.doc_id}? (file gốc vẫn giữ)`)
-                    }
-                  >
-                    Xóa
-                  </button>
-                </td>
-              </tr>
-            ),
-          )}
-        </tbody>
-      </table>
-      </div>
+      <ul className="kn-revs">
+        {data.revisions.length === 0 && <li className="muted pad">Không có revision khớp bộ lọc</li>}
+        {data.revisions.map((r) => (
+          <li key={r.doc_id} className={r.is_latest ? "kn-rev kn-latest" : "kn-rev"}>
+            <div className="kn-rev-main">
+              <span className="kn-rev-line">
+                <strong>Rev {r.revision ?? "?"}</strong>
+                {r.is_latest && <span className="kn-tag ok">Hiệu lực</span>}
+                <span className="small muted">
+                  {fmtDate(r.issue_date)}
+                  {r.stage && ` · ${r.stage}`}
+                </span>
+              </span>
+              <span className="small muted kn-rev-title">
+                {r.title ?? "–"}
+                {r.issuer && ` · ${r.issuer}`}
+              </span>
+            </div>
+            <span className="kn-actions">
+              <button className="kn-btn small" onClick={() => setPreview(r)}>
+                Xem
+              </button>
+              <a
+                className="kn-btn small"
+                href={fileDownloadUrl(r.doc_id)}
+                download={r.file_name || `${r.title || r.doc_id}.pdf`}
+              >
+                Tải xuống
+              </a>
+              {!r.is_latest && (
+                <button
+                  className="kn-btn small"
+                  disabled={busy}
+                  onClick={() => act(() => setLatest(docCode, r.doc_id, userId))}
+                >
+                  Đặt hiệu lực
+                </button>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {preview && (
+        <Modal
+          title={`${head?.title || docCode} – Rev ${preview.revision ?? "?"}`}
+          onClose={() => setPreview(null)}
+          className="kp-modal-pdf"
+        >
+          <PdfFrame docId={preview.doc_id} />
+        </Modal>
+      )}
     </div>
   );
+}
+
+/** Khung xem PDF: tải file thành blob rồi hiển thị (trình duyệt không tự tải xuống). */
+function PdfFrame({ docId }: { docId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    let made: string | null = null;
+    setUrl(null);
+    setErr(null);
+    filePreviewUrl(docId)
+      .then((u) => {
+        made = u;
+        if (alive) setUrl(u);
+        else URL.revokeObjectURL(u);
+      })
+      .catch((e) => alive && setErr(e instanceof Error ? e.message : String(e)));
+    return () => {
+      alive = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [docId]);
+
+  if (err) return <div className="kn-pdf kn-pdf-msg">{err}</div>;
+  if (!url) return <div className="kn-pdf kn-pdf-msg muted">Đang tải PDF…</div>;
+  return <iframe className="kn-pdf" src={url} title="Xem PDF" />;
 }

@@ -16,7 +16,7 @@ const split = (s: string) =>
     .filter(Boolean);
 
 /** Hộp thoại tạo / sửa dự án: chỉ bắt buộc tên; ngày bắt đầu / kết thúc dự kiến tùy chọn (sửa sau được).
- *  Nâng cao (thu gọn): mã dự án (trống → tự sinh từ tên), tên gọi khác để chat nhận ra dự án. */
+ *  Tên gọi khác (để chat nhận ra dự án) hiện ngay dưới tên. Nâng cao (thu gọn): mã dự án (trống → tự sinh từ tên). */
 export default function ProjectForm({ project, onSaved, onCancel }: Props) {
   const [name, setName] = useState(project?.name ?? "");
   const [start, setStart] = useState(project?.start_date ?? "");
@@ -61,6 +61,10 @@ export default function ProjectForm({ project, onSaved, onCancel }: Props) {
         <span>Tên dự án *</span>
         <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="VD DA Song Việt P1.14" />
       </label>
+      <label className="kn-field">
+        <span>Tên gọi khác (phân cách dấu phẩy) – để chat nhận ra dự án</span>
+        <input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Song Việt, P1.14" />
+      </label>
       <div className="kn-grid">
         <label className="kn-field">
           <span>Ngày bắt đầu</span>
@@ -82,10 +86,6 @@ export default function ProjectForm({ project, onSaved, onCancel }: Props) {
             <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Để trống: tự sinh từ tên" />
           </label>
         )}
-        <label className="kn-field">
-          <span>Tên gọi khác (phân cách dấu phẩy) – để chat nhận ra dự án</span>
-          <input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Song Việt, P1.14" />
-        </label>
       </details>
       {err && (
         <div className="kn-err small" role="alert">

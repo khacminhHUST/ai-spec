@@ -166,7 +166,7 @@ def check_a5(out, sbx):
 def check_a6(out, sbx):
     """Câu tra cứu đơn giản: chỉ tra tài liệu (không sandbox / nguồn ngoài), trả lời nhanh."""
     return {"chi_tra_tai_lieu": set(out["tools"]) == {"search_project_docs"},
-            "ttft_10s": bool(out["ttft"] and out["ttft"] < 10), "6_lan": "6 lần" in norm(out["answer"])}
+            "ttft_13s": bool(out["ttft"] and out["ttft"] < 13), "6_lan": "6 lần" in norm(out["answer"])}
 
 
 def check_a8(out, sbx):
@@ -246,7 +246,7 @@ def test_golden_through_assistant(harness):
                "seconds_p50": statistics.median(r["seconds"] for r in rows),
                "search_only_rate": sum(set(r["tools"]) == {"search_project_docs"} for r in rows) / len(rows)}
     print(json.dumps(summary, ensure_ascii=False), [r for r in final if not r["values"] or not all(r["values"])])
-    assert values_rate >= 0.85 and summary["ttft_p50"] < 10
+    assert values_rate >= 0.85 and summary["ttft_p50"] < 13   # nới từ 10s (2026-11-19: reranker Gemini +2–2.5s)
 
 
 def test_scenarios(harness):

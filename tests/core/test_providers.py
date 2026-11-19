@@ -72,3 +72,30 @@ def test_mock_chat_model():
     assert len(m.calls) == 3
     h = MockChatModel(handler=lambda msgs: msgs[-1].content.upper())
     assert "".join(c.content for c in h.stream("hello world")) == "HELLO WORLD"
+
+
+def test_gemini_reranker_cham_diem_va_bo_sot():
+    """LLM trả điểm 0–10 theo id → /10; id thiếu → missing_score (giữ lại); lô lớn chia nhỏ."""
+    import json
+    import re
+
+    from app.providers.reranker import GeminiReranker
+
+    def handler(msgs):
+        ids = [int(x) for x in re.findall(r"^\[(\d+)\]", msgs[-1].content, re.M)]
+        return json.dumps({"scores": [{"id": i, "score": 9 if "gió tươi" in msgs[-1].content.split(f"[{i}]")[1][:40]
+                                       else 1} for i in ids[:-1]]})   # cố tình bỏ sót đoạn cuối mỗi lô
+
+    llm = MockChatModel(handler=handler, calls=[])
+    r = GeminiReranker({"model": "x", "batch_size": 2, "gemini_min_score": 0.3}, settings=None, llm=llm)
+    sc = r.score("gió tươi gym?", ["gió tươi 10 l/s", "chiếu sáng", "cáp điện"])
+    assert sc == [0.9, 0.3, 0.3] and len(llm.calls) == 3   # 2 lô; lô 2 không có điểm → thử lại 1 lần; đoạn sót → 0.3
+
+
+def test_gemini_reranker_loi_giu_nguyen():
+    from app.providers.reranker import GeminiReranker
+
+    r = GeminiReranker({"model": "x", "gemini_min_score": 0.3}, settings=None, llm=MockChatModel(responses=["không phải JSON"],
+                                                                                           calls=[]))
+    assert r.score("q", ["a", "b"]) == [0.3, 0.3]
+    assert GeminiReranker.parse('{"scores": [{"id": 0, "score": 12}, {"id": 9, "score": 5}, {"id": "x"}]}', 2) == {0: 1.0}

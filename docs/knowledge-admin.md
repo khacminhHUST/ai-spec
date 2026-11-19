@@ -27,6 +27,13 @@ Dự án → Công trình → Luồng (stream) → Phân hệ (discipline) → B
 > - `GET /knowledge/tree` trả `[{project_id, name, start_date, end_date, n_series, n_documents, active_jobs,
 >   streams: [{stream, series: [...]}]}]`.
 
+> **Cập nhật 2026-11-19 – upload tự động hoàn toàn** (người dùng duyệt; ghi đè nguyên tắc "duyệt rồi mới phát hành"):
+> - `config/knowledge.yaml › worker.auto_publish: true`: xử lý xong phát hành luôn (người upload = `published_by`),
+>   không dừng ở `DRAFT`. Nhận diện sai → sửa sau trong trang dự án. Tắt (`false`) → quay lại bước duyệt.
+> - `worker.embedded: true`: server (`app/main.py` lifespan) tự chạy worker trong 1 thread nền; không cần
+>   `python -m app.cli.worker` (lệnh này vẫn dùng được, SKIP LOCKED nên chạy song song không nhận trùng job).
+> - UI: bỏ tab "Tải lên"; tải lên ở khung bên cạnh trong trang dự án, có chọn phân hệ (tùy chọn).
+
 Nguyên tắc:
 - **Chưa có đăng nhập và phân quyền.** `user_id` vẫn do client gửi. Mọi user như nhau, ai cũng upload, phát hành, xóa được. `user_id` chỉ được ghi lại để truy vết (`uploaded_by`, `published_by`). Sau này SSO sẽ thay.
 - **Không đổi** schema `documents`, `parent_chunks`, payload Qdrant (hợp đồng dữ liệu trong `docs/ingestion.md`).

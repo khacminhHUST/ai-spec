@@ -110,6 +110,15 @@ class InMemoryRepo(Repo):
     def get_conversation(self, conversation_id):
         return self.conversations.get(conversation_id)
 
+    def stale_conversations(self, days):
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        return [cid for cid, c in self.conversations.items() if c.get("updated_at") and c["updated_at"] < cutoff]
+
+    def delete_conversation(self, conversation_id):
+        self.conversations.pop(conversation_id, None)
+
 
 class FakeRetriever(Retriever):
     """Lọc payload như Qdrant; điểm = tỷ lệ token query có trong child.text."""

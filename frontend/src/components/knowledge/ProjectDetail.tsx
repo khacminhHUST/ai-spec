@@ -11,6 +11,7 @@ import {
 } from "../../knowledgeApi";
 import ProjectForm from "./ProjectForm";
 import SeriesHistory from "./SeriesHistory";
+import UploadForm from "./UploadForm";
 
 interface Props {
   project: Project | null;
@@ -19,7 +20,6 @@ interface Props {
   options: KnowledgeOptions | null;
   projects: Project[];
   onBack: () => void;
-  onUpload: (preset: UploadPreset) => void;
   onOpenQueue: () => void;
   onChanged: () => void;
   onError: (e: unknown) => void;
@@ -32,7 +32,8 @@ const norm = (s: string) =>
     .replace(/đ/gi, "d")
     .toLowerCase();
 
-/** Tài liệu của 1 dự án, chia theo luồng; chọn 1 bộ → lịch sử revision, sửa thông tin, chuyển dự án, xóa. */
+/** Tài liệu của 1 dự án, chia theo luồng. Khung bên cạnh: chọn 1 bộ → lịch sử revision, sửa / chuyển dự án, xóa;
+ *  hoặc tải tài liệu lên dự án này. */
 export default function ProjectDetail({
   project,
   node,
@@ -40,21 +41,30 @@ export default function ProjectDetail({
   options,
   projects,
   onBack,
-  onUpload,
   onOpenQueue,
   onChanged,
   onError,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null); // doc_code đang xem
+  const [upload, setUpload] = useState<UploadPreset | null>(null); // đang mở khung tải lên
+  const hasPanel = !!(selected || upload);
+  const onUpload = (preset: UploadPreset) => {
+    setSelected(null);
+    setUpload(preset);
+  };
+  const openSeries = (code: string | null) => {
+    setUpload(null);
+    setSelected(code);
+  };
   const detailRef = useRef<HTMLElement>(null);
 
   // Khung hẹp (điện thoại, iframe hẹp): chi tiết nằm dưới danh sách → cuộn tới khi chọn tài liệu
   useEffect(() => {
-    if (selected && window.matchMedia("(max-width: 1179px)").matches)
+    if (hasPanel && window.matchMedia("(max-width: 1179px)").matches)
       detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [selected]);
+  }, [selected, upload, hasPanel]);
 
   const streams = useMemo(() => {
     const q = norm(query.trim());
@@ -122,7 +132,7 @@ export default function ProjectDetail({
         />
       )}
 
-      <div className={"kp-docs" + (selected ? " has-detail" : "")}>
+      <div className={"kp-docs" + (hasPanel ? " has-detail" : "")}>
         <section className="kp-doclist">
           {node.n_series > 0 && (
             <label className="kp-search">
@@ -164,7 +174,7 @@ export default function ProjectDetail({
                   <button
                     key={s.doc_code}
                     className={"kp-doc" + (selected === s.doc_code ? " active" : "")}
-                    onClick={() => setSelected(s.doc_code === selected ? null : s.doc_code)}
+                    onClick={() => openSeries(s.doc_code === selected ? null : s.doc_code)}
                     aria-expanded={selected === s.doc_code}
                   >
                     <Icon name="file" size={18} className="kp-doc-icon" />
@@ -191,6 +201,23 @@ export default function ProjectDetail({
             ))
           )}
         </section>
+        {upload && options && (
+          <section className="kp-docdetail" ref={detailRef}>
+            <UploadForm
+              key={JSON.stringify(upload)}
+              projectId={pid}
+              preset={upload}
+              userId={userId}
+              options={options}
+              onUploaded={() => {
+                setUpload(null);
+                onChanged(); // dòng "N file đang xử lý / chờ duyệt" ở đầu trang cập nhật
+              }}
+              onClose={() => setUpload(null)}
+              onError={onError}
+            />
+          </section>
+        )}
         {selected && (
           <section className="kp-docdetail" ref={detailRef}>
             <SeriesHistory

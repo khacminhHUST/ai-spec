@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
 
 # provider trong config → nhóm key/mock
-_PROVIDER_GROUP = {"deepinfra": "deepinfra", "google": "google", "google_genai": "google", "local": "local"}
+_PROVIDER_GROUP = {"deepinfra": "deepinfra", "google": "google", "google_genai": "google", "gemini": "google",
+                   "local": "local"}
 _NS_RE = re.compile(r"^[a-z_][a-z0-9_]{0,40}$")
 
 
