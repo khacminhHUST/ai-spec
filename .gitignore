@@ -24,3 +24,6 @@ S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/
 *.tar
 mep-models*/
 data/uploads/
+
+# file khóa tạm của Office
+~$*

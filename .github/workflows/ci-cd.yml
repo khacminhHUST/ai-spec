@@ -1,0 +1,83 @@
+# CI: unit test backend + build frontend (máy GitHub) – mọi PR và push lên main.
+# CD: push main (CI xanh) hoặc chạy tay → runner self-hosted trên server MEP chạy deploy/trithuc/deploy.sh.
+# Runner self-hosted KHÔNG BAO GIỜ chạy cho pull_request (repo public: PR từ fork không được đụng server).
+name: CI-CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Bỏ qua test (chỉ khi cần deploy gấp)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    if: ${{ !inputs.skip_tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Cài thư viện (torch bản CPU – bản PyPI kéo theo CUDA vài GB)
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0
+          pip install -r requirements.txt pytest pytest-asyncio
+      - name: Cache mô hình Docling (HuggingFace)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ hashFiles('requirements.txt') }}
+      - name: Unit test
+        # test_data_root_has_samples cần bộ tài liệu S5 trên máy dev (không có trong git)
+        run: >-
+          python -m pytest -m unit -q
+          --deselect tests/core/test_config.py::test_data_root_has_samples
+
+  frontend:
+    if: ${{ !inputs.skip_tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  deploy:
+    needs: [backend, frontend]
+    # chạy khi test xanh, hoặc test được bỏ qua (chạy tay); chỉ main, không bao giờ cho pull_request
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+          && (needs.backend.result == 'success' || needs.backend.result == 'skipped')
+          && (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') }}
+    runs-on: [self-hosted, linux, mep-prod]
+    environment: production
+    timeout-minutes: 60
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: sh deploy/trithuc/deploy.sh "$GITHUB_WORKSPACE"

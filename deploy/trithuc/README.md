@@ -129,7 +129,8 @@ Tên collection theo `MEP_NS` (tiền tố) – kiểm bằng `GET /collections`
 | Đăng xuất web Tri thức rồi thao tác trong iframe | Báo "phiên đã hết hạn" |
 
 ## 6. Vận hành
-- Cập nhật: `cd ~/mep && git pull && cd deploy/trithuc && docker compose up -d --build` (server 1 không đổi).
+- Cập nhật: tự động qua CI/CD (mục 8). Chạy tay: `sh ~/mep/deploy/trithuc/deploy.sh <thư mục code mới>`
+  (đồng bộ code giữ `.env` → build → migrate → up → chờ healthy, hỏng thì quay về image `:prev`).
 - Log: `docker compose logs -f api worker gateway`. Sandbox: `docker events --filter label=mep.sandbox`.
 - Sao lưu: volume `pgdata`, `qdrantdata`, `appdata` (file gốc upload).
 - Gỡ khỏi web Tri thức: chép lại `nginx.conf.bak-*` trên server 1 rồi `nginx -s reload`.
@@ -140,3 +141,33 @@ Tên collection theo `MEP_NS` (tiền tố) – kiểm bằng `GET /collections`
 - Upload multipart: `uploaded_by` lấy từ form (frontend gửi email trong token), middleware không sửa body multipart.
 - Reranker: Gemini 3.8-flash chấm điểm qua API (2026-11-19) – không cần GPU, không tải mô hình reranker.
 - Sandbox: 512 MB / cái, tối đa 12 cái cùng lúc (`config/agent.yaml`) – tính cho server 15 GB / 8 nhân.
+
+## 8. CI/CD (GitHub Actions – `.github/workflows/ci-cd.yml`)
+| Sự kiện | Chạy |
+|---|---|
+| Pull request | Unit test backend + build frontend (máy GitHub). **Không** deploy |
+| Push `main` | Như trên → xanh thì job `deploy` chạy trên runner self-hosted ở server 2: `deploy/trithuc/deploy.sh` |
+| Chạy tay (Actions › CI-CD › Run workflow) | Deploy lại `main`; tick `skip_tests` để bỏ test khi cần gấp |
+
+Deploy khởi động lại `worker` → job ingest đang chạy chuyển FAILED (bấm Chạy lại). Tránh merge lúc đang ingest file lớn.
+
+### Cài runner trên server 2 (1 lần, user chạy docker không cần sudo)
+GitHub › repo › Settings › Actions › Runners › New self-hosted runner › Linux x64 – lấy lệnh tải + token (token hết hạn sau 1 giờ):
+```bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+curl -o runner.tar.gz -L <URL tải trên trang GitHub> && tar xzf runner.tar.gz
+./config.sh --url https://github.com/khacminhHUST/ai-spec --token <TOKEN> \
+  --name "$(hostname)" --labels mep-prod --unattended
+sudo ./svc.sh install "$USER" && sudo ./svc.sh start      # chạy nền như service, tự bật khi reboot
+sudo apt install -y rsync                                 # deploy.sh cần
+```
+Kiểm tra: trang Runners thấy runner `Idle` có nhãn `mep-prod`. Log: `sudo ./svc.sh status`, `~/actions-runner/_diag/`.
+
+### Bắt buộc với repo public
+Runner có quyền Docker = quyền root server 2 (đang chứa dữ liệu thật). Workflow không cho runner chạy với
+`pull_request`, nhưng PR từ fork có thể **sửa chính file workflow** để nhắm vào runner. Phải làm ít nhất một trong hai:
+- Chuyển repo sang **private** (khuyến nghị), hoặc
+- Settings › Actions › General › *Approval for running fork pull request workflows* → **Require approval for all external contributors**,
+  và không bấm duyệt PR lạ.
+
+Thêm: Settings › Environments › tạo `production` (job deploy dùng) – có thể đặt *Required reviewers* để mỗi lần deploy phải bấm duyệt.
