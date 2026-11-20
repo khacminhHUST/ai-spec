@@ -147,6 +147,9 @@ Cấu hình `config/knowledge.yaml`: `access.mode`, `uploads_dir`, `max_upload_m
 | GET | `/knowledge/documents/{doc_id}/file` | Tải file gốc |
 | GET | `/knowledge/documents/{doc_id}` | Dữ liệu đã lưu: metadata, thống kê, kiểm tra đồng bộ Postgres ↔ Qdrant |
 | GET | `/knowledge/documents/{doc_id}/sections?q=` · `/sections/{lang}/{section_key}` | Mục đã lưu (lọc) / parent + payload child |
+| PATCH / DELETE | `/knowledge/documents/{doc_id}/sections/{lang}/{section_key}` | Sửa mục (Postgres) / xóa mục + child |
+| POST | `/knowledge/documents/{doc_id}/sections/{lang}/{section_key}/children` | Thêm child (embed) |
+| PATCH / DELETE | `/knowledge/documents/{doc_id}/children/{lang}/{child_id}` | Sửa child (dựng lại text, embed lại) / xóa child |
 | POST | `/knowledge/uploads` (multipart: file + metadata JSON, `user_id`) | Tạo job |
 | GET | `/knowledge/jobs?status=` · `/knowledge/jobs/{id}` | Danh sách / chi tiết job (kèm report) |
 | GET | `/knowledge/jobs/{id}/sections` · `/knowledge/jobs/{id}/sections/{lang}/{section_key}` | Cây mục / xem trước |
@@ -173,7 +176,7 @@ Tab **"Kho tri thức"** trong `App.tsx` (chỉ thêm vài dòng), gồm:
 3. **Hàng chờ xử lý**: danh sách job, trạng thái, bước hiện tại (tự làm mới vài giây một lần khi có job đang chạy).
 4. **Trang duyệt** của job: thống kê, cảnh báo, cây mục, xem trước, các nút Phát hành / Hủy / Chạy lại.
 5. **Dự án**: tạo/sửa dự án và công trình.
-6. **Dữ liệu đã lưu** của 1 revision (nút "Dữ liệu" trong lịch sử revision): metadata, kiểm tra, thống kê, mục & chunk – đọc thẳng DB để soát lỗi xử lý AI.
+6. **Dữ liệu đã lưu** của 1 revision (nút "Dữ liệu" trong lịch sử revision): metadata, kiểm tra, thống kê, mục & chunk – đọc thẳng DB để soát lỗi xử lý AI; sửa metadata, mục, child (thêm/sửa/xóa). Quyền sửa: `require_editor` (API) + `canEditKnowledge` (UI), hiện chưa phân quyền.
 
 Không thêm thư viện router; điều hướng bằng state.
 

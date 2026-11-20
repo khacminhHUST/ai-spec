@@ -1,14 +1,22 @@
 import Icon from "../Icon";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  addStoredChild,
+  canEditKnowledge,
+  deleteStoredChild,
+  deleteStoredSection,
   fmtDate,
   fmtTime,
   getStored,
   getStoredSection,
   getStoredSections,
   streamLabel,
+  updateDocument,
+  updateStoredChild,
+  updateStoredSection,
+  type DocumentPatch,
   type StoredDetail,
   type StoredSection,
   type StoredSectionDetail,
@@ -16,7 +24,10 @@ import {
 
 interface Props {
   docId: string;
+  userId: string;
   onError: (e: unknown) => void;
+  /** Dữ liệu đã đổi (metadata) → bên ngoài tải lại lịch sử revision. */
+  onChanged?: () => void;
 }
 
 type Tab = "overview" | "sections";
@@ -53,16 +64,24 @@ function show(key: string, v: unknown): string {
   return String(v);
 }
 
+const numOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
+const pageText = (a: number | null | undefined, b: number | null | undefined) =>
+  `tr.${a ?? "?"}${b && b !== a ? `–${b}` : ""}`;
+
 /** Dữ liệu đã lưu của 1 revision – đọc thẳng Postgres (documents, parent_chunks) và Qdrant (payload child),
- *  để soát lỗi sau xử lý AI: metadata, thống kê, kiểm tra đồng bộ, cây mục, nội dung parent và từng child. */
-export default function DocumentInspector({ docId, onError }: Props) {
+ *  để soát và sửa lỗi sau xử lý AI: metadata, kiểm tra đồng bộ, cây mục, nội dung parent và từng child. */
+export default function DocumentInspector({ docId, userId, onError, onChanged }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
   const [detail, setDetail] = useState<StoredDetail | null>(null);
+  const canEdit = canEditKnowledge(userId);
 
-  useEffect(() => {
-    setDetail(null);
+  const load = useCallback(() => {
     getStored(docId).then(setDetail).catch(onError);
   }, [docId, onError]);
+  useEffect(() => {
+    setDetail(null);
+    load();
+  }, [load]);
 
   if (!detail) return <div className="muted pad">Đang tải dữ liệu đã lưu…</div>;
   const errors = detail.checks.filter((c) => c.level === "error").length;
@@ -82,15 +101,56 @@ export default function DocumentInspector({ docId, onError }: Props) {
           Mục & chunk
         </button>
       </div>
-      {tab === "overview" ? <Overview d={detail} /> : <Sections docId={docId} langs={detail.langs.map((l) => l.lang)} onError={onError} />}
+      {tab === "overview" ? (
+        <Overview d={detail} canEdit={canEdit} onError={onError}
+          onSaved={() => { load(); onChanged?.(); }} />
+      ) : (
+        <Sections docId={docId} userId={userId} canEdit={canEdit} langs={detail.langs.map((l) => l.lang)}
+          onError={onError} onDataChanged={load} />
+      )}
     </div>
   );
 }
 
-function Overview({ d }: { d: StoredDetail }) {
+// ---------------------------------------------------------------- tổng quan
+
+function Overview({ d, canEdit, onError, onSaved }: {
+  d: StoredDetail; canEdit: boolean; onError: (e: unknown) => void; onSaved: () => void;
+}) {
   const doc = d.document;
   const job = d.job;
   const cls = job?.report?.classification;
+  const [form, setForm] = useState<Required<{ [K in keyof DocumentPatch]: string }> | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const startEdit = () =>
+    setForm({
+      title: doc.title ?? "",
+      issuer: doc.issuer ?? "",
+      revision: doc.revision ?? "",
+      issue_date: doc.issue_date ?? "",
+      stage: doc.stage ?? "",
+    });
+  const save = async () => {
+    if (!form) return;
+    const patch: DocumentPatch = {};
+    (Object.keys(form) as (keyof DocumentPatch)[]).forEach((k) => {
+      const v = form[k].trim();
+      if (v !== (doc[k] ?? "")) patch[k] = v || null;
+    });
+    if (Object.keys(patch).length === 0) return setForm(null);
+    setBusy(true);
+    try {
+      await updateDocument(doc.doc_id, patch);
+      setForm(null);
+      onSaved();
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="ki-overview">
       <section className="ki-block" aria-label="Kiểm tra">
@@ -112,7 +172,39 @@ function Overview({ d }: { d: StoredDetail }) {
       </section>
 
       <section className="ki-block" aria-label="Metadata">
-        <h4>Metadata (bảng documents)</h4>
+        <div className="kn-row ki-head">
+          <h4>Metadata (bảng documents)</h4>
+          {canEdit && !form && (
+            <button className="kn-btn small" onClick={startEdit}>
+              <Icon name="pencil" size={14} /> Sửa metadata
+            </button>
+          )}
+        </div>
+        {form && (
+          <div className="kn-card kn-inline kn-form">
+            <div className="kn-grid">
+              {([
+                ["title", "Tiêu đề", "text"],
+                ["issuer", "Đơn vị ban hành", "text"],
+                ["revision", "Revision", "text"],
+                ["issue_date", "Ngày ban hành", "date"],
+                ["stage", "Giai đoạn", "text"],
+              ] as const).map(([k, label, type]) => (
+                <label key={k} className={"kn-field" + (k === "title" ? " ki-wide" : "")}>
+                  <span>{label}</span>
+                  <input type={type} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+                </label>
+              ))}
+            </div>
+            <div className="kn-row">
+              <span className="small muted">Dự án, luồng, phân hệ: sửa bằng "Sửa / chuyển dự án" của cả bộ.</span>
+              <span className="kn-actions">
+                <button className="kn-btn small" disabled={busy} onClick={() => setForm(null)}>Hủy</button>
+                <button className="kn-btn small primary" disabled={busy} onClick={save}>{busy ? "Đang lưu…" : "Lưu"}</button>
+              </span>
+            </div>
+          </div>
+        )}
         <dl className="kn-meta">
           {DOC_FIELDS.map(([k, label]) => (
             <div key={k} className="ki-meta-row">
@@ -192,7 +284,12 @@ function Overview({ d }: { d: StoredDetail }) {
   );
 }
 
-function Sections({ docId, langs, onError }: { docId: string; langs: string[]; onError: (e: unknown) => void }) {
+// ---------------------------------------------------------------- danh sách mục
+
+function Sections({ docId, userId, canEdit, langs, onError, onDataChanged }: {
+  docId: string; userId: string; canEdit: boolean; langs: string[];
+  onError: (e: unknown) => void; onDataChanged: () => void;
+}) {
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [lang, setLang] = useState(langs.includes("vi") ? "vi" : langs[0] ?? "vi");
@@ -206,8 +303,7 @@ function Sections({ docId, langs, onError }: { docId: string; langs: string[]; o
     return () => window.clearTimeout(t);
   }, [q]);
 
-  useEffect(() => {
-    setRows(null);
+  const loadRows = useCallback(() => {
     getStoredSections(docId, query)
       .then(setRows)
       .catch((e) => {
@@ -215,6 +311,10 @@ function Sections({ docId, langs, onError }: { docId: string; langs: string[]; o
         onError(e);
       });
   }, [docId, query, onError]);
+  useEffect(() => {
+    setRows(null);
+    loadRows();
+  }, [loadRows]);
 
   const open = (s: StoredSection) => {
     setLoading(true);
@@ -222,6 +322,13 @@ function Sections({ docId, langs, onError }: { docId: string; langs: string[]; o
       .then(setSel)
       .catch(onError)
       .finally(() => setLoading(false));
+  };
+
+  /** Sau khi sửa: cập nhật mục đang xem, số child ở danh sách, thống kê/kiểm tra ở tab Tổng quan. */
+  const saved = (d: StoredSectionDetail | null) => {
+    setSel(d);
+    loadRows();
+    onDataChanged();
   };
 
   const list = (rows ?? []).filter((r) => r.lang === lang && (!onlyEmpty || r.n_children === 0));
@@ -265,8 +372,7 @@ function Sections({ docId, langs, onError }: { docId: string; langs: string[]; o
                 {s.type === "TABLE" && <span className="kn-tag">Bảng</span>} {s.number ?? ""} {s.title ?? s.section_key}
               </span>
               <span className={"small ki-sec-meta" + (s.n_children === 0 ? " kn-warn" : " muted")}>
-                tr.{s.page_start ?? "?"}
-                {s.page_end && s.page_end !== s.page_start ? `–${s.page_end}` : ""} · {s.n_children} child
+                {pageText(s.page_start, s.page_end)} · {s.n_children} child
               </span>
             </button>
           ))}
@@ -275,7 +381,8 @@ function Sections({ docId, langs, onError }: { docId: string; langs: string[]; o
 
       <section className="ki-detail" aria-live="polite">
         {sel ? (
-          <SectionDetail d={sel} loading={loading} onBack={() => setSel(null)} />
+          <SectionDetail key={selKey} d={sel} docId={docId} userId={userId} canEdit={canEdit} loading={loading}
+            onBack={() => setSel(null)} onSaved={saved} onError={onError} />
         ) : (
           <div className="muted pad">{loading ? "Đang tải…" : "Chọn một mục để xem parent (Postgres) và các child (Qdrant)."}</div>
         )}
@@ -284,29 +391,226 @@ function Sections({ docId, langs, onError }: { docId: string; langs: string[]; o
   );
 }
 
-function SectionDetail({ d, loading, onBack }: { d: StoredSectionDetail; loading: boolean; onBack: () => void }) {
+// ---------------------------------------------------------------- 1 mục: xem + sửa
+
+interface ParentForm {
+  number: string;
+  title: string;
+  type: "SECTION" | "TABLE";
+  page_start: string;
+  page_end: string;
+  breadcrumb: string;
+  content_md: string;
+}
+interface ChildForm {
+  raw_text: string;
+  topic: string;
+  page_start: string;
+  page_end: string;
+}
+
+function SectionDetail({ d, docId, userId, canEdit, loading, onBack, onSaved, onError }: {
+  d: StoredSectionDetail; docId: string; userId: string; canEdit: boolean; loading: boolean;
+  onBack: () => void; onSaved: (d: StoredSectionDetail | null) => void; onError: (e: unknown) => void;
+}) {
   const [raw, setRaw] = useState(false);
+  const [pForm, setPForm] = useState<ParentForm | null>(null);
+  const [cEdit, setCEdit] = useState<{ id: string | "new"; form: ChildForm } | null>(null);
+  const [busy, setBusy] = useState(false);
   const p = d.parent;
+  const lang = p.lang as string;
+  const key = p.section_key as string;
+
+  const run = async (f: () => Promise<StoredSectionDetail | null>, confirmMsg?: string) => {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    setBusy(true);
+    try {
+      onSaved(await f());
+      setPForm(null);
+      setCEdit(null);
+    } catch (e) {
+      onError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const editParent = () =>
+    setPForm({
+      number: p.number ?? "",
+      title: p.title ?? "",
+      type: p.type,
+      page_start: p.page_start?.toString() ?? "",
+      page_end: p.page_end?.toString() ?? "",
+      breadcrumb: p.breadcrumb ?? "",
+      content_md: p.content_md ?? "",
+    });
+  const saveParent = () =>
+    pForm &&
+    run(() =>
+      updateStoredSection(docId, lang, key, {
+        number: pForm.number.trim() || null,
+        title: pForm.title.trim() || null,
+        type: pForm.type,
+        page_start: numOrNull(pForm.page_start),
+        page_end: numOrNull(pForm.page_end),
+        breadcrumb: pForm.breadcrumb,
+        content_md: pForm.content_md,
+      }, userId),
+    );
+  const removeParent = () =>
+    run(
+      async () => {
+        await deleteStoredSection(docId, lang, key, userId);
+        return null;
+      },
+      `Xóa mục "${p.number ?? ""} ${p.title ?? key}" và ${d.children.length} child? Không hoàn tác được.`,
+    );
+
+  const childForm = (c?: StoredSectionDetail["children"][number]): ChildForm => ({
+    raw_text: c?.raw_text ?? "",
+    topic: c?.topic ?? "",
+    page_start: (c?.page_start ?? p.page_start)?.toString() ?? "",
+    page_end: (c?.page_end ?? p.page_end)?.toString() ?? "",
+  });
+  const saveChild = () => {
+    if (!cEdit) return;
+    const body = {
+      raw_text: cEdit.form.raw_text,
+      topic: cEdit.form.topic.trim() || null,
+      page_start: numOrNull(cEdit.form.page_start),
+      page_end: numOrNull(cEdit.form.page_end),
+    };
+    return run(() =>
+      cEdit.id === "new"
+        ? addStoredChild(docId, lang, key, body, userId)
+        : updateStoredChild(docId, lang, cEdit.id, body, userId),
+    );
+  };
+
+  const childEditor = cEdit && (
+    <div className="kn-card kn-inline kn-form ki-edit">
+      <strong>{cEdit.id === "new" ? "Thêm child" : "Sửa child"}</strong>
+      <label className="kn-field">
+        <span>Nội dung (raw_text) – lưu sẽ dựng lại text embed và embed lại</span>
+        <textarea className="ki-textarea" rows={8} value={cEdit.form.raw_text}
+          onChange={(e) => setCEdit({ ...cEdit, form: { ...cEdit.form, raw_text: e.target.value } })} />
+      </label>
+      {cEdit.id === "new" && (
+        <button className="kn-link small ki-fill" type="button"
+          onClick={() => setCEdit({ ...cEdit, form: { ...cEdit.form, raw_text: p.content_md } })}>
+          Lấy toàn bộ nội dung mục
+        </button>
+      )}
+      <div className="kn-grid">
+        <label className="kn-field">
+          <span>Chủ đề (topic)</span>
+          <input value={cEdit.form.topic} onChange={(e) => setCEdit({ ...cEdit, form: { ...cEdit.form, topic: e.target.value } })} />
+        </label>
+        <label className="kn-field">
+          <span>Trang đầu</span>
+          <input inputMode="numeric" value={cEdit.form.page_start}
+            onChange={(e) => setCEdit({ ...cEdit, form: { ...cEdit.form, page_start: e.target.value.replace(/\D/g, "") } })} />
+        </label>
+        <label className="kn-field">
+          <span>Trang cuối</span>
+          <input inputMode="numeric" value={cEdit.form.page_end}
+            onChange={(e) => setCEdit({ ...cEdit, form: { ...cEdit.form, page_end: e.target.value.replace(/\D/g, "") } })} />
+        </label>
+      </div>
+      <div className="kn-row ki-form-actions">
+        <button className="kn-btn small" disabled={busy} onClick={() => setCEdit(null)}>Hủy</button>
+        <button className="kn-btn small primary" disabled={busy || !cEdit.form.raw_text.trim()} onClick={saveChild}>
+          {busy ? "Đang lưu & embed…" : "Lưu"}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className={"ki-sec" + (loading ? " ki-loading" : "")}>
+    <div className={"ki-sec" + (loading || busy ? " ki-loading" : "")}>
       <button className="kn-link ki-back" onClick={onBack}>
         <Icon name="arrow-left" size={16} /> Danh sách mục
       </button>
-      <div className="small muted">{p.breadcrumb || p.section_key}</div>
-      <div className="kn-row">
+      <div className="small muted">{p.breadcrumb || key}</div>
+      <div className="kn-row ki-head">
         <strong>
           Parent · {p.type} {p.number ?? ""} {p.title ?? ""}
         </strong>
-        <span className="ki-seg" role="group" aria-label="Kiểu hiển thị">
-          <button className={!raw ? "active" : ""} aria-pressed={!raw} onClick={() => setRaw(false)}>Hiển thị</button>
-          <button className={raw ? "active" : ""} aria-pressed={raw} onClick={() => setRaw(true)}>Markdown gốc</button>
+        <span className="kn-actions">
+          {!pForm && (
+            <span className="ki-seg" role="group" aria-label="Kiểu hiển thị">
+              <button className={!raw ? "active" : ""} aria-pressed={!raw} onClick={() => setRaw(false)}>Hiển thị</button>
+              <button className={raw ? "active" : ""} aria-pressed={raw} onClick={() => setRaw(true)}>Markdown gốc</button>
+            </span>
+          )}
+          {canEdit && !pForm && (
+            <>
+              <button className="kn-btn small" disabled={busy} onClick={editParent}>
+                <Icon name="pencil" size={14} /> Sửa mục
+              </button>
+              <button className="kn-btn small danger" disabled={busy} onClick={removeParent}>Xóa mục</button>
+            </>
+          )}
         </span>
       </div>
-      {raw ? <pre className="ki-pre">{p.content_md}</pre> : (
+
+      {pForm ? (
+        <div className="kn-card kn-inline kn-form ki-edit">
+          <div className="kn-grid">
+            <label className="kn-field">
+              <span>Số mục</span>
+              <input value={pForm.number} onChange={(e) => setPForm({ ...pForm, number: e.target.value })} />
+            </label>
+            <label className="kn-field ki-wide">
+              <span>Tiêu đề</span>
+              <input value={pForm.title} onChange={(e) => setPForm({ ...pForm, title: e.target.value })} />
+            </label>
+            <label className="kn-field">
+              <span>Loại</span>
+              <select value={pForm.type} onChange={(e) => setPForm({ ...pForm, type: e.target.value as ParentForm["type"] })}>
+                <option value="SECTION">Mục (SECTION)</option>
+                <option value="TABLE">Bảng (TABLE)</option>
+              </select>
+            </label>
+            <label className="kn-field">
+              <span>Trang đầu</span>
+              <input inputMode="numeric" value={pForm.page_start}
+                onChange={(e) => setPForm({ ...pForm, page_start: e.target.value.replace(/\D/g, "") })} />
+            </label>
+            <label className="kn-field">
+              <span>Trang cuối</span>
+              <input inputMode="numeric" value={pForm.page_end}
+                onChange={(e) => setPForm({ ...pForm, page_end: e.target.value.replace(/\D/g, "") })} />
+            </label>
+          </div>
+          <label className="kn-field">
+            <span>Breadcrumb</span>
+            <input value={pForm.breadcrumb} onChange={(e) => setPForm({ ...pForm, breadcrumb: e.target.value })} />
+          </label>
+          <label className="kn-field">
+            <span>Nội dung (Markdown) – agent đọc nội dung này khi trả lời</span>
+            <textarea className="ki-textarea" rows={14} value={pForm.content_md}
+              onChange={(e) => setPForm({ ...pForm, content_md: e.target.value })} />
+          </label>
+          <div className="kn-row">
+            <span className="small muted">Chỉ sửa mục (Postgres). Child dùng để tìm kiếm sửa riêng ở dưới.</span>
+            <span className="kn-actions">
+              <button className="kn-btn small" disabled={busy} onClick={() => setPForm(null)}>Hủy</button>
+              <button className="kn-btn small primary" disabled={busy || !pForm.content_md.trim()} onClick={saveParent}>
+                {busy ? "Đang lưu…" : "Lưu"}
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : raw ? (
+        <pre className="ki-pre">{p.content_md}</pre>
+      ) : (
         <div className="md ki-md">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{p.content_md}</ReactMarkdown>
         </div>
       )}
+
       <details className="ki-details">
         <summary>Các cột parent_chunks</summary>
         <dl className="kn-meta ki-kv">
@@ -321,19 +625,36 @@ function SectionDetail({ d, loading, onBack }: { d: StoredSectionDetail; loading
         </dl>
       </details>
 
-      <h4 className="ki-h">{d.children.length} child trên Qdrant</h4>
+      <div className="kn-row ki-head ki-h">
+        <h4>{d.children.length} child trên Qdrant</h4>
+        {canEdit && cEdit?.id !== "new" && (
+          <button className="kn-btn small" disabled={busy} onClick={() => setCEdit({ id: "new", form: childForm() })}>
+            <Icon name="plus" size={14} /> Thêm child
+          </button>
+        )}
+      </div>
       {d.children.length === 0 && (
         <p className="ki-check warn small">Mục này không có child → không tìm được bằng tìm kiếm vector/BM25.</p>
       )}
+      {cEdit?.id === "new" && childEditor}
       {d.children.map((c) => (
         <article key={c.child_id} className="ki-child">
           <div className="ki-child-head small">
             <span className="kn-code">#{c.child_id.split("#").pop()}</span>
             <span className="kn-tag">{c.type}</span>
             {c.topic && <span className="muted">{c.topic}</span>}
-            <span className="muted">tr.{c.page_start ?? "?"}{c.page_end && c.page_end !== c.page_start ? `–${c.page_end}` : ""}</span>
+            <span className="muted">{pageText(c.page_start, c.page_end)}</span>
+            {canEdit && cEdit?.id !== c.child_id && (
+              <span className="kn-actions ki-child-actions">
+                <button className="kn-btn small" disabled={busy}
+                  onClick={() => setCEdit({ id: c.child_id, form: childForm(c) })}>Sửa</button>
+                <button className="kn-btn small danger" disabled={busy}
+                  onClick={() => run(() => deleteStoredChild(docId, lang, c.child_id, userId),
+                    `Xóa child #${c.child_id.split("#").pop()}? Không hoàn tác được.`)}>Xóa</button>
+              </span>
+            )}
           </div>
-          <pre className="ki-pre">{c.raw_text}</pre>
+          {cEdit?.id === c.child_id ? childEditor : <pre className="ki-pre">{c.raw_text}</pre>}
           <details className="ki-details">
             <summary>Text dùng để embed + payload</summary>
             <pre className="ki-pre small">{c.text}</pre>

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from app.api.deps import get_deps
 from app.api.routes.projects import call, get_conn
-from app.services.knowledge import drafts, inspect, jobs, versions
+from app.services.knowledge import drafts, edits, inspect, jobs, versions
 from app.services.knowledge.cache import clear_profiles
 from app.services.knowledge.config import max_upload_bytes, options
 from app.services.knowledge.storage import FileStore, LocalFileStore, is_pdf, spool_upload
@@ -141,6 +141,61 @@ def document_sections(doc_id: str, q: str | None = None, conn=Depends(get_conn),
 def document_section(doc_id: str, lang: str, section_key: str, conn=Depends(get_conn),
                      deps: Deps = Depends(get_deps)):
     return call(inspect.document_section, conn, deps.settings, doc_id, lang, section_key)
+
+
+# ---------------------------------------------------------------- sửa tay dữ liệu đã lưu
+
+def require_editor(user_id: str | None = Query(None)) -> str | None:
+    """Chỗ duy nhất kiểm tra quyền sửa dữ liệu kho. Hiện chưa phân quyền: ai cũng sửa được."""
+    return user_id
+
+
+class SectionPatch(BaseModel):
+    number: str | None = None
+    title: str | None = None
+    breadcrumb: str | None = None
+    content_md: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    type: str | None = None
+
+
+class ChildBody(BaseModel):
+    raw_text: str | None = None
+    topic: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+
+
+@router.patch("/documents/{doc_id}/sections/{lang}/{section_key}")
+def update_section(doc_id: str, lang: str, section_key: str, body: SectionPatch, conn=Depends(get_conn),
+                   deps: Deps = Depends(get_deps), _=Depends(require_editor)):
+    return call(edits.update_section, conn, deps.settings, doc_id, lang, section_key,
+                body.model_dump(exclude_unset=True))
+
+
+@router.delete("/documents/{doc_id}/sections/{lang}/{section_key}")
+def delete_section(doc_id: str, lang: str, section_key: str, conn=Depends(get_conn),
+                   deps: Deps = Depends(get_deps), _=Depends(require_editor)):
+    return call(edits.delete_section, conn, deps.settings, doc_id, lang, section_key)
+
+
+@router.post("/documents/{doc_id}/sections/{lang}/{section_key}/children", status_code=201)
+def add_child(doc_id: str, lang: str, section_key: str, body: ChildBody, conn=Depends(get_conn),
+              deps: Deps = Depends(get_deps), _=Depends(require_editor)):
+    return call(edits.add_child, conn, deps.settings, doc_id, lang, section_key, body.model_dump(exclude_unset=True))
+
+
+@router.patch("/documents/{doc_id}/children/{lang}/{child_id:path}")
+def update_child(doc_id: str, lang: str, child_id: str, body: ChildBody, conn=Depends(get_conn),
+                 deps: Deps = Depends(get_deps), _=Depends(require_editor)):
+    return call(edits.update_child, conn, deps.settings, doc_id, lang, child_id, body.model_dump(exclude_unset=True))
+
+
+@router.delete("/documents/{doc_id}/children/{lang}/{child_id:path}")
+def delete_child(doc_id: str, lang: str, child_id: str, conn=Depends(get_conn),
+                 deps: Deps = Depends(get_deps), _=Depends(require_editor)):
+    return call(edits.delete_child, conn, deps.settings, doc_id, lang, child_id)
 
 
 @router.get("/documents/{doc_id}/file")

@@ -342,3 +342,39 @@ export const getStoredSections = (docId: string, q = "") =>
   req<StoredSection[]>(`/knowledge/documents/${enc(docId)}/sections${q.trim() ? `?q=${enc(q.trim())}` : ""}`);
 export const getStoredSection = (docId: string, lang: string, key: string) =>
   req<StoredSectionDetail>(`/knowledge/documents/${enc(docId)}/sections/${enc(lang)}/${enc(key)}`);
+
+// ---- sửa tay dữ liệu đã lưu
+/** Quyền sửa dữ liệu kho – hiện ai cũng sửa được; phân quyền sau thì thay ở đây (và require_editor ở API). */
+export const canEditKnowledge = (_userId: string) => true;
+
+export interface StoredSectionPatch {
+  number?: string | null;
+  title?: string | null;
+  breadcrumb?: string;
+  content_md?: string;
+  page_start?: number | null;
+  page_end?: number | null;
+  type?: "SECTION" | "TABLE";
+}
+export interface StoredChildBody {
+  raw_text?: string;
+  topic?: string | null;
+  page_start?: number | null;
+  page_end?: number | null;
+}
+const secUrl = (docId: string, lang: string, key: string) =>
+  `/knowledge/documents/${enc(docId)}/sections/${enc(lang)}/${enc(key)}`;
+const childUrl = (docId: string, lang: string, childId: string) =>
+  `/knowledge/documents/${enc(docId)}/children/${enc(lang)}/${enc(childId)}`;
+const by = (userId: string) => q({ user_id: userId });
+
+export const updateStoredSection = (docId: string, lang: string, key: string, p: StoredSectionPatch, userId: string) =>
+  send<StoredSectionDetail>("PATCH", secUrl(docId, lang, key) + by(userId), p);
+export const deleteStoredSection = (docId: string, lang: string, key: string, userId: string) =>
+  send("DELETE", secUrl(docId, lang, key) + by(userId));
+export const addStoredChild = (docId: string, lang: string, key: string, b: StoredChildBody, userId: string) =>
+  send<StoredSectionDetail>("POST", `${secUrl(docId, lang, key)}/children${by(userId)}`, b);
+export const updateStoredChild = (docId: string, lang: string, childId: string, b: StoredChildBody, userId: string) =>
+  send<StoredSectionDetail>("PATCH", childUrl(docId, lang, childId) + by(userId), b);
+export const deleteStoredChild = (docId: string, lang: string, childId: string, userId: string) =>
+  send<StoredSectionDetail>("DELETE", childUrl(docId, lang, childId) + by(userId));

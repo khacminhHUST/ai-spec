@@ -1669,3 +1669,53 @@ input[type="radio"] {
     transition: none;
   }
 }
+
+/* sửa tay trong DocumentInspector */
+.ki-head {
+  margin-bottom: 0;
+}
+
+.ki-head h4 {
+  margin: 0;
+}
+
+.ki-edit {
+  margin: 4px 0;
+}
+
+.ki-wide {
+  grid-column: span 2;
+}
+
+.kn-field textarea.ki-textarea {
+  min-height: 120px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.ki-fill {
+  align-self: flex-start;
+  margin: -8px 0 10px;
+}
+
+.ki-form-actions {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.ki-child-actions {
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .ki-wide {
+    grid-column: auto;
+  }
+
+  .kn-field textarea.ki-textarea {
+    font-size: 16px; /* tránh iOS tự zoom */
+  }
+}

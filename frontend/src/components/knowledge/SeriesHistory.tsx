@@ -317,7 +317,7 @@ export default function SeriesHistory({
           onClose={() => setInspect(null)}
           className="kp-modal-inspect"
         >
-          <DocumentInspector docId={inspect.doc_id} onError={onError} />
+          <DocumentInspector docId={inspect.doc_id} userId={userId} onError={onError} onChanged={() => { load(); onChanged(); }} />
         </Modal>
       )}
     </div>
