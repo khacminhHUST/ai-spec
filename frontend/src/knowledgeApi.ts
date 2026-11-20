@@ -303,3 +303,42 @@ export function projectStatus(start: string | null, end: string | null): { label
 
 export const fmtDate = (s: string | null | undefined) => (s ? new Date(s).toLocaleDateString("vi-VN") : "–");
 export const fmtTime = (s: string | null | undefined) => (s ? new Date(s).toLocaleString("vi-VN") : "–");
+
+// ---------------------------------------------------------------- dữ liệu đã lưu của 1 revision (DB)
+
+export interface StoredLang {
+  lang: string;
+  n_parents: number;
+  n_sections: number;
+  n_tables: number;
+  parent_tokens: number;
+  n_children: number;
+  n_children_text: number;
+  n_children_table: number;
+  empty_parents: string[];
+  n_empty_parents: number;
+  orphan_children: number;
+  payload_mismatch: Record<string, number>;
+}
+
+export interface StoredDetail {
+  document: Record<string, any> & { doc_id: string; title: string | null; warnings: string[] };
+  job: (Record<string, any> & { job_id: string; report: Record<string, any> | null }) | null;
+  langs: StoredLang[];
+  checks: { level: "error" | "warn"; message: string }[];
+}
+
+export interface StoredSection extends SectionRow {
+  n_refs: number;
+}
+
+export interface StoredSectionDetail {
+  parent: Record<string, any> & { parent_id: string; breadcrumb: string; content_md: string; referenced_ids: string[] };
+  children: (Record<string, any> & { child_id: string; type: string; raw_text: string; text: string })[];
+}
+
+export const getStored = (docId: string) => req<StoredDetail>(`/knowledge/documents/${enc(docId)}`);
+export const getStoredSections = (docId: string, q = "") =>
+  req<StoredSection[]>(`/knowledge/documents/${enc(docId)}/sections${q.trim() ? `?q=${enc(q.trim())}` : ""}`);
+export const getStoredSection = (docId: string, lang: string, key: string) =>
+  req<StoredSectionDetail>(`/knowledge/documents/${enc(docId)}/sections/${enc(lang)}/${enc(key)}`);

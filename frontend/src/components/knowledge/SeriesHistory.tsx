@@ -16,6 +16,7 @@ import {
   type SeriesHistory as History,
   type UploadPreset,
 } from "../../knowledgeApi";
+import DocumentInspector from "./DocumentInspector";
 import Modal from "./Modal";
 
 interface Props {
@@ -57,6 +58,7 @@ export default function SeriesHistory({
   const [stage, setStage] = useState("");
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<Revision | null>(null);
+  const [inspect, setInspect] = useState<Revision | null>(null);
   const [seriesForm, setSeriesForm] = useState<SeriesForm | null>(null);
 
   const load = useCallback(() => {
@@ -71,6 +73,7 @@ export default function SeriesHistory({
   useEffect(load, [load]);
   useEffect(() => {
     setPreview(null);
+    setInspect(null);
     setSeriesForm(null);
   }, [docCode]);
 
@@ -275,6 +278,9 @@ export default function SeriesHistory({
               <button className="kn-btn small" onClick={() => setPreview(r)}>
                 Xem
               </button>
+              <button className="kn-btn small" onClick={() => setInspect(r)} title="Xem dữ liệu đã lưu trong DB sau xử lý">
+                Dữ liệu
+              </button>
               <a
                 className="kn-btn small"
                 href={fileDownloadUrl(r.doc_id)}
@@ -303,6 +309,15 @@ export default function SeriesHistory({
           className="kp-modal-pdf"
         >
           <PdfFrame docId={preview.doc_id} />
+        </Modal>
+      )}
+      {inspect && (
+        <Modal
+          title={`Dữ liệu đã lưu – ${head?.title || docCode} · Rev ${inspect.revision ?? "?"}`}
+          onClose={() => setInspect(null)}
+          className="kp-modal-inspect"
+        >
+          <DocumentInspector docId={inspect.doc_id} onError={onError} />
         </Modal>
       )}
     </div>

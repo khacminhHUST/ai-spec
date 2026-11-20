@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from app.api.deps import get_deps
 from app.api.routes.projects import call, get_conn
-from app.services.knowledge import drafts, jobs, versions
+from app.services.knowledge import drafts, inspect, jobs, versions
 from app.services.knowledge.cache import clear_profiles
 from app.services.knowledge.config import max_upload_bytes, options
 from app.services.knowledge.storage import FileStore, LocalFileStore, is_pdf, spool_upload
@@ -124,6 +124,23 @@ def delete_series(doc_code: str, conn=Depends(get_conn), deps: Deps = Depends(ge
     out = call(versions.delete_series, conn, deps.settings, doc_code)
     clear_profiles(deps)
     return out
+
+
+@router.get("/documents/{doc_id}")
+def document_detail(doc_id: str, conn=Depends(get_conn), deps: Deps = Depends(get_deps)):
+    """Dữ liệu đã lưu của 1 revision: metadata, thống kê, kiểm tra đồng bộ Postgres ↔ Qdrant."""
+    return call(inspect.document_detail, conn, deps.settings, doc_id)
+
+
+@router.get("/documents/{doc_id}/sections")
+def document_sections(doc_id: str, q: str | None = None, conn=Depends(get_conn), deps: Deps = Depends(get_deps)):
+    return call(inspect.document_sections, conn, deps.settings, doc_id, q)
+
+
+@router.get("/documents/{doc_id}/sections/{lang}/{section_key}")
+def document_section(doc_id: str, lang: str, section_key: str, conn=Depends(get_conn),
+                     deps: Deps = Depends(get_deps)):
+    return call(inspect.document_section, conn, deps.settings, doc_id, lang, section_key)
 
 
 @router.get("/documents/{doc_id}/file")
