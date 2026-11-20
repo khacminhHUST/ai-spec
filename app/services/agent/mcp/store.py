@@ -2,7 +2,7 @@
 cột description – 004_source_description.sql).
 
 `ConnectorStore` là interface; `PgConnectorStore` là bản Postgres. Xóa connector → token, override, state đi kèm
-bị xóa theo (ON DELETE CASCADE).
+bị xóa theo (ON DELETE CASCADE). Connector thuộc riêng 1 người (`created_by`, migration 006_mcp_per_user.sql).
 """
 from __future__ import annotations
 
@@ -17,14 +17,15 @@ CONNECTOR_FIELDS = ("name", "display_name", "description", "url", "transport", "
 
 class ConnectorStore(ABC):
     @abstractmethod
-    def list_connectors(self) -> list[dict[str, Any]]: ...
+    def list_connectors(self, owner: str) -> list[dict[str, Any]]:
+        """Connector của 1 người (created_by = owner)."""
 
     @abstractmethod
     def get_connector(self, connector_id: str) -> dict[str, Any] | None: ...
 
     @abstractmethod
     def insert_connector(self, row: dict[str, Any]) -> None:
-        """Trùng `name` → ValueError."""
+        """Trùng `name` trong cùng chủ sở hữu → ValueError."""
 
     @abstractmethod
     def update_connector(self, connector_id: str, **fields: Any) -> None: ...
@@ -57,8 +58,8 @@ class PgConnectorStore(ConnectorStore):
             cur = conn.execute(sql, params)
             return list(cur) if cur.description else []
 
-    def list_connectors(self):
-        return self._q("SELECT * FROM mcp_connectors ORDER BY name")
+    def list_connectors(self, owner):
+        return self._q("SELECT * FROM mcp_connectors WHERE created_by = %s ORDER BY name", (owner,))
 
     def get_connector(self, connector_id):
         rows = self._q("SELECT * FROM mcp_connectors WHERE connector_id = %s", (connector_id,))

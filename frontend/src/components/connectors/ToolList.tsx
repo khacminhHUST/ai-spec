@@ -69,7 +69,7 @@ export default function ToolList({ connector, userId, onFail }: Props) {
       await Promise.all(
         items
           .filter((t) => (t.override ?? null) !== overrideFor(t, a))
-          .map((t) => setToolAccess(connector.connector_id, t.name, overrideFor(t, a))),
+          .map((t) => setToolAccess(connector.connector_id, t.name, overrideFor(t, a), userId)),
       );
     } catch (e) {
       setError(String((e as Error).message ?? e));

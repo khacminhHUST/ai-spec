@@ -138,6 +138,7 @@ export default function ConnectorsView({ userId }: { userId: string }) {
           <Icon name="plus" /> Thêm
         </button>
       </div>
+      <p className="muted">Nguồn bạn thêm chỉ tài khoản của bạn thấy và dùng; người khác muốn dùng phải tự thêm.</p>
       {notice && <div className="cn-ok">{notice}</div>}
       {error && <div className="banner-error">{error}</div>}
       {form && (
@@ -209,7 +210,7 @@ export default function ConnectorsView({ userId }: { userId: string }) {
                         {!c.readonly && <button onClick={() => setForm({ editing: c })}>Sửa</button>}
                         {!c.readonly && (
                           <button
-                            onClick={() => act(async () => void (await updateConnector(c.connector_id, { enabled: !c.enabled })))}
+                            onClick={() => act(async () => void (await updateConnector(c.connector_id, { enabled: !c.enabled }, userId)))}
                           >
                             {c.enabled ? "Tắt" : "Bật"}
                           </button>
@@ -224,7 +225,7 @@ export default function ConnectorsView({ userId }: { userId: string }) {
                             className="cn-danger"
                             onClick={() => {
                               if (window.confirm(`Xóa connector ${title(c)}?`))
-                                act(() => deleteConnector(c.connector_id));
+                                act(() => deleteConnector(c.connector_id, userId));
                             }}
                           >
                             Xóa

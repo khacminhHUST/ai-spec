@@ -114,10 +114,11 @@ def _opened(*names):
     return AIMessage("", tool_calls=[{"name": OPEN, "args": {"name": n}, "id": f"open_{n}"} for n in names])
 
 
-def _add_kho(c, w, name="kho"):
+def _add_kho(c, w, owner="alice", name="kho"):
+    """Connector thuộc riêng `owner` (chỉ owner thấy / kết nối / dùng)."""
     d = c.post("/mcp/connectors/discover", json={"url": w.resource}).json()
     assert d["auth_type"] == "oauth" and d["issuer"] == w.issuer and d["has_prm"], d
-    r = c.post("/mcp/connectors", json={"name": name, "url": w.resource, "auth_type": "oauth", "user_id": "alice"})
+    r = c.post("/mcp/connectors", json={"name": name, "url": w.resource, "auth_type": "oauth", "user_id": owner})
     assert r.status_code == 201, r.text
     return r.json()["connector_id"]
 
@@ -206,7 +207,7 @@ def test_3_expired_token_auto_refresh(env):
     c, model = env.client([_opened("kho"), tool_call("kho_whoami"), "ok"])
     a = env.w.a
     with c:
-        cid = _add_kho(c, env.w)
+        cid = _add_kho(c, env.w, "carol")
         _browser_connect(c, cid, "carol")
         old_rt = _token_row(env.pool, "carol", cid)["refresh_token_enc"]
         n = len(a.refresh_grants())
@@ -234,7 +235,7 @@ def test_3_expired_token_auto_refresh(env):
 def test_4_revoked_refresh_needs_reauth(env):
     c, model = env.client([_opened("kho"), tool_call("kho_list_items"), "Kết nối hết hạn."])
     with c:
-        cid = _add_kho(c, env.w)
+        cid = _add_kho(c, env.w, "dave")
         _browser_connect(c, cid, "dave")
         env.w.a.revoke("dave")
         _expire(env.pool, "dave", cid)
@@ -255,7 +256,7 @@ def test_4_revoked_refresh_needs_reauth(env):
 def test_5_no_permission_forbidden(env):
     c, _ = env.client(["ok"])
     with c:
-        cid = _add_kho(c, env.w)
+        cid = _add_kho(c, env.w, "nobody")
         msg = _browser_connect(c, cid, "nobody")
         assert msg["status"] == "forbidden" and "chưa được cấp quyền" in msg["message"]
         assert _status(env.hub, "nobody", "kho") == "forbidden"
@@ -271,32 +272,39 @@ def test_6_none_and_headers_connectors(env, monkeypatch):
                            tool_call("hdr_echo", text="bí mật"), "ok"])
     with c:
         assert c.post("/mcp/connectors/discover", json={"url": env.w.open_url}).json()["auth_type"] == "none"
-        pub = c.post("/mcp/connectors", json={"name": "pub", "url": env.w.open_url, "auth_type": "none"}).json()
+        pub = c.post("/mcp/connectors", json={"name": "pub", "url": env.w.open_url, "auth_type": "none",
+                                              "user_id": "x"}).json()
         hdr = c.post("/mcp/connectors", json={"name": "hdr", "url": env.w.hdr_url, "auth_type": "headers",
-                                              "headers": [{"name": "X-API-Key", "value": "${HDR_API_KEY}"}]}).json()
+                                              "headers": [{"name": "X-API-Key", "value": "${HDR_API_KEY}"}],
+                                              "user_id": "x"}).json()
         assert c.post(f"/mcp/connectors/{pub['connector_id']}/test", params={"user_id": "x"}).json()["ok"]
         assert c.post(f"/mcp/connectors/{hdr['connector_id']}/test", params={"user_id": "x"}).json()["ok"]
         tools = c.get(f"/mcp/connectors/{pub['connector_id']}/tools", params={"user_id": "x"}).json()
         assert {t["name"]: t["access"] for t in tools} == {"echo": "read", "ping": "write"}
-        ev = _chat(c, "anyone")
+        ev = _chat(c, "x")
         ends = [d for e, d in ev if e == "tool_end" and d["tool"] != OPEN]
         assert [e["ok"] for e in ends] == [True, True]
         texts = [str(m.content) for m in _tool_results(model)]
         assert "echo: xin chào" in texts[0] and "echo: bí mật" in texts[1]
-        c.patch(f"/mcp/connectors/{hdr['connector_id']}", json={"headers": [{"name": "X-API-Key", "value": "sai"}]})
+        assert env.hub.catalog("y") == []                                    # người khác không thấy nguồn của x
+        c.patch(f"/mcp/connectors/{hdr['connector_id']}", json={"headers": [{"name": "X-API-Key", "value": "sai"}]},
+                params={"user_id": "x"})
         res = c.post(f"/mcp/connectors/{hdr['connector_id']}/test", params={"user_id": "x"}).json()
         assert not res["ok"] and "401" in res["message"]
 
 
-# ------------------------------------------------------------------ 7. hai user khác nhau có token riêng
+# ------------------------------------------------------------------ 7. hai user: connector + token riêng
 
 def test_7_two_users_separate_tokens(env):
     c, model = env.client([_opened("kho"), tool_call("kho_whoami"), tool_call("kho_create_item", ten="Bơm"), "ok"])
     with c:
-        cid = _add_kho(c, env.w)
+        cid = _add_kho(c, env.w, "alice")
+        assert c.post(f"/mcp/connectors/{cid}/connect", params={"user_id": "bob"}).status_code == 404   # của alice
+        cid_b = _add_kho(c, env.w, "bob")                                     # bob tự thêm, cùng tên "kho"
         _browser_connect(c, cid, "alice")
-        _browser_connect(c, cid, "bob")
-        ra, rb = _token_row(env.pool, "alice", cid), _token_row(env.pool, "bob", cid)
+        _browser_connect(c, cid_b, "bob")
+        ra, rb = _token_row(env.pool, "alice", cid), _token_row(env.pool, "bob", cid_b)
+        assert _token_row(env.pool, "bob", cid) is None
         assert BOX.decrypt(ra["access_token_enc"]) != BOX.decrypt(rb["access_token_enc"])
         ev = _chat(c, "bob")
         assert "bob@hawee.com.vn" in str(_tool_results(model)[0].content)
@@ -306,7 +314,7 @@ def test_7_two_users_separate_tokens(env):
                                                  "confirm_id": conf["confirm_id"], "approve": True}).text)
         end = _first(ev2, "tool_end")
         assert not end["ok"] and "quyền 'write'" in end["summary"]           # ToolError → lỗi có cấu trúc
-        assert _token_row(env.pool, "bob", cid)["status"] == "connected"       # kết nối vẫn giữ
+        assert _token_row(env.pool, "bob", cid_b)["status"] == "connected"     # kết nối vẫn giữ
         model.calls.clear()
         model.script = [_opened("kho"), tool_call("kho_whoami"), "ok"]
         _chat(c, "alice")
@@ -318,7 +326,7 @@ def test_7_two_users_separate_tokens(env):
 def test_concurrent_refresh_postgres_single_call(env):
     c, _ = env.client(["ok"])
     with c:
-        cid = _add_kho(c, env.w)
+        cid = _add_kho(c, env.w, "erin")
         _browser_connect(c, cid, "erin")
         row = env.hub.registry.get(cid)
         _expire(env.pool, "erin", cid)

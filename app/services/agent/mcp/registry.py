@@ -1,5 +1,8 @@
 """Registry connector: DB (khai qua giao diện) + config/mcp.yaml (chỉ đọc). Tạo/sửa/xóa, mã hóa header tĩnh.
 
+Connector trong DB thuộc riêng người tạo (`created_by` = user_id/email): chỉ người đó thấy, sửa, kết nối, dùng.
+Connector config/mcp.yaml dùng chung cho mọi người.
+
 Connector `oauth` khi tạo/sửa URL: chạy khám phá (mục 2.1) + đảm bảo có client OAuth (DCR 1 lần hoặc nhập tay).
 Header tĩnh lưu mã hóa (JSON), cho phép `${ENV_VAR}` – thay bằng giá trị trong .env lúc gọi.
 """
@@ -63,12 +66,18 @@ class ConnectorRegistry:
                         "header_names": sorted((s.get("headers") or {}).keys())})
         return out
 
-    def list_db(self) -> list[dict[str, Any]]:
-        return self.store.list_connectors()
+    def list_db(self, owner: str) -> list[dict[str, Any]]:
+        """Connector trong DB của 1 người."""
+        return self.store.list_connectors(owner) if owner else []
 
     def get(self, connector_id: str) -> dict[str, Any] | None:
-        """Connector trong DB (yaml → None: chỉ đọc, không qua registry này)."""
+        """Connector trong DB, không kiểm chủ sở hữu (yaml → None: chỉ đọc, không qua registry này)."""
         return None if connector_id.startswith(YAML_PREFIX) else self.store.get_connector(connector_id)
+
+    def owned(self, connector_id: str, owner: str) -> dict[str, Any] | None:
+        """Connector trong DB nếu thuộc `owner`; của người khác → None (như không tồn tại)."""
+        row = self.get(connector_id)
+        return row if row is not None and owner and row.get("created_by") == owner else None
 
     def header_names(self, row: dict[str, Any]) -> list[str]:
         if not row.get("headers_enc"):
@@ -85,13 +94,13 @@ class ConnectorRegistry:
         return _subst(json.loads(self.box().decrypt(row["headers_enc"])))
 
     # ---------------------------------------------------------------- ghi
-    def _check_name(self, name: str, exclude_id: str | None = None) -> str:
+    def _check_name(self, name: str, owner: str, exclude_id: str | None = None) -> str:
         name = (name or "").strip()
         if not NAME_RE.match(name):
             raise ConnectorError("Tên connector chỉ gồm a-z, 0-9, _ (2–32 ký tự)")
         if name in (self.cfg.get("servers") or {}):
             raise ConnectorError(f"Tên '{name}' trùng server trong config/mcp.yaml")
-        if any(c["name"] == name and c["connector_id"] != exclude_id for c in self.store.list_connectors()):
+        if any(c["name"] == name and c["connector_id"] != exclude_id for c in self.store.list_connectors(owner)):
             raise ConnectorError(f"Tên connector đã tồn tại: {name}")
         return name
 
@@ -127,11 +136,14 @@ class ConnectorRegistry:
             out["enabled"] = bool(data["enabled"])
         return out
 
-    def create(self, data: dict[str, Any], created_by: str | None) -> dict[str, Any]:
+    def create(self, data: dict[str, Any], created_by: str) -> dict[str, Any]:
+        created_by = (created_by or "").strip()
+        if not created_by:
+            raise ConnectorError("Thiếu user_id (chủ sở hữu connector)")
         f = self._validate({"transport": "streamable_http", **data})
         if "url" not in f or "auth_type" not in f:
             raise ConnectorError("Thiếu url hoặc auth_type")
-        name = self._check_name(data.get("name", ""))
+        name = self._check_name(data.get("name", ""), created_by)
         row: dict[str, Any] = {"connector_id": uuid.uuid4().hex, "name": name, "display_name": f.get("display_name") or name,
                                "description": f.get("description", ""),
                                "url": f["url"], "transport": f["transport"], "auth_type": f["auth_type"],
@@ -165,7 +177,7 @@ class ConnectorRegistry:
         data = {k: v for k, v in data.items() if k in EDITABLE and v is not None}
         f = self._validate(data)
         if "name" in data:
-            f["name"] = self._check_name(data["name"], exclude_id=connector_id)
+            f["name"] = self._check_name(data["name"], old["created_by"], exclude_id=connector_id)
         auth_type, url = f.get("auth_type", old["auth_type"]), f.get("url", old["url"])
         reset = auth_type != old["auth_type"] or url != old["url"]
         reauth = reset or (auth_type == "headers" and "headers" in data) or (

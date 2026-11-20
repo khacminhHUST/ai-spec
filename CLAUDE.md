@@ -33,6 +33,7 @@ Bộ tài liệu mẫu: `S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/` (dự án Qu�
 3. **Agent Harness** – spec: `docs/agent-harness.md` ✅ đã làm. Từ 2026-11-03 không còn Gate/lookup: mọi câu hỏi vào 1 agent
    (`create_agent` + middleware + sandbox Docker + skills); tra tài liệu là tool `search_project_docs` (Query Pipeline N1–N6);
    nguồn ngoài (MCP) nạp 2 tầng: danh mục nguồn trong prompt → agent mở nguồn mới nạp tool.
+   Connector MCP riêng theo người dùng (từ 2026-11-20): chỉ người thêm thấy/dùng; `user_id` = email token Tri thức khi chạy `trusted_proxy`.
 
 Lưu trữ dùng chung:
 - PostgreSQL: `documents`, `parent_chunks`, `project_aliases`, `conversations`, checkpoint LangGraph (PostgresSaver)

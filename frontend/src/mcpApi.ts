@@ -1,4 +1,5 @@
-// API MCP connector (backend app/api/routes/mcp.py, proxy /mcp trong vite.config.ts)
+// API MCP connector (backend app/api/routes/mcp.py, proxy /mcp trong vite.config.ts).
+// Connector thuộc riêng người tạo: mọi lời gọi theo connector đều gửi user_id (chạy sau Tri thức: backend lấy từ token).
 
 export type AuthType = "oauth" | "none" | "headers";
 export type Transport = "streamable_http" | "sse";
@@ -100,15 +101,15 @@ export const discover = (url: string) => post("/mcp/connectors/discover", { url 
 export const createConnector = (body: ConnectorInput, userId: string) =>
   post("/mcp/connectors", { ...body, user_id: userId }).then((r) => call<Connector>(r));
 
-export const updateConnector = (cid: string, body: Partial<ConnectorInput>) =>
-  fetch(`/mcp/connectors/${id(cid)}`, {
+export const updateConnector = (cid: string, body: Partial<ConnectorInput>, userId: string) =>
+  fetch(`/mcp/connectors/${id(cid)}?${q(userId)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }).then((r) => call<Connector>(r));
 
-export const deleteConnector = (cid: string) =>
-  fetch(`/mcp/connectors/${id(cid)}`, { method: "DELETE" }).then((r) => call<void>(r));
+export const deleteConnector = (cid: string, userId: string) =>
+  fetch(`/mcp/connectors/${id(cid)}?${q(userId)}`, { method: "DELETE" }).then((r) => call<void>(r));
 
 export const connect = (cid: string, userId: string) =>
   post(`/mcp/connectors/${id(cid)}/connect?${q(userId)}`).then((r) => call<{ authorize_url: string }>(r));
@@ -126,8 +127,8 @@ export const describeConnector = (cid: string, userId: string) =>
 export const listTools = (cid: string, userId: string) =>
   fetch(`/mcp/connectors/${id(cid)}/tools?${q(userId)}`).then((r) => call<McpTool[]>(r));
 
-export const setToolAccess = (cid: string, tool: string, access: Access | null) =>
-  fetch(`/mcp/connectors/${id(cid)}/tools/${encodeURIComponent(tool)}`, {
+export const setToolAccess = (cid: string, tool: string, access: Access | null, userId: string) =>
+  fetch(`/mcp/connectors/${id(cid)}/tools/${encodeURIComponent(tool)}?${q(userId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ access }),

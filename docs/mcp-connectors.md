@@ -15,8 +15,12 @@ Tài liệu chuẩn OAuth của hệ thống HAWEE, **đọc trước khi code**
 Code thật của A (`D:\ai-planner\app\api\oauth\`, `app/services/oauth/`) và MCP server mẫu (`D:\git_ai_hopdong`, `D:\New folder\mcp-reference\`) **chỉ đọc**, không sửa.
 
 Nguyên tắc:
-- **Chưa có đăng nhập và phân quyền.** `user_id` vẫn do client gửi như các API hiện có. Sau này SSO sẽ thay. Mọi user như nhau, ai cũng thêm/sửa được connector.
-- **Rủi ro đã biết** (ghi vào README của trang): biết `user_id` của người khác thì dùng được kết nối OAuth của người đó. Chấp nhận trong giai đoạn này.
+- **Connector riêng theo người dùng** (từ 2026-11-20, migration `006_mcp_per_user.sql`): ai thêm connector thì chỉ người đó
+  thấy, sửa, xóa, kết nối, đặt quyền tool và dùng trong agent. Người khác muốn dùng phải tự thêm. Server trong
+  `config/mcp.yaml` vẫn dùng chung.
+- **`user_id`**: chạy sau web Tri thức (`MEP_AUTH_MODE=trusted_proxy`, `deploy/trithuc/`) là email trong token đăng nhập
+  Tri thức, trình duyệt không sửa được. Chạy local: client tự gửi (biết `user_id` của người khác thì dùng được connector
+  của người đó – chấp nhận khi chạy local).
 - **Không sửa** `app/services/query/`, `app/services/ingestion/`, schema bảng cũ. Cần đổi thì dừng lại, ghi đề xuất và hỏi.
 - Mọi tham số đọc từ `config/mcp.yaml`. Secret lấy từ `.env`.
 - Server khai trong `config/mcp.yaml`, kể cả stdio và token tĩnh, **vẫn chạy như cũ**, hiển thị trên giao diện ở chế độ chỉ đọc.
@@ -27,9 +31,9 @@ Nguyên tắc:
 
 | Khái niệm | Ý nghĩa |
 |---|---|
-| **Connector** | Một MCP server đã khai: URL, tên, transport, kiểu xác thực. Dùng chung cho mọi user. |
+| **Connector** | Một MCP server đã khai: URL, tên, transport, kiểu xác thực. Thuộc riêng người tạo (`created_by`). |
 | **Kết nối (connection)** | Chỉ có ở connector `oauth`: token của **một user** cho **một connector**. Mỗi user tự bấm "Kết nối". |
-| **Tên connector** | Dạng slug `[a-z0-9_]{2,32}`, duy nhất, dùng làm tiền tố tên tool: `<tên>_<tool>`. |
+| **Tên connector** | Dạng slug `[a-z0-9_]{2,32}`, duy nhất trong phạm vi 1 người, dùng làm tiền tố tên tool: `<tên>_<tool>`. |
 
 Kiểu xác thực (`auth_type`):
 - `oauth`: theo mục 2.
@@ -118,11 +122,11 @@ Mã hóa: Fernet, khóa lấy từ `MEP_SECRET_KEY` trong `.env`. Thiếu khóa 
 
 | Bảng | Cột chính |
 |---|---|
-| `mcp_connectors` | `connector_id` PK, `name` UNIQUE, `display_name`, `url`, `transport`, `auth_type` (`oauth`/`none`/`headers`), `headers_enc`, `resource`, `issuer`, `as_metadata` JSONB, `scopes`, `enabled`, `created_by`, `created_at`, `updated_at` |
+| `mcp_connectors` | `connector_id` PK, (`created_by`, `name`) UNIQUE, `display_name`, `url`, `transport`, `auth_type` (`oauth`/`none`/`headers`), `headers_enc`, `resource`, `issuer`, `as_metadata` JSONB, `scopes`, `enabled`, `created_by` NOT NULL (chủ sở hữu), `created_at`, `updated_at` |
 | `oauth_clients` | `issuer` + `redirect_uri` PK, `client_id`, `client_secret_enc`, `auth_method`, `registered_at` |
 | `oauth_pending` | `state` PK, `user_id`, `connector_id`, `code_verifier_enc`, `expires_at` |
 | `mcp_user_tokens` | (`user_id`, `connector_id`) PK, `access_token_enc`, `refresh_token_enc`, `expires_at`, `scope`, `status` (`connected`/`forbidden`/`needs_reauth`), `updated_at` |
-| `mcp_tool_overrides` | (`connector_id`, `tool_name`) PK, `access` (`read`/`write`/`disabled`) |
+| `mcp_tool_overrides` | (`connector_id`, `tool_name`) PK, `access` (`read`/`write`/`disabled`) – riêng theo người vì connector riêng |
 
 Cấu hình bổ sung trong `config/mcp.yaml`: `public_base_url` (để dựng `redirect_uri`, mặc định `http://localhost:5173`), `client_name`, `tool_cache_ttl_s`, `refresh_skew_s`, `http_timeout_s`, `allow_http_localhost`.
 
@@ -132,16 +136,19 @@ Cấu hình bổ sung trong `config/mcp.yaml`: `public_base_url` (để dựng `
 
 | Method | Path | Mô tả |
 |---|---|---|
-| GET | `/mcp/connectors?user_id=` | Danh sách connector (DB + yaml) kèm trạng thái kết nối của user |
+| GET | `/mcp/connectors?user_id=` | Connector của user (DB) + yaml, kèm trạng thái kết nối của user |
 | POST | `/mcp/connectors/discover` `{url}` | Chạy khám phá mục 2.1, trả gợi ý `auth_type`, resource, issuer (chưa lưu) |
-| POST | `/mcp/connectors` | Tạo connector |
-| PATCH / DELETE | `/mcp/connectors/{id}` | Sửa / xóa (xóa kèm token và override) |
+| POST | `/mcp/connectors` `{…, user_id}` | Tạo connector (chủ sở hữu = `user_id`, bắt buộc) |
+| PATCH / DELETE | `/mcp/connectors/{id}?user_id=` | Sửa / xóa (xóa kèm token và override) |
 | POST | `/mcp/connectors/{id}/connect?user_id=` | Trả `authorize_url` |
 | GET | `/mcp/oauth/callback` | Callback OAuth (mục 2.3) |
 | POST | `/mcp/connectors/{id}/disconnect?user_id=` | Xóa token của user |
 | GET | `/mcp/connectors/{id}/tools?user_id=` | Danh sách tool kèm `access` hiệu lực |
-| PUT | `/mcp/connectors/{id}/tools/{tool}` `{access}` | Ghi đè đọc/ghi/tắt |
+| PUT | `/mcp/connectors/{id}/tools/{tool}?user_id=` `{access}` | Ghi đè đọc/ghi/tắt |
 | POST | `/mcp/connectors/{id}/test?user_id=` | Gọi thử `initialize` + `tools/list` |
+
+Mọi route theo `{id}` chỉ cho chủ sở hữu; connector của người khác → 404 (như không tồn tại). Callback OAuth: `user_id`
+của state phải là chủ connector, nếu không → lỗi, không lưu token.
 
 Thêm proxy `/mcp` vào `frontend/vite.config.ts`. Callback đi qua origin của frontend nên `redirect_uri` dùng `public_base_url`.
 
@@ -247,4 +254,4 @@ Không sửa: `app/services/query/`, `app/services/ingestion/`, `app/services/kn
   (`unavailable: true`), không thực thi.
 - Thêm `state_ttl_s` (600) vào `config/mcp.yaml`. `MEP_SECRET_KEY` là chuỗi bất kỳ → SHA-256 → khóa Fernet.
 - `GET /mcp/connectors/{id}/tools` của connector OAuth khi user chưa kết nối → 409.
-- Rủi ro "biết `user_id` của người khác thì dùng được kết nối OAuth" ghi ở đầu tab "Kết nối".
+- Tab "Kết nối" ghi: nguồn bạn thêm chỉ tài khoản của bạn thấy và dùng.

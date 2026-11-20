@@ -1,6 +1,7 @@
 """Unit – connector: registry, httpx.Auth (401 → refresh 1 lần), phân loại đọc/ghi, danh mục nguồn + tool theo
 nguồn/user, mô tả nguồn, mở nguồn trong agent, confirm_required và resume khi tool không còn, token không lọt vào log
 (MockTransport, store in-memory)."""
+import datetime as dt
 import json
 import logging
 
@@ -126,15 +127,25 @@ def test_connect_callback_and_errors(monkeypatch):
     res = _login(hub, fa, row, "u1")
     assert res == {"connector_id": row["connector_id"], "status": "connected", "message": "Đã kết nối"}
     assert store.token_statuses("u1") == {row["connector_id"]: "connected"} and store.token_statuses("u2") == {}
+    # connector của u1: u2 không kết nối được (như không tồn tại)
+    with pytest.raises(KeyError):
+        hub.oauth.connect(row["connector_id"], "u2")
     # state đã dùng / A trả lỗi invalid_target
-    params = httpx.URL(hub.oauth.connect(row["connector_id"], "u2")).params
+    params = httpx.URL(hub.oauth.connect(row["connector_id"], "u1")).params
     bad = hub.oauth.callback(code=None, state=params["state"], error="invalid_target")
     assert bad["status"] == "error" and "chưa được quản trị" in bad["message"]
     again = hub.oauth.callback(code="x", state=params["state"], error=None)
     assert again["status"] == "error" and again["connector_id"] is None
     # cookie người khởi tạo khác user của state → từ chối
-    params = httpx.URL(hub.oauth.connect(row["connector_id"], "u2")).params
-    assert hub.oauth.callback(code="x", state=params["state"], error=None, user_hint="u1")["status"] == "error"
+    params = httpx.URL(hub.oauth.connect(row["connector_id"], "u1")).params
+    assert hub.oauth.callback(code="x", state=params["state"], error=None, user_hint="u2")["status"] == "error"
+    # state ghi user khác chủ connector (không đi qua connect()) → từ chối, không lưu token
+    hub.oauth.store.add_pending("st-la", "u2", row["connector_id"], BOX.encrypt("v"), dt.datetime.now(dt.timezone.utc)
+                                + dt.timedelta(minutes=5))
+    assert hub.oauth.callback(code="x", state="st-la", error=None)["status"] == "error"
+    assert store.token_statuses("u2") == {}
+    with pytest.raises(KeyError):
+        hub.oauth.disconnect(row["connector_id"], "u2")
     assert "Đã xóa token" in hub.oauth.disconnect(row["connector_id"], "u1")
     assert store.token_statuses("u1") == {}
 
@@ -241,7 +252,9 @@ def test_catalog_and_source_tools_by_user_status_enabled_and_override(monkeypatc
             hub.source_tools("u1", src)
     monkeypatch.setattr(hub.tools, "probe", lambda r, u: {"ok": True, "status": "connected", "message": "", "tool_count": 2})
     _login(hub, fa, kho, "u1")
-    assert cat("u1")["kho"] == "connected" and cat("u2")["kho"] == "not_connected"     # u2 chưa kết nối
+    assert cat("u1")["kho"] == "connected" and cat("u2") == {}                         # connector của u1: u2 không thấy
+    with pytest.raises(SourceUnavailable):
+        hub.source_tools("u2", "kho")
     assert names("u1", "kho") == {"kho_list_items": "read", "kho_create_item": "write"}
     store.set_override(kho["connector_id"], "create_item", "disabled")
     store.set_override(kho["connector_id"], "list_items", "write")
@@ -253,17 +266,18 @@ def test_catalog_and_source_tools_by_user_status_enabled_and_override(monkeypatc
 
 
 def test_auth_is_bound_to_chatting_user(monkeypatch):
-    """User A gọi tool → header mang token của A, không bao giờ của B."""
+    """Alice, Bob mỗi người tự thêm connector cùng tên tới cùng server → mỗi người gọi bằng token của mình."""
     hub, store, fa = _hub()
-    kho = _oauth_connector(hub)
+    kho = {u: hub.registry.create({"name": "kho", "url": MCP_URL, "auth_type": "oauth"}, u) for u in ("alice", "bob")}
     monkeypatch.setattr(hub.tools, "probe", lambda r, u: {"ok": True, "status": "connected", "message": "", "tool_count": 0})
-    _login(hub, fa, kho, "alice")
-    _login(hub, fa, kho, "bob")
-    tok = {u: BOX.decrypt(store.tokens[(u, kho["connector_id"])]["access_token_enc"]) for u in ("alice", "bob")}
+    for u in ("alice", "bob"):
+        assert _login(hub, fa, kho[u], u)["status"] == "connected"
+    tok = {u: BOX.decrypt(store.tokens[(u, kho[u]["connector_id"])]["access_token_enc"]) for u in ("alice", "bob")}
     assert tok["alice"] != tok["bob"] and tok["alice"].startswith("at-alice")
+    assert len(store.tokens) == 2
     for user in ("alice", "bob"):
         seen = []
-        conn = hub.tools.connection_for(kho, user)
+        conn = hub.tools.connection_for(kho[user], user)
         httpx.Client(transport=httpx.MockTransport(_mcp_endpoint(set(tok.values()), seen)), auth=conn["auth"]).post(MCP_URL)
         assert seen == [tok[user]]
 

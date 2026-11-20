@@ -1,6 +1,8 @@
-"""API MCP connector (docs/mcp-connectors.md mục 5). Chưa có đăng nhập: `user_id` do client gửi như các API khác.
+"""API MCP connector (docs/mcp-connectors.md mục 5). Connector thuộc riêng người tạo: mọi route theo connector nhận
+`user_id` và chỉ cho chủ sở hữu (của người khác → 404 như không tồn tại).
 
-Rủi ro đã biết: biết `user_id` của người khác thì dùng được kết nối OAuth của người đó (chấp nhận giai đoạn này).
+`user_id`: chạy sau web Tri thức (MEP_AUTH_MODE=trusted_proxy) là email trong token, trình duyệt không sửa được;
+chạy local là giá trị client tự gửi.
 Callback OAuth đi qua origin của frontend (proxy /mcp) nên redirect_uri = public_base_url + /mcp/oauth/callback.
 """
 from __future__ import annotations
@@ -40,7 +42,7 @@ class ConnectorIn(BaseModel):
     client_id: str | None = None
     client_secret: str | None = None
     enabled: bool = True
-    user_id: str | None = None          # người tạo (created_by)
+    user_id: str                        # người tạo = chủ sở hữu (created_by)
 
 
 class ConnectorPatch(BaseModel):
@@ -86,10 +88,10 @@ def _call(fn, *args, **kwargs):
         raise HTTPException(404, "không tìm thấy connector") from None
 
 
-def _db_row(hub, connector_id: str) -> dict[str, Any]:
+def _db_row(hub, connector_id: str, user_id: str) -> dict[str, Any]:
     if hub.is_yaml(connector_id):
         raise HTTPException(400, "Connector từ config/mcp.yaml chỉ đọc – sửa trong file cấu hình")
-    row = hub.registry.get(connector_id)
+    row = hub.registry.owned(connector_id, user_id)
     if row is None:
         raise HTTPException(404, "không tìm thấy connector")
     return row
@@ -125,19 +127,20 @@ def create_connector(body: ConnectorIn, hub=Depends(get_hub)) -> dict[str, Any]:
 
 
 @router.patch("/connectors/{connector_id}")
-def update_connector(connector_id: str, body: ConnectorPatch, hub=Depends(get_hub)) -> dict[str, Any]:
-    _db_row(hub, connector_id)
+def update_connector(connector_id: str, body: ConnectorPatch, user_id: str = Query(...),
+                     hub=Depends(get_hub)) -> dict[str, Any]:
+    _db_row(hub, connector_id, user_id)
     data = body.model_dump(exclude_none=True)
     if body.headers is not None:
         data["headers"] = _headers(body.headers)
     row, _ = _call(hub.registry.update, connector_id, data)
     hub.invalidate(connector_id)
-    return hub.connector_view(row, {})
+    return hub.connector_view(row, hub.tokens.store.token_statuses(user_id))
 
 
 @router.delete("/connectors/{connector_id}", status_code=204)
-def delete_connector(connector_id: str, hub=Depends(get_hub)) -> Response:
-    _db_row(hub, connector_id)
+def delete_connector(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub)) -> Response:
+    _db_row(hub, connector_id, user_id)
     _call(hub.registry.delete, connector_id)
     hub.invalidate(connector_id)
     return Response(status_code=204)
@@ -147,7 +150,7 @@ def delete_connector(connector_id: str, hub=Depends(get_hub)) -> Response:
 
 @router.post("/connectors/{connector_id}/connect")
 def connect(connector_id: str, response: Response, user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, str]:
-    _db_row(hub, connector_id)
+    _db_row(hub, connector_id, user_id)
     url = _call(hub.oauth.connect, connector_id, user_id)
     # Gắn trình duyệt khởi tạo với callback (cookie cùng origin frontend, SameSite=Lax gửi kèm điều hướng về)
     response.set_cookie(USER_COOKIE, user_id, max_age=int(hub.cfg.get("state_ttl_s", 600)), path="/mcp/oauth",
@@ -183,7 +186,7 @@ def oauth_callback(request: Request, code: str | None = None, state: str | None 
 
 @router.post("/connectors/{connector_id}/disconnect")
 def disconnect(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, str]:
-    _db_row(hub, connector_id)
+    _db_row(hub, connector_id, user_id)
     return {"message": _call(hub.oauth.disconnect, connector_id, user_id)}
 
 
@@ -202,7 +205,7 @@ def list_tools(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub
                runtime: AgentRuntime = Depends(get_runtime)) -> list[dict[str, Any]]:
     if hub.is_yaml(connector_id):
         return _yaml_tools(runtime, connector_id)
-    row = _db_row(hub, connector_id)
+    row = _db_row(hub, connector_id, user_id)
     if row["auth_type"] == "oauth" and hub.tokens.status(user_id, connector_id) is None:
         raise HTTPException(409, "Chưa kết nối – bấm Kết nối để xem danh sách tool")
     try:
@@ -215,7 +218,7 @@ def list_tools(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub
 @router.post("/connectors/{connector_id}/describe")
 def describe(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, str]:
     """Gợi ý mô tả cho danh mục nguồn của agent (không lưu – người dùng xem lại rồi bấm Lưu)."""
-    row = _db_row(hub, connector_id)
+    row = _db_row(hub, connector_id, user_id)
     if row["auth_type"] == "oauth" and hub.tokens.status(user_id, connector_id) is None:
         raise HTTPException(409, "Chưa kết nối – bấm Kết nối trước để server trả danh sách tool")
     try:
@@ -226,15 +229,16 @@ def describe(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub))
 
 
 @router.put("/connectors/{connector_id}/tools/{tool_name}")
-def set_tool_access(connector_id: str, tool_name: str, body: AccessIn, hub=Depends(get_hub)) -> dict[str, Any]:
-    _db_row(hub, connector_id)
+def set_tool_access(connector_id: str, tool_name: str, body: AccessIn, user_id: str = Query(...),
+                    hub=Depends(get_hub)) -> dict[str, Any]:
+    _db_row(hub, connector_id, user_id)
     hub.registry.store.set_override(connector_id, tool_name, body.access)
     return {"tool": tool_name, "override": body.access}
 
 
 @router.post("/connectors/{connector_id}/test")
 def test_connector(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, Any]:
-    row = _db_row(hub, connector_id)
+    row = _db_row(hub, connector_id, user_id)
     if row["auth_type"] == "oauth" and hub.tokens.status(user_id, connector_id) is None:
         raise HTTPException(409, "Chưa kết nối – bấm Kết nối trước")
     return _call(hub.tools.probe, row, user_id)

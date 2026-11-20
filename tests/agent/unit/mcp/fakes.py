@@ -86,14 +86,15 @@ class MemoryStore(OAuthStore, ConnectorStore):
             yield row, update
 
     # ---- mcp_connectors / overrides
-    def list_connectors(self):
-        return [copy.deepcopy(c) for c in sorted(self.connectors.values(), key=lambda c: c["name"])]
+    def list_connectors(self, owner):
+        return [copy.deepcopy(c) for c in sorted(self.connectors.values(), key=lambda c: c["name"])
+                if c.get("created_by") == owner]
 
     def get_connector(self, connector_id):
         return copy.deepcopy(self.connectors.get(connector_id))
 
     def insert_connector(self, row):
-        if any(c["name"] == row["name"] for c in self.connectors.values()):
+        if any(c["name"] == row["name"] and c.get("created_by") == row.get("created_by") for c in self.connectors.values()):
             raise ValueError("trùng tên")
         self.connectors[row["connector_id"]] = {"enabled": True, **copy.deepcopy(row)}
 

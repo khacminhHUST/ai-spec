@@ -35,8 +35,9 @@ class OAuthConnect:
         self.redirect_uri = redirect_uri
         self.state_ttl_s = state_ttl_s
 
-    def _oauth_row(self, connector_id: str) -> dict[str, Any]:
-        row = self.registry.get(connector_id)
+    def _oauth_row(self, connector_id: str, user_id: str) -> dict[str, Any]:
+        """Connector OAuth của chính user_id (của người khác → KeyError như không tồn tại)."""
+        row = self.registry.owned(connector_id, user_id)
         if row is None:
             raise KeyError(connector_id)
         if row["auth_type"] != "oauth":
@@ -45,7 +46,7 @@ class OAuthConnect:
 
     def connect(self, connector_id: str, user_id: str) -> str:
         """→ authorize_url (state + PKCE đã lưu oauth_pending)."""
-        row = self._oauth_row(connector_id)
+        row = self._oauth_row(connector_id, user_id)
         if not row.get("enabled"):
             raise ConnectorError("Connector đang tắt")
         client = self.clients.ensure(row["issuer"], row["as_metadata"], self.redirect_uri)   # đổi redirect → DCR lại
@@ -64,7 +65,7 @@ class OAuthConnect:
                 return {"connector_id": cid, "status": "error", "message": flow.error_text(error)}
             if not code:
                 return {"connector_id": cid, "status": "error", "message": "Thiếu mã code từ Authorization Server"}
-            row = self._oauth_row(cid)
+            row = self._oauth_row(cid, pend.user_id)
             client = self.clients.get(row["issuer"], self.redirect_uri)
             if client is None:
                 return {"connector_id": cid, "status": "error", "message": "Chưa có client OAuth – bấm Kết nối lại"}
@@ -85,7 +86,7 @@ class OAuthConnect:
             return {"connector_id": cid, "status": "error", "message": f"Connector không hợp lệ: {e}"}
 
     def disconnect(self, connector_id: str, user_id: str) -> str:
-        self._oauth_row(connector_id)
+        self._oauth_row(connector_id, user_id)
         self.tokens.disconnect(user_id, connector_id)
         self.tools.invalidate(connector_id, user_id)
         return DISCONNECT_NOTE

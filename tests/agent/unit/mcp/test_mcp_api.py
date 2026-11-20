@@ -72,23 +72,22 @@ def test_discover_create_connect_callback_tools(api):
         assert kho["description"] == "Công cụ: list_items, create_item"          # tự điền khi kết nối lần đầu
         assert c.post(f"/mcp/connectors/{cid}/describe", params={"user_id": "u1"}).json() == {
             "description": "Công cụ: list_items, create_item"}
-        assert c.post(f"/mcp/connectors/{cid}/describe", params={"user_id": "u2"}).status_code == 409
-        r = c.patch(f"/mcp/connectors/{cid}", json={"description": "Kho vật tư:  tồn kho, nhập xuất"})
-        assert r.json()["description"] == "Kho vật tư: tồn kho, nhập xuất"
-        assert next(x for x in c.get("/mcp/connectors", params={"user_id": "u2"}).json()
-                    if x["name"] == "kho")["status"] == "not_connected"
+        assert c.post(f"/mcp/connectors/{cid}/describe", params={"user_id": "u2"}).status_code == 404   # của u1
+        r = c.patch(f"/mcp/connectors/{cid}", json={"description": "Kho vật tư:  tồn kho, nhập xuất"}, params={"user_id": "u1"})
+        assert r.json()["description"] == "Kho vật tư: tồn kho, nhập xuất" and r.json()["status"] == "connected"
+        assert all(x["name"] != "kho" for x in c.get("/mcp/connectors", params={"user_id": "u2"}).json())
         tools = c.get(f"/mcp/connectors/{cid}/tools", params={"user_id": "u1"}).json()
         assert {t["name"]: t["access"] for t in tools} == {"list_items": "read", "create_item": "write"}
-        assert c.put(f"/mcp/connectors/{cid}/tools/create_item", json={"access": "disabled"}).status_code == 200
+        assert c.put(f"/mcp/connectors/{cid}/tools/create_item", json={"access": "disabled"}, params={"user_id": "u1"}).status_code == 200
         tools = c.get(f"/mcp/connectors/{cid}/tools", params={"user_id": "u1"}).json()
         assert next(t for t in tools if t["name"] == "create_item")["access"] == "disabled"
         assert {t.name for t in hub.source_tools("u1", "kho")} == {"kho_list_items"}
         assert c.post(f"/mcp/connectors/{cid}/test", params={"user_id": "u1"}).json()["ok"]
         r = c.post(f"/mcp/connectors/{cid}/disconnect", params={"user_id": "u1"})
         assert "60 phút" in r.json()["message"]
-        assert c.patch(f"/mcp/connectors/{cid}", json={"enabled": False}).json()["enabled"] is False
-        assert c.delete(f"/mcp/connectors/{cid}").status_code == 204
-        assert c.delete(f"/mcp/connectors/{cid}").status_code == 404
+        assert c.patch(f"/mcp/connectors/{cid}", json={"enabled": False}, params={"user_id": "u1"}).json()["enabled"] is False
+        assert c.delete(f"/mcp/connectors/{cid}", params={"user_id": "u1"}).status_code == 204
+        assert c.delete(f"/mcp/connectors/{cid}", params={"user_id": "u1"}).status_code == 404
 
 
 def test_callback_errors_and_yaml_readonly(api):
@@ -96,18 +95,19 @@ def test_callback_errors_and_yaml_readonly(api):
     with c:
         page = c.get("/mcp/oauth/callback", params={"state": "khong-co", "code": "x"})
         assert page.status_code == 200 and '"status": "error"' in page.text
-        cid = c.post("/mcp/connectors", json={"name": "kho", "url": MCP_URL, "auth_type": "oauth"}).json()["connector_id"]
+        cid = c.post("/mcp/connectors", json={"name": "kho", "url": MCP_URL, "auth_type": "oauth", "user_id": "u1"}).json()["connector_id"]
         p = httpx.URL(c.post(f"/mcp/connectors/{cid}/connect", params={"user_id": "u1"}).json()["authorize_url"]).params
         page = c.get("/mcp/oauth/callback", params={"error": "invalid_target", "state": p["state"]})
         assert "chưa được quản trị" in page.text
         y = next(x for x in c.get("/mcp/connectors", params={"user_id": "u1"}).json() if x["source"] == "yaml")
-        assert c.patch(f"/mcp/connectors/{y['connector_id']}", json={"enabled": False}).status_code == 400
+        assert c.patch(f"/mcp/connectors/{y['connector_id']}", json={"enabled": False}, params={"user_id": "u1"}).status_code == 400
         assert c.post(f"/mcp/connectors/{y['connector_id']}/connect", params={"user_id": "u1"}).status_code == 400
         assert c.get(f"/mcp/connectors/{y['connector_id']}/tools", params={"user_id": "u1"}).json() == []
         r = c.post("/mcp/connectors", json={"name": "h1", "url": MCP_URL, "auth_type": "headers",
-                                            "headers": [{"name": "Authorization", "value": "Bearer abc"}]})
+                                            "headers": [{"name": "Authorization", "value": "Bearer abc"}], "user_id": "u1"})
         assert r.status_code == 201 and r.json()["header_names"] == ["Authorization"] and "abc" not in r.text
-        assert c.post("/mcp/connectors", json={"name": "Bad Name", "url": MCP_URL, "auth_type": "none"}).status_code == 400
+        assert c.post("/mcp/connectors", json={"name": "Bad Name", "url": MCP_URL, "auth_type": "none", "user_id": "u1"}).status_code == 400
+        assert c.post("/mcp/connectors", json={"name": "pub2", "url": MCP_URL, "auth_type": "none"}).status_code == 422
 
 
 def test_missing_secret_key_is_clear_error(api):
@@ -116,7 +116,43 @@ def test_missing_secret_key_is_clear_error(api):
 
     c, *_ = api(box=no_key)
     with c:
-        r = c.post("/mcp/connectors", json={"name": "kho", "url": MCP_URL, "auth_type": "oauth"})
+        r = c.post("/mcp/connectors", json={"name": "kho", "url": MCP_URL, "auth_type": "oauth", "user_id": "u1"})
         assert r.status_code == 503 and r.json()["detail"]["code"] == "secret_key_missing"
         assert c.post("/mcp/connectors", json={"name": "pub", "url": "https://pub.example.com/mcp",
-                                               "auth_type": "none"}).status_code == 201
+                                               "auth_type": "none", "user_id": "u1"}).status_code == 201
+
+
+def test_connectors_are_private_per_user(api):
+    """Mỗi người chỉ thấy / sửa / kết nối / đặt quyền connector của mình; tên chỉ cần riêng trong phạm vi 1 người."""
+    c, hub, fa, store = api()
+    u1, u2 = {"user_id": "a@hawee.vn"}, {"user_id": "b@hawee.vn"}
+    with c:
+        a = c.post("/mcp/connectors", json={"name": "kho", "url": MCP_URL, "auth_type": "oauth", **u1}).json()
+        b = c.post("/mcp/connectors", json={"name": "kho", "url": MCP_URL, "auth_type": "oauth", **u2})
+        assert b.status_code == 201, b.text                                       # cùng tên, khác người: được
+        b = b.json()
+        assert c.post("/mcp/connectors", json={"name": "kho", "url": MCP_URL, "auth_type": "oauth", **u1}).status_code == 400
+        assert [x["connector_id"] for x in c.get("/mcp/connectors", params=u1).json() if x["source"] == "db"] == [a["connector_id"]]
+        assert [x["connector_id"] for x in c.get("/mcp/connectors", params=u2).json() if x["source"] == "db"] == [b["connector_id"]]
+        assert store.connectors[a["connector_id"]]["created_by"] == "a@hawee.vn"
+
+        aid = a["connector_id"]
+        for method, path, kw in [("patch", "", {"json": {"enabled": False}}), ("delete", "", {}),
+                                 ("post", "/connect", {}), ("post", "/disconnect", {}), ("post", "/test", {}),
+                                 ("post", "/describe", {}), ("get", "/tools", {}),
+                                 ("put", "/tools/create_item", {"json": {"access": "write"}})]:
+            r = getattr(c, method)(f"/mcp/connectors/{aid}{path}", params=u2, **kw)
+            assert r.status_code == 404, (method, path, r.status_code)
+        assert store.connectors[aid]["enabled"] is True and store.get_overrides(aid) == {}
+
+        # Quyền tool của B không ảnh hưởng A (2 connector riêng)
+        assert c.put(f"/mcp/connectors/{b['connector_id']}/tools/list_items", json={"access": "disabled"}, params=u2).status_code == 200
+        assert store.get_overrides(aid) == {}
+
+        # Kết nối OAuth của A: B không dùng được nguồn 'kho' của A trong agent
+        p = httpx.URL(c.post(f"/mcp/connectors/{aid}/connect", params=u1).json()["authorize_url"]).params
+        code = fa.issue_code("a@hawee.vn", p["client_id"], p["redirect_uri"], p["code_challenge"])
+        assert '"status": "connected"' in c.get("/mcp/oauth/callback", params={"code": code, "state": p["state"]}).text
+        assert {t.name for t in hub.source_tools("a@hawee.vn", "kho")} == {"kho_list_items", "kho_create_item"}
+        assert [e["status"] for e in hub.catalog("b@hawee.vn") if e["name"] == "kho"] == ["not_connected"]  # 'kho' của B
+        assert ("b@hawee.vn", aid) not in store.tokens

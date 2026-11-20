@@ -60,7 +60,7 @@ export default function ConnectorForm({ userId, editing, existingNames, onSaved,
           patch.url = u;
           patch.auth_type = (await discover(u)).auth_type;
         }
-        await updateConnector(editing.connector_id, patch);
+        await updateConnector(editing.connector_id, patch, userId);
         onSaved(null, null);
         return;
       }
