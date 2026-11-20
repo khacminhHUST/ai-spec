@@ -12,7 +12,7 @@ agent:
   max_steps: 25
   max_consecutive_tool_errors: 3
   max_wall_time_s: 300
-  tool_result_max_tokens: 4000
+  tool_result_max_tokens: 12000   # 4000 → câu hỏi rộng (10 mục) bị ghi ra file, agent tốn ~10 lần run_code để đọc
   sibling_tables_max: 20    # search_project_docs nạp kèm tối đa N bảng table_A_B_* của mục sec_A_B đã trúng
   summarize_above_tokens: 60000
 sandbox:

@@ -23,6 +23,8 @@ Dùng khi: tạo/sửa file (xlsx, docx, pdf, pptx, csv, png), đọc file nhị
 Không dùng để tra cứu tài liệu dự án (dùng search_project_docs) và không tự điền số liệu từ kiến thức chung.
 - Thư mục: /workspace/input (file người dùng gửi, kết quả tra cứu lớn *.json), /workspace/output (file kết quả – chỉ file ở đây mới gửi được cho người dùng).
 - Có sẵn: openpyxl, xlsxwriter, python-docx, python-pptx, reportlab, pandas, matplotlib, mep_helpers (helper công ty), LibreOffice (`soffice --headless`).
+- MỖI LẦN CHẠY LÀ TIẾN TRÌNH PYTHON MỚI: biến, import, dữ liệu đã đọc ở lần trước KHÔNG còn → mỗi đoạn code phải tự
+  import (json, pandas…) và tự đọc lại file cần dùng. Gộp đọc + xử lý vào 1 lần chạy.
 - In kết quả cần xem bằng print(); stdout/stderr bị cắt ngắn.
 - timeout_s: mặc định theo cấu hình, tối đa có giới hạn.
 Ví dụ: run_code(code="import pandas as pd\\ndf = pd.DataFrame({'a': [1]})\\ndf.to_excel('/workspace/output/a.xlsx', index=False)\\nprint('ok')")
