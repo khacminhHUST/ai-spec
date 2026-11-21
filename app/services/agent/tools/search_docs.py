@@ -135,7 +135,8 @@ def _summary_block(b: dict[str, Any]) -> dict[str, Any]:
     return short
 
 
-def _summarize(payload: dict[str, Any]) -> dict[str, Any]:
+def summarize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Bản ngắn: cắt nội dung từng khối (bảng ngắn giữ nguyên), đánh dấu truncated."""
     short = {k: v for k, v in payload.items() if k not in ("blocks", "citations")}
     short["blocks"] = [_summary_block(b) for b in payload.get("blocks", [])]
     return short
@@ -175,28 +176,27 @@ class SearchDocs:
             self.saver.delete_thread(tid)
 
 
-def search_impl(search: SearchDocs, manager: SandboxManager, agent_cfg: dict[str, Any], ctx: AgentContext,
-                state: dict[str, Any], question: str, project_mentions=None, disciplines=None, streams=None
-                ) -> tuple[str, list[dict], list[str]]:
-    """→ (JSON cho LLM, citations mới (n toàn cục), active_projects sau tra cứu)."""
-    active = list(state.get("active_projects") or ctx.active_projects)
-    try:
-        st = search.run(ctx, question, active, project_mentions, disciplines, streams)
-    except Exception as e:  # noqa: BLE001
-        log.exception("search_project_docs lỗi")
-        return fail(f"Tra cứu lỗi: {e}"), [], active
+def search_payload(search: SearchDocs, ctx: AgentContext, active: list[str], question: str, project_mentions=None,
+                   disciplines=None, streams=None, *, sibling_tables_max: int = 0, existing: int = 0
+                   ) -> tuple[dict[str, Any], list[dict], list[str]]:
+    """N1–N6 → (payload JSON: status, question, projects, blocks, citations…; citations; active_projects sau tra cứu).
+
+    Dùng chung cho agent (search_impl) và MCP server cho Claude (app/services/mcp_server). Lỗi tra cứu → raise.
+    existing = số nguồn đã có trong state (đánh số [n] tiếp theo).
+    """
+    st = search.run(ctx, question, active, project_mentions, disciplines, streams)
     status = st.get("status") or "OK"
     active = list(st.get("active_projects") or active)
     profiles = st.get("project_profiles") or {}
     if status == "ASK_CLARIFY":
-        return ok(status=status, message=st.get("answer") or "", clarify_options=st.get("clarify_options") or []
-                  ), [], active
+        return {"status": status, "message": st.get("answer") or "",
+                "clarify_options": st.get("clarify_options") or []}, [], active
     context = (st.get("context") or []) if status != "NOT_FOUND" else []
     try:
-        context = expand_sibling_tables(search.deps, context, int(agent_cfg.get("sibling_tables_max", 0)))
+        context = expand_sibling_tables(search.deps, context, sibling_tables_max)
     except Exception as e:  # noqa: BLE001 – phần bổ sung: lỗi thì vẫn trả kết quả chính
         log.warning("nạp bảng của mục lỗi: %s", e)
-    first = ctx.allocate_sources(len(context), len(state.get("sources") or []))
+    first = ctx.allocate_sources(len(context), existing)
     blocks = [_block(b, first + i, profiles) for i, b in enumerate(context)]
     cites = [_citation(b, first + i) for i, b in enumerate(context)]
     payload = {"status": "NOT_FOUND" if not blocks else status,
@@ -208,12 +208,29 @@ def search_impl(search: SearchDocs, manager: SandboxManager, agent_cfg: dict[str
         payload["missing"] = [m.split(":", 1)[-1] for m in st.get("missing") or []]
     if not blocks:
         payload["message"] = "Không tìm thấy thông tin trong tài liệu dự án – không được tự điền số liệu."
+    return payload, cites, active
+
+
+def search_impl(search: SearchDocs, manager: SandboxManager, agent_cfg: dict[str, Any], ctx: AgentContext,
+                state: dict[str, Any], question: str, project_mentions=None, disciplines=None, streams=None
+                ) -> tuple[str, list[dict], list[str]]:
+    """→ (JSON cho LLM, citations mới (n toàn cục), active_projects sau tra cứu)."""
+    active = list(state.get("active_projects") or ctx.active_projects)
     try:
-        payload, _ = fit_or_offload(manager, ctx.conversation_id, "search", payload, _summarize,
+        payload, cites, active = search_payload(
+            search, ctx, active, question, project_mentions, disciplines, streams,
+            sibling_tables_max=int(agent_cfg.get("sibling_tables_max", 0)), existing=len(state.get("sources") or []))
+    except Exception as e:  # noqa: BLE001
+        log.exception("search_project_docs lỗi")
+        return fail(f"Tra cứu lỗi: {e}"), [], active
+    if payload["status"] == "ASK_CLARIFY":
+        return ok(**payload), [], active
+    try:
+        payload, _ = fit_or_offload(manager, ctx.conversation_id, "search", payload, summarize_payload,
                                     int(agent_cfg["tool_result_max_tokens"]), search.deps.count_tokens)
     except Exception as e:  # noqa: BLE001 – sandbox lỗi: vẫn trả bản tóm tắt
         log.warning("offload kết quả search lỗi: %s", e)
-        payload = {**_summarize(payload), "note": "Kết quả bị cắt (không ghi được file sandbox)."}
+        payload = {**summarize_payload(payload), "note": "Kết quả bị cắt (không ghi được file sandbox)."}
     return ok(**payload), cites, active
 
 

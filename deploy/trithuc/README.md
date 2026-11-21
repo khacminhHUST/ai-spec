@@ -171,3 +171,11 @@ Runner có quyền Docker = quyền root server 2 (đang chứa dữ liệu th�
   và không bấm duyệt PR lạ.
 
 Thêm: Settings › Environments › tạo `production` (job deploy dùng) – có thể đặt *Required reviewers* để mỗi lần deploy phải bấm duyệt.
+
+## MCP server cho Claude (docs/mcp-server.md)
+`https://trithuc.hawee.com.vn/thongtinduan/mcp` – Claude tra cứu tài liệu dự án (chỉ đọc), đăng nhập OAuth HAWEE.
+Phía server 2 deploy cùng app (gateway + api, không thêm container). Một lần trên server 1:
+```bash
+curl -fsSLO https://raw.githubusercontent.com/khacminhHUST/ai-spec/main/deploy/trithuc/server1-add-mcp.sh && sh server1-add-mcp.sh
+```
+Rồi nhờ quản trị user-management đăng ký server `ai-thongtinduan` (resource_uri như trên) và gán quyền `read`.

@@ -23,6 +23,8 @@ from urllib.parse import parse_qsl, urlencode
 import anyio
 
 EXEMPT_PATHS = frozenset({"/healthz", "/mcp/oauth/callback"})  # callback OAuth: trình duyệt bị chuyển hướng về, không có Bearer
+# MCP server cho Claude (app/services/mcp_server): token user-management, MCP server tự verify chữ ký – không qua đây
+EXEMPT_PREFIXES = ("/kb-mcp", "/.well-known/oauth-protected-resource/")
 MAX_JSON_BYTES = 2 * 1024 * 1024
 _CONV_RE = re.compile(r"^/conversations/([^/]+)$")
 
@@ -73,7 +75,7 @@ class TrustedProxyAuth:
         self.claim = user_claim
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["path"] in EXEMPT_PATHS:
+        if scope["type"] != "http" or scope["path"] in EXEMPT_PATHS or scope["path"].startswith(EXEMPT_PREFIXES):
             return await self.app(scope, receive, send)
         auth = _header(scope, b"authorization")
         email = identity(auth[7:].strip() if auth.lower().startswith("bearer ") else None, self.claim)

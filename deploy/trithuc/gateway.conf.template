@@ -39,6 +39,23 @@ server {
         proxy_cookie_path /mcp/oauth ${PUBLIC_PREFIX}/api/mcp/oauth;
     }
 
+    # MCP server tra cứu cho Claude (docs/mcp-server.md): token user-management, backend tự verify chữ ký.
+    # Công khai ${PUBLIC_PREFIX}/mcp → backend /kb-mcp (config/mcp_server.yaml › path).
+    location = ${PUBLIC_PREFIX}/mcp {
+        proxy_pass http://api:8000/kb-mcp;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+    }
+    # Metadata RFC 9728 – Claude tìm máy chủ đăng nhập (user-management) từ đây
+    location = /.well-known/oauth-protected-resource${PUBLIC_PREFIX}/mcp {
+        proxy_pass http://api:8000;
+        proxy_set_header Host $host;
+    }
+
     # Frontend (file tĩnh). Chỉ cho nhúng iframe từ chính tên miền (trang Tri thức).
     root /usr/share/nginx/html;
 

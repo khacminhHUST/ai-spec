@@ -1,0 +1,13 @@
+# MCP server "Thông tin dự án" cho Claude (docs/mcp-server.md): chỉ tra cứu tài liệu dự án (Query Pipeline N1–N6),
+# chỉ đọc. Đăng nhập theo chuẩn OAuth HAWEE: token do user-management ký (RS256), MEP tự verify.
+# Biến môi trường ghi đè: MCP_SERVER_ENABLED, MCP_SERVER_RESOURCE_URL, MCP_SERVER_PUBLIC_KEY_PEM,
+# MCP_SERVER_REQUIRE_PERMISSION.
+enabled: true
+path: /kb-mcp                                  # đường dẫn trong app (deploy: gateway chuyển <PUBLIC_PREFIX>/mcp → đây)
+resource_url: http://localhost:8000/kb-mcp     # URL công khai = định danh RFC 8707 đăng ký ở user-management
+server_name: ai-thongtinduan                   # = mcp_servers.name đăng ký ở user-management
+issuer: https://user-management.hawee.com.vn   # `iss` trong token – không có "/" cuối
+jwks_url: ""                                   # trống → <issuer>/.well-known/jwks.json (chỉ gọi khi token mang kid lạ)
+leeway_s: 30                                   # lệch đồng hồ cho phép khi kiểm exp/iat
+require_permission: read                       # quyền cần có trong claim permissions; "" → chỉ cần token hợp lệ
+result_max_tokens: 20000                       # kết quả tra cứu dài hơn → cắt nội dung từng đoạn (truncated)

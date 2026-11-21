@@ -34,6 +34,8 @@ Bộ tài liệu mẫu: `S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/` (dự án Qu�
    (`create_agent` + middleware + sandbox Docker + skills); tra tài liệu là tool `search_project_docs` (Query Pipeline N1–N6);
    nguồn ngoài (MCP) nạp 2 tầng: danh mục nguồn trong prompt → agent mở nguồn mới nạp tool.
    Connector MCP riêng theo người dùng (từ 2026-11-20): chỉ người thêm thấy/dùng; `user_id` = email token Tri thức khi chạy `trusted_proxy`.
+4. **MCP server cho Claude** – spec: `docs/mcp-server.md` (từ 2026-11-21): `https://trithuc.hawee.com.vn/thongtinduan/mcp`,
+   chỉ tra cứu (N1–N6, dùng chung `search_payload` với agent), OAuth HAWEE (user-management). UI/agent không đổi.
 
 Lưu trữ dùng chung:
 - PostgreSQL: `documents`, `parent_chunks`, `project_aliases`, `conversations`, checkpoint LangGraph (PostgresSaver)

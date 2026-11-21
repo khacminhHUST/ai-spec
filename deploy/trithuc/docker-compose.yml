@@ -11,6 +11,8 @@ x-app: &app
     QDRANT_URL: http://qdrant:6333
     MEP_NS: ${MEP_NS:-ingest}
     MCP_PUBLIC_BASE_URL: ${PUBLIC_ORIGIN:?đặt PUBLIC_ORIGIN trong .env}${PUBLIC_PREFIX:-/thongtinduan}/api
+    # MCP server tra cứu cho Claude (docs/mcp-server.md): URL công khai = định danh đăng ký ở user-management
+    MCP_SERVER_RESOURCE_URL: ${PUBLIC_ORIGIN}${PUBLIC_PREFIX:-/thongtinduan}/mcp
   restart: unless-stopped
   depends_on:
     postgres: { condition: service_healthy }

@@ -7,6 +7,7 @@
     POST /conversations/{id}/files  upload file vào sandbox
     GET  /conversations/{id}/files/{name}  tải file kết quả
     /mcp/...                        MCP connector (app/api/routes/mcp.py)
+    /kb-mcp                         MCP server cho Claude – tra cứu tài liệu (app/services/mcp_server, docs/mcp-server.md)
 
 Chạy: uvicorn app.main:app --port 8000
 """
@@ -24,6 +25,7 @@ from app.services.agent.graph import build_assistant_graph
 from app.services.agent.retention import purge_stale_conversations
 from app.services.agent.runtime import AgentRuntime, build_runtime
 from app.services.knowledge.cache import attach_store_version
+from app.services.mcp_server.server import McpServerRoute, build as build_mcp_server
 from app.services.query.deps import Deps
 
 log = logging.getLogger(__name__)
@@ -58,8 +60,13 @@ def _start_embedded_worker(settings, stop: threading.Event) -> None:
     threading.Thread(target=run, name="knowledge-worker", daemon=True).start()
 
 
-def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntime | None = None) -> FastAPI:
-    """deps/checkpointer = None → bản thật (Postgres pool + PostgresSaver qua app.db.client.checkpointer_conn)."""
+def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntime | None = None,
+               mcp_server_cfg=None) -> FastAPI:
+    """deps/checkpointer = None → bản thật (Postgres pool + PostgresSaver qua app.db.client.checkpointer_conn).
+
+    mcp_server_cfg: ServerConfig cho MCP server tra cứu (None → config/mcp_server.yaml; enabled=false → không bật).
+    """
+    kb_mcp = build_mcp_server(mcp_server_cfg)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -80,6 +87,8 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
         app.state.deps = d
         app.state.runtime = rt
         app.state.graph = build_assistant_graph(d, rt, cp)
+        if kb_mcp is not None:
+            kb_mcp.attach(d)
 
         async def reap_loop():
             while True:
@@ -105,7 +114,11 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
         if deps is None:
             _start_embedded_worker(d.settings, worker_stop)
         try:
-            yield
+            if kb_mcp is not None:
+                async with kb_mcp.session():
+                    yield
+            else:
+                yield
         finally:
             worker_stop.set()
             reaper.cancel()
@@ -122,6 +135,9 @@ def create_app(deps: Deps | None = None, checkpointer=None, runtime: AgentRuntim
     app.include_router(mcp.router)
     app.include_router(projects.router)
     app.include_router(knowledge.router)
+    if kb_mcp is not None:
+        app.add_middleware(McpServerRoute, kb=kb_mcp)
+        app.state.kb_mcp = kb_mcp
     return app
 
 
