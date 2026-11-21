@@ -138,7 +138,6 @@ export default function ConnectorsView({ userId }: { userId: string }) {
           <Icon name="plus" /> Thêm
         </button>
       </div>
-      <p className="muted">Nguồn bạn thêm chỉ tài khoản của bạn thấy và dùng; người khác muốn dùng phải tự thêm.</p>
       {notice && <div className="cn-ok">{notice}</div>}
       {error && <div className="banner-error">{error}</div>}
       {form && (

@@ -254,4 +254,4 @@ Không sửa: `app/services/query/`, `app/services/ingestion/`, `app/services/kn
   (`unavailable: true`), không thực thi.
 - Thêm `state_ttl_s` (600) vào `config/mcp.yaml`. `MEP_SECRET_KEY` là chuỗi bất kỳ → SHA-256 → khóa Fernet.
 - `GET /mcp/connectors/{id}/tools` của connector OAuth khi user chưa kết nối → 409.
-- Tab "Kết nối" ghi: nguồn bạn thêm chỉ tài khoản của bạn thấy và dùng.
+- Connector riêng theo người dùng (mục đầu) – giao diện không ghi chú thêm.
