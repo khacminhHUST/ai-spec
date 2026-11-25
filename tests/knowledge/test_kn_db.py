@@ -100,6 +100,22 @@ def test_worker_skip_locked(conn, kn_ns):
     assert claim_next(conn)["job_id"] == "job_p"
 
 
+def test_dem_job_va_thu_tu_hang_cho(conn):
+    """Nút lọc Hàng chờ xử lý: đếm trên toàn bộ job (danh sách chỉ 200 dòng); lọc đang chạy → thứ tự xử lý."""
+    from app.services.knowledge.jobs import count_jobs, list_jobs
+
+    for jid in ("job_q1", "job_q2", "job_q3"):
+        _job(conn, jid)
+    _job(conn, "job_run", status="PROCESSING", step="parse")
+    _job(conn, "job_pub", status="PUBLISHED")
+    assert count_jobs(conn) == {"QUEUED": 3, "PROCESSING": 1, "PUBLISHED": 1}
+    assert count_jobs(conn, "KHONG_CO") == {}
+    order = [j["job_id"] for j in list_jobs(conn, "QUEUED,PROCESSING,PUBLISHING")]
+    assert order == ["job_run", "job_q1", "job_q2", "job_q3"]      # đang xử lý trước, rồi job cũ nhất
+    assert [j["job_id"] for j in list_jobs(conn)][0] == "job_pub"   # không lọc → mới nhất trước
+    assert len(list_jobs(conn, "QUEUED", limit=2)) == 2
+
+
 def test_worker_job_do_dang_thanh_failed(conn):
     _job(conn, "job_1", status="PROCESSING", step="chunk_vi")
     _job(conn, "job_2", status="PUBLISHING", step="embed")
@@ -142,6 +158,7 @@ def test_huy_job_dang_xu_ly(conn, kn_ns, monkeypatch, tmp_path):
         raise AssertionError("không được chạy tiếp sau khi hủy")
 
     monkeypatch.setattr("app.services.ingestion.pipeline.process", fake_process)
+    monkeypatch.setattr(worker, "prewarm_ocr", lambda *a, **k: None)
     monkeypatch.setattr(worker, "classify_job", lambda *a, **k: None)
     monkeypatch.setattr(worker, "job_overrides", lambda *a, **k: {})
     _job(conn, "job_h")

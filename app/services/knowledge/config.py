@@ -14,7 +14,8 @@ DEFAULTS: dict[str, Any] = {
     "uploads_dir": "data/uploads",
     "artifacts_dir": "artifacts/jobs",
     "max_upload_mb": 200,
-    "worker": {"poll_interval_s": 3, "auto_publish": False, "embedded": False},
+    "worker": {"poll_interval_s": 3, "auto_publish": False, "embedded": False,
+               "ocr_max_pages": 300, "ocr_timeout_s": 2700},
 }
 
 # Mô tả ngắn cho form upload (doc_type = profile trong config/headings.yaml)

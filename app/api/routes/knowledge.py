@@ -239,6 +239,12 @@ def list_jobs(status: str | None = None, project_id: str | None = None, conn=Dep
     return jobs.list_jobs(conn, status, project_id)
 
 
+@router.get("/jobs/counts")
+def count_jobs(project_id: str | None = None, conn=Depends(get_conn)):
+    """{trạng thái: số job} trên toàn bộ hàng chờ (danh sách /jobs chỉ trả tối đa 200 dòng)."""
+    return jobs.count_jobs(conn, project_id)
+
+
 @router.get("/jobs/{job_id}")
 def get_job(job_id: str, conn=Depends(get_conn)):
     job = call(jobs.get_job, conn, job_id)

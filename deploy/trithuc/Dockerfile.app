@@ -8,11 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     HF_HOME=/models/hf \
     MEP_EASYOCR_DIR=/models/easyocr \
-    MEP_OCR_ENGINE=easyocr
+    MEP_OCR_ENGINE=tesseract
 
 # libgl/glib: opencv (Docling, EasyOCR)
+# tesseract-ocr-vie: OCR PDF scan tiếng Việt trên CPU (~2 s/trang, RAM thấp; EasyOCR ~9 s/trang, vài GB RAM –
+# đo 25/11/2026). EasyOCR vẫn cài qua requirements, đổi lại bằng MEP_OCR_ENGINE=easyocr.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+ && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 tesseract-ocr tesseract-ocr-vie \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

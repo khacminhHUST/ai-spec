@@ -14,3 +14,8 @@ worker:
   poll_interval_s: 3
   auto_publish: true   # xử lý xong phát hành luôn (không dừng ở bước duyệt); sửa sau trong trang dự án
   embedded: true       # server (uvicorn) tự chạy worker trong thread nền – không cần `python -m app.cli.worker`
+  # PDF scan / lỗi font: OCR chạy trong tiến trình con. Quá số trang → từ chối ngay; quá giờ → dừng, báo lỗi
+  # (không để 1 file scan chặn cả hàng chờ). Đo 25/11/2026 trên CPU: Tesseract vie ~2 s/trang (image deploy),
+  # EasyOCR ~9 s/trang + vài GB RAM (máy dev chưa cài Tesseract).
+  ocr_max_pages: 300
+  ocr_timeout_s: 2700

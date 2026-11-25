@@ -112,6 +112,66 @@ def classify_job(conn, job: dict[str, Any], path: Path, llm=None) -> dict[str, A
     return {**got, **upd}
 
 
+class OcrRejected(RuntimeError):
+    """PDF cần OCR quá nhiều trang / OCR quá giờ – báo lỗi rõ thay vì chặn hàng chờ."""
+
+
+def ocr_pages(path: Path) -> tuple[int, str]:
+    """→ (số trang sẽ phải OCR, mô tả). Lỗi font nhiều → Docling OCR toàn trang cả file (docling_cache.convert)."""
+    import pypdfium2 as pdfium
+
+    from app.services.ingestion.docling_cache import analyze_pages, needs_full_ocr
+
+    scans, broken, n_text = analyze_pages(path)
+    if needs_full_ocr(broken, n_text):
+        total = len(pdfium.PdfDocument(str(path)))
+        return total, f"lỗi font {len(broken)} trang → OCR toàn bộ {total} trang"
+    return len(scans), f"{len(scans)} trang scan"
+
+
+def prewarm_ocr(conn, job: dict[str, Any], path: Path, max_pages: int, timeout_s: float,
+                poll_s: float = CANCEL_POLL_S, cmd: list[str] | None = None) -> dict[str, Any] | None:
+    """PDF cần OCR → parse Docling trong TIẾN TRÌNH CON (ghi cache theo file_hash, bước sau đọc cache):
+    quá `max_pages` trang OCR → từ chối ngay; quá `timeout_s` → giết tiến trình con, báo lỗi; job bị hủy → giết.
+    Lý do: OCR trên CPU ~9 s/trang, vài GB RAM, không ngắt giữa chừng được – trước đây 1 file scan treo cả hàng chờ.
+    Không cần OCR → None (parse text nhanh, chạy như cũ)."""
+    import subprocess
+    import sys
+    import tempfile
+    import time
+
+    from app.core.config import ROOT
+
+    n, desc = ocr_pages(path)
+    if n == 0:
+        return None
+    if n > max_pages:
+        raise OcrRejected(f"PDF cần OCR {n} trang ({desc}) – vượt giới hạn {max_pages} trang/file. "
+                          "Tách file hoặc OCR trước rồi tải lên lại.")
+    _update(conn, job["job_id"], only_if="PROCESSING", step="ocr")
+    log.info("Job %s: OCR %s (tiến trình con, tối đa %.0fs)", job["job_id"], desc, timeout_s)
+    t0 = time.monotonic()
+    with tempfile.TemporaryFile() as err:   # log Docling ra file (pipe đầy bộ đệm sẽ làm tiến trình con kẹt)
+        proc = subprocess.Popen(cmd or [sys.executable, "-m", "app.services.ingestion.docling_cache", str(path)],
+                                cwd=ROOT, stdout=subprocess.DEVNULL, stderr=err)
+        try:
+            while proc.poll() is None:
+                if time.monotonic() - t0 > timeout_s:
+                    raise OcrRejected(f"OCR quá {timeout_s / 60:.0f} phút ({desc}) – đã dừng. "
+                                      "Tách file hoặc OCR trước rồi tải lên lại.")
+                _check_cancel(conn, job["job_id"])
+                time.sleep(poll_s)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+        if proc.returncode != 0:
+            err.seek(0)
+            tail = err.read().decode("utf-8", "replace")[-300:]
+            raise RuntimeError(f"OCR lỗi (mã {proc.returncode}): {tail}")
+    return {"ocr_pages": n, "desc": desc, "seconds": round(time.monotonic() - t0)}
+
+
 def process_job(s: Settings, conn, job: dict[str, Any], store: FileStore, llm=None,
                 out_root: Path | None = None) -> None:
     from app.services.ingestion.pipeline import process
@@ -123,6 +183,9 @@ def process_job(s: Settings, conn, job: dict[str, Any], store: FileStore, llm=No
         _update(conn, job_id, only_if="PROCESSING", step=step)
 
     path = store.local_path(job["storage_key"])
+    wcfg = knowledge_cfg()["worker"]
+    prewarm_ocr(conn, job, path, int(wcfg["ocr_max_pages"]), float(wcfg["ocr_timeout_s"]))
+    _check_cancel(conn, job_id)
     cls = classify_job(conn, job, path, llm)
     _check_cancel(conn, job_id)
     res = process(path, settings=s, llm=llm, overrides=job_overrides(conn, job), on_step=on_step)

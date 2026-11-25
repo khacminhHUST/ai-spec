@@ -263,6 +263,8 @@ export function uploadDocument(file: File, meta: UploadMeta, userId: string) {
   return req<Job>("/knowledge/uploads", { method: "POST", body: form });
 }
 export const listJobs = (status?: string) => req<Job[]>(`/knowledge/jobs${q({ status })}`);
+/** Số job theo trạng thái trên toàn hàng chờ (listJobs chỉ trả tối đa 200 dòng). */
+export const countJobs = () => req<Partial<Record<JobStatus, number>>>("/knowledge/jobs/counts");
 export const getJob = (id: string) => req<Job>(`/knowledge/jobs/${enc(id)}`);
 export const getSections = (id: string) => req<SectionRow[]>(`/knowledge/jobs/${enc(id)}/sections`);
 export const getSection = (id: string, lang: string, key: string) =>

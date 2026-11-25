@@ -3,6 +3,7 @@ import {
   ACTIVE_STATUSES,
   CANCEL_CONFIRM,
   canCancel,
+  countJobs,
   fmtTime,
   jobAction,
   listJobs,
@@ -24,51 +25,52 @@ interface Props {
 const POLL_MS = 3000;
 
 type Filter = "draft" | "running" | "failed" | "published" | "all";
-const FILTERS: { id: Filter; label: string; match: (s: JobStatus) => boolean }[] = [
-  { id: "draft", label: "Chờ duyệt", match: (s) => s === "DRAFT" },
-  { id: "running", label: "Đang xử lý", match: (s) => ACTIVE_STATUSES.includes(s) },
-  { id: "failed", label: "Lỗi", match: (s) => s === "FAILED" },
-  { id: "published", label: "Đã phát hành", match: (s) => s === "PUBLISHED" },
-  { id: "all", label: "Tất cả", match: () => true },
+// statuses: lọc ở server (danh sách tối đa 200 dòng); số trên nút lọc lấy từ /jobs/counts (toàn bộ hàng chờ)
+const FILTERS: { id: Filter; label: string; statuses: JobStatus[] | null }[] = [
+  { id: "draft", label: "Chờ duyệt", statuses: ["DRAFT"] },
+  { id: "running", label: "Đang xử lý", statuses: ACTIVE_STATUSES },
+  { id: "failed", label: "Lỗi", statuses: ["FAILED"] },
+  { id: "published", label: "Đã phát hành", statuses: ["PUBLISHED"] },
+  { id: "all", label: "Tất cả", statuses: null },
 ];
 
 /** Hàng chờ xử lý: lọc nhanh theo trạng thái (mặc định Chờ duyệt), phát hành / chạy lại ngay trên dòng,
  *  chọn nhiều để phát hành hàng loạt; tự làm mới khi có job đang chạy. Bấm dòng → trang duyệt chi tiết. */
 export default function JobQueue({ userId, projects, onOpen, onChanged, onError }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [byStatus, setByStatus] = useState<Partial<Record<JobStatus, number>> | null>(null);
   const [filter, setFilter] = useState<Filter | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null); // job_id đang thao tác / "bulk"
   const projectName = (id: string) => projects.find((p) => p.project_id === id)?.name ?? id;
 
+  const counts = useMemo(() => {
+    const n = (st: JobStatus[] | null) =>
+      Object.entries(byStatus ?? {}).reduce((a, [k, v]) => a + (!st || st.includes(k as JobStatus) ? v ?? 0 : 0), 0);
+    return Object.fromEntries(FILTERS.map((f) => [f.id, n(f.statuses)])) as Record<Filter, number>;
+  }, [byStatus]);
+  // lần đầu: có file chờ duyệt → mở thẳng "Chờ duyệt", không thì "Tất cả"
+  const cur: Filter = filter ?? (byStatus && counts.draft === 0 ? "all" : "draft");
+  const statuses = FILTERS.find((f) => f.id === cur)!.statuses;
+
   const load = useCallback(() => {
-    listJobs()
-      .then((js) => {
+    Promise.all([countJobs(), listJobs(statuses?.join(","))])
+      .then(([c, js]) => {
+        setByStatus(c);
         setJobs(js);
-        setLoaded(true);
       })
       .catch(onError);
-  }, [onError]);
+  }, [onError, statuses]);
 
   useEffect(load, [load]);
-  const running = jobs.some((j) => ACTIVE_STATUSES.includes(j.status));
+  const running = counts.running > 0;
   useEffect(() => {
     if (!running) return;
     const t = window.setInterval(load, POLL_MS);
     return () => window.clearInterval(t);
   }, [running, load]);
 
-  const counts = useMemo(
-    () => Object.fromEntries(FILTERS.map((f) => [f.id, jobs.filter((j) => f.match(j.status)).length])) as Record<
-      Filter,
-      number
-    >,
-    [jobs],
-  );
-  // lần đầu: có file chờ duyệt → mở thẳng "Chờ duyệt", không thì "Tất cả"
-  const cur: Filter = filter ?? (loaded && counts.draft === 0 ? "all" : "draft");
-  const shown = jobs.filter((j) => FILTERS.find((f) => f.id === cur)!.match(j.status));
+  const shown = jobs;
   const drafts = shown.filter((j) => j.status === "DRAFT");
   const pickedDrafts = drafts.filter((j) => picked.has(j.job_id));
 
@@ -234,6 +236,12 @@ export default function JobQueue({ userId, projects, onOpen, onChanged, onError 
           </tbody>
         </table>
       </div>
+      {counts[cur] > shown.length && (
+        <p className="small muted">
+          Hiển thị {shown.length}/{counts[cur]} file
+          {cur === "running" ? " (theo thứ tự xử lý – đang xử lý trước, rồi file chờ lâu nhất)" : " mới nhất"}.
+        </p>
+      )}
     </div>
   );
 }

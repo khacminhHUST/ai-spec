@@ -202,10 +202,21 @@ def list_jobs(conn, status: str | None = None, project_id: str | None = None, li
         cond.append("project_id = %s")
         args.append(project_id)
     where = ("WHERE " + " AND ".join(cond)) if cond else ""
+    # Chỉ lọc job đang chạy/chờ → theo thứ tự hàng chờ (đang xử lý trước, rồi job cũ nhất – cái worker nhận kế tiếp);
+    # còn lại → mới nhất trước.
+    queue_only = bool(status) and set(args[0]) <= {"QUEUED", "PROCESSING", "PUBLISHING"}
+    order = "(status = 'QUEUED'), created_at" if queue_only else "created_at DESC"
     return [dict(r) for r in conn.execute(
         "SELECT job_id, file_name, size, project_id, building, stream, disciplines, doc_type, revision, issue_date, "
         f"series_doc_code, status, step, error, doc_id, uploaded_by, created_at, published_by, published_at, updated_at "
-        f"FROM ingest_jobs {where} ORDER BY created_at DESC LIMIT {int(limit)}", args)]
+        f"FROM ingest_jobs {where} ORDER BY {order} LIMIT {int(limit)}", args)]
+
+
+def count_jobs(conn, project_id: str | None = None) -> dict[str, int]:
+    """Số job theo trạng thái (toàn bộ, không giới hạn như list_jobs) – cho các nút lọc ở Hàng chờ xử lý."""
+    where, args = ("WHERE project_id = %s", [project_id]) if project_id else ("", [])
+    return {r["status"]: r["n"] for r in conn.execute(
+        f"SELECT status, count(*) AS n FROM ingest_jobs {where} GROUP BY status", args)}
 
 
 def transition(conn, job_id: str, action: str, user_id: str | None = None) -> dict[str, Any]:
