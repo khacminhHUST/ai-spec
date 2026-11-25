@@ -152,7 +152,7 @@ def test_huy_job_dang_xu_ly(conn, kn_ns, monkeypatch, tmp_path):
     PUBLISHING đang ghi (step != queued) → 409."""
     from app.services.knowledge import jobs, worker
 
-    def fake_process(path, settings, llm, overrides, on_step):
+    def fake_process(path, settings, llm, overrides, on_step, **kw):
         jobs.transition(conn, "job_h", "cancel")   # người dùng bấm Hủy giữa chừng
         on_step("chunk_vi")
         raise AssertionError("không được chạy tiếp sau khi hủy")

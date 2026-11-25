@@ -10,4 +10,4 @@ issuer: https://user-management.hawee.com.vn   # `iss` trong token – không c�
 jwks_url: ""                                   # trống → <issuer>/.well-known/jwks.json (chỉ gọi khi token mang kid lạ)
 leeway_s: 30                                   # lệch đồng hồ cho phép khi kiểm exp/iat
 require_permission: read                       # quyền cần có trong claim permissions; "" → chỉ cần token hợp lệ
-result_max_tokens: 20000                       # kết quả tra cứu dài hơn → cắt nội dung từng đoạn (truncated)
+result_max_tokens: 10000                      # kết quả tra cứu dài hơn → cắt nội dung từng đoạn (truncated)

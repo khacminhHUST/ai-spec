@@ -44,3 +44,14 @@ def test_title_bo_quoc_hieu_lay_dong_tieu_de_that():
 def test_title_chi_co_quoc_hieu_thi_lay_ten_file():
     blocks = [_b("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"), _b("Độc lập - Tự do - Hạnh phúc", "text")]
     assert title_from(blocks, "CT5_TKTC-Report.pdf") == "CT5 TKTC Report"
+
+
+def test_upload_kho_tri_thuc_dung_ten_file_goc(tmp_path):
+    """File lưu trên server mang tên mã băm → tiêu đề dự phòng / revision lấy từ tên file gốc lúc upload."""
+    from app.services.ingestion.metadata import infer_metadata
+
+    stored = tmp_path / ("de889cd3373a2df6" * 4 + ".pdf")
+    blocks = [_b("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"), _b("Độc lập - Tự do - Hạnh phúc", "text")]
+    m = infer_metadata(stored, "d" * 64, blocks, source_name="JW Marriott Design Standards-Managed_202602.pdf")
+    assert m.title == "JW Marriott Design Standards Managed 202602"
+    assert infer_metadata(stored, "d" * 64, blocks).title == "de889cd3373a2df6" * 4   # không truyền → như cũ

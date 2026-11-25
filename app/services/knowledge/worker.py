@@ -188,7 +188,8 @@ def process_job(s: Settings, conn, job: dict[str, Any], store: FileStore, llm=No
     _check_cancel(conn, job_id)
     cls = classify_job(conn, job, path, llm)
     _check_cancel(conn, job_id)
-    res = process(path, settings=s, llm=llm, overrides=job_overrides(conn, job), on_step=on_step)
+    res = process(path, settings=s, llm=llm, overrides=job_overrides(conn, job), on_step=on_step,
+                  source_name=job["file_name"])
     if cls:
         res.report["classification"] = cls
     art = save_draft(res, (out_root or artifacts_dir()) / job_id)

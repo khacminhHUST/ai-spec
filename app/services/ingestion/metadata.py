@@ -236,9 +236,12 @@ def title_from(blocks: list[Block], filename: str) -> str:
 
 def infer_metadata(path: str | Path, file_hash: str, blocks: list[Block], *, project: str | None = None,
                    building: str | None = None, settings: Settings | None = None,
-                   overrides: dict[str, Any] | None = None) -> DocMeta:
+                   overrides: dict[str, Any] | None = None, source_name: str | None = None) -> DocMeta:
     s = settings or get_settings()
     path = Path(path)
+    # Tên file gốc (upload qua giao diện: file lưu trên server mang tên mã băm) – dùng cho tiêu đề dự phòng,
+    # revision, ngày ban hành, giai đoạn, nhận diện dự án theo tên file
+    name = source_name or path.name
     ov = clean_overrides(overrides)
     project, building = ov.get("project_id") or project, ov.get("building") or building
     meta = DocMeta(make_doc_id(file_hash), file_hash, str(path.resolve()), doc_code_override=ov.get("doc_code"))
@@ -249,7 +252,7 @@ def infer_metadata(path: str | Path, file_hash: str, blocks: list[Block], *, pro
     cover_tables = [b for b in blocks if b.page <= 2 and b.kind == "table"]
 
     proj, fm, bld = _find_folder(path, s)
-    a_proj, a_bld = _alias_match(path.name + "\n" + cover_text, s)
+    a_proj, a_bld = _alias_match(name + "\n" + cover_text, s)
     meta.project_id = project or (proj["project_id"] if proj else None) or a_proj
     meta.building = building or bld or a_bld
     pinfo = next((p for p in s.project_list() if p["project_id"] == meta.project_id), None)
@@ -270,19 +273,19 @@ def infer_metadata(path: str | Path, file_hash: str, blocks: list[Block], *, pro
         if k in ov:
             setattr(meta, k, ov[k])
 
-    meta.title = ov.get("title") or title_from(blocks, path.name)
+    meta.title = ov.get("title") or title_from(blocks, name)
     meta.issuer = ov.get("issuer") or issuer_from(cover_text)
     if not meta.issuer:
         w.append("metadata: không suy ra được issuer (đơn vị ban hành) → null")
-    meta.revision = ov.get("revision") or revision_from(path.name, cover_text, cover_tables)[0]
+    meta.revision = ov.get("revision") or revision_from(name, cover_text, cover_tables)[0]
     if not meta.revision:
         w.append("metadata: không suy ra được revision → null")
-    meta.issue_date, note = (ov["issue_date"], None) if "issue_date" in ov else issue_date_from(path.name, cover_text)
+    meta.issue_date, note = (ov["issue_date"], None) if "issue_date" in ov else issue_date_from(name, cover_text)
     if note:
         w.append("metadata: " + note)
     if not meta.issue_date:
         w.append("metadata: không suy ra được issue_date → null")
-    meta.stage = ov.get("stage") or stage_from(path.name + "\n" + cover_text) or stage_from(str(path.resolve()))
+    meta.stage = ov.get("stage") or stage_from(name + "\n" + cover_text) or stage_from(str(path.resolve()))
     if not meta.stage:
         w.append("metadata: không suy ra được stage → null")
     return meta

@@ -64,11 +64,13 @@ class IngestResult:
 
 def process(path: str | Path, *, project: str | None = None, building: str | None = None, llm=None,
             settings: Settings | None = None, use_cache: bool = True, workers: int = 8,
-            overrides: dict[str, Any] | None = None, on_step: Callable[[str], None] | None = None) -> IngestResult:
+            overrides: dict[str, Any] | None = None, on_step: Callable[[str], None] | None = None,
+            source_name: str | None = None) -> IngestResult:
     """Bước 1–5 (không ghi DB).
 
     overrides: ghi đè metadata/doc_code (metadata.OVERRIDE_FIELDS) – upload qua giao diện.
     on_step  : báo tiến độ (parse, bilingual, chunk_vi, chunk_en).
+    source_name: tên file gốc khi `path` là bản lưu tạm (VD <file_hash>.pdf của kho tri thức).
     """
     s = settings or get_settings()
     step = on_step or (lambda _name: None)
@@ -81,7 +83,7 @@ def process(path: str | Path, *, project: str | None = None, building: str | Non
     parsed = parse_pdf(path, file_hash, use_cache=use_cache)
     timings["parse"] = round(time.time() - t0, 1)
     meta = infer_metadata(path, file_hash, parsed.blocks, project=project, building=building, settings=s,
-                          overrides=overrides)
+                          overrides=overrides, source_name=source_name)
     prof = profile(meta.doc_type)
     warnings: list[str] = list(meta.warnings)
 
