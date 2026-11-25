@@ -96,9 +96,18 @@ export default function App() {
   const patchLast = (f: (m: Message) => Message) =>
     setMessages((ms) => [...ms.slice(0, -1), f(ms[ms.length - 1])]);
 
+  // Đo thời gian lượt hiện tại (tính từ lúc gửi, phía client)
+  const t0Ref = useRef(0);
+  const elapsed = () => Math.round(performance.now() - t0Ref.current);
+
   const handlers: ChatHandlers = {
     onStatus: (step) => patchLast((m) => ({ ...m, step })),
-    onToken: (t) => patchLast((m) => ({ ...m, content: m.content + t })),
+    onToken: (t) =>
+      patchLast((m) => ({
+        ...m,
+        content: m.content + t,
+        timing: m.timing?.first != null ? m.timing : { ...m.timing, first: elapsed() },
+      })),
     onTokenReset: () => patchLast((m) => ({ ...m, content: "" })),
     onCitations: (citations) => patchLast((m) => ({ ...m, citations })),
     onToolStart: (d) =>
@@ -118,7 +127,7 @@ export default function App() {
         m.confirms?.some((x) => x.confirm_id === c.confirm_id) ? m : { ...m, confirms: [...(m.confirms ?? []), c] },
       ),
     onDone: (d) => {
-      patchLast((m) => ({ ...m, status: d.status, step: null }));
+      patchLast((m) => ({ ...m, status: d.status, step: null, timing: { ...m.timing, total: elapsed() } }));
       setActiveId(d.conversation_id);
       setProjects(d.active_projects);
     },
@@ -127,6 +136,7 @@ export default function App() {
   const run = async (call: (h: ChatHandlers, signal: AbortSignal) => Promise<void>) => {
     setError(null);
     setBusy(true);
+    t0Ref.current = performance.now();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
@@ -160,6 +170,7 @@ export default function App() {
       ...m,
       step: "agent",
       status: null,
+      timing: undefined, // đo lại cho phần chạy sau xác nhận
       confirms: m.confirms?.filter((c) => c.confirm_id !== confirmId),
     }));
     return run((h, signal) =>

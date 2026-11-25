@@ -46,6 +46,8 @@ export interface Message {
   tools?: ToolRun[];
   confirms?: ConfirmRequest[];
   error?: string | null;
+  /** chỉ phía client: ms từ lúc gửi tới chữ đầu tiên / tới khi nhận xong */
+  timing?: { first?: number; total?: number };
 }
 
 export interface ConversationSummary {

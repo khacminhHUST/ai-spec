@@ -39,6 +39,10 @@ function formatSize(n: number): string {
   return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function formatSec(ms: number): string {
+  return `${(ms / 1000).toLocaleString("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} giây`;
+}
+
 /** Các bước tool: đang chạy thì mở; xong thì thu gọn thành 1 dòng, bấm để xổ ra / ẩn đi */
 function ToolSteps({ tools, finished }: { tools: ToolRun[]; finished: boolean }) {
   const [open, setOpen] = useState(false);
@@ -143,6 +147,12 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       )}
       {m.error && <div className="msg-error">Lỗi: {m.error}</div>}
       {m.citations && m.citations.length > 0 && <Citations items={m.citations} />}
+      {m.timing?.total != null && (
+        <div className="msg-timing">
+          {m.timing.first != null && <span>Chữ đầu: {formatSec(m.timing.first)}</span>}
+          <span>Nhận xong: {formatSec(m.timing.total)}</span>
+        </div>
+      )}
       </div>
     </div>
   );
