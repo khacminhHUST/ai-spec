@@ -647,17 +647,6 @@ a {
   max-width: 100%;
 }
 
-.chip.lang {
-  margin-left: 6px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--bg-subtle);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-
 .banner-error {
   display: flex;
   align-items: center;
@@ -1200,15 +1189,19 @@ a {
 }
 
 .citations {
-  margin-top: 16px;
-  padding: 12px 14px;
+  margin-top: 18px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-subtle);
+  background: var(--panel);
   font-size: 13px;
   color: var(--fg-2);
 }
 
 .citations-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1216,23 +1209,197 @@ a {
   color: var(--muted);
 }
 
-.citations ol {
-  margin: 6px 0 0;
-  padding-left: 22px;
+.citations-count {
+  margin-left: auto;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.citations li {
-  margin: 4px 0;
+.cite-groups {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
 }
 
-.citations li::marker {
+.cite-group {
+  padding: 10px 0 8px;
+  border-top: 1px solid var(--border);
+}
+
+.cite-group:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.cite-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cite-icon {
+  flex: none;
+  margin-top: 2px;
   color: var(--accent);
-  font-weight: 600;
 }
 
 .cite-doc {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 600;
+  line-height: 1.4;
   color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.cite-doc.untitled {
+  font-weight: 500;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.cite-meta {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.cite-tag {
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.cite-items {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 24px;
+}
+
+.cite-items li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  line-height: 1.45;
+}
+
+.cite-n {
+  flex: none;
+  min-width: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cite-sec {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cite-sec-label {
+  color: var(--fg-2);
+  font-weight: 500;
+}
+
+.cite-sec-title {
+  color: var(--muted);
+}
+
+.cite-page {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cite-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  margin: 2px 0 0 24px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+
+.cite-more:hover {
+  background: var(--accent-soft);
+}
+
+.cite-more:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.cite-more .icon.down {
+  transform: rotate(90deg);
+}
+
+.cite-more .icon.up {
+  transform: rotate(90deg);
+}
+
+@media (max-width: 640px) {
+  .citations {
+    padding: 10px 12px 8px;
+  }
+
+  .cite-head {
+    flex-wrap: wrap;
+  }
+
+  .cite-doc {
+    flex-basis: calc(100% - 24px); /* icon + tiêu đề cùng dòng, nhãn Rev/VI/EN xuống dòng dưới */
+  }
+
+  .cite-meta {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    padding-left: 24px;
+  }
+
+  .cite-items,
+  .cite-more {
+    padding-left: 0;
+    margin-left: 0;
+  }
+
+  .cite-items li {
+    flex-wrap: wrap;
+    column-gap: 8px;
+    row-gap: 0;
+  }
+
+  .cite-page {
+    padding-left: 34px;
+  }
 }
 
 /* ---------- composer ---------- */

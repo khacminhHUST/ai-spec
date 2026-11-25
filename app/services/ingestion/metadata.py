@@ -203,11 +203,27 @@ def issuer_from(text: str) -> str | None:
     return None
 
 
-_TITLE_EXCLUDE = re.compile(r"(?i)^(dự án|công trình|địa điểm|project|tên dự án|location|chủ đầu tư|owner|công ty|company)\b")
+_TITLE_EXCLUDE = re.compile(r"(?i)^(dự án|công trình|địa điểm|project|tên dự án|location|chủ đầu tư|owner|công ty|company"
+                            r"|hạng mục|gói thầu|package)\b")
+# Quốc hiệu / tiêu ngữ trên bìa văn bản VN (so khớp sau khi bỏ dấu – OCR hay mất dấu chữ in hoa)
+_TITLE_MOTTO = re.compile(r"^\s*(cong hoa xa hoi chu nghia|doc lap\s*[-–—,]?\s*tu do|socialist republic of viet"
+                          r"|independence\s*[-–—,]?\s*freedom)")
+
+
+def _no_accent(s: str) -> str:
+    import unicodedata
+
+    s = unicodedata.normalize("NFD", s.replace("Đ", "D").replace("đ", "d"))
+    return "".join(c for c in s if unicodedata.category(c) != "Mn").lower()
+
+
+def is_title_noise(text: str) -> bool:
+    """Dòng bìa không phải tên tài liệu: quốc hiệu, tiêu ngữ, "Dự án:/Hạng mục:/Công ty…"."""
+    return bool(_TITLE_EXCLUDE.match(text.strip()) or _TITLE_MOTTO.match(_no_accent(text)))
 
 
 def title_from(blocks: list[Block], filename: str) -> str:
-    cands = [b for b in blocks if b.page == 1 and b.kind in ("heading", "text") and not _TITLE_EXCLUDE.match(b.text)
+    cands = [b for b in blocks if b.page == 1 and b.kind in ("heading", "text") and not is_title_noise(b.text)
              and len(b.text.split()) >= 2 and len(b.text) >= 12 and sum(c.isalpha() for c in b.text) > 8
              and "|" not in b.text and not re.search(r"\b(19|20)\d{2}\b", b.text) and "*" not in b.text]
     heads = [b for b in cands if b.kind == "heading"] or cands
