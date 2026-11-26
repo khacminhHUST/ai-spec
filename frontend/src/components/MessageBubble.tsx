@@ -93,7 +93,8 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       </div>
     );
   const badge = m.status ? STATUS_LABEL[m.status] : undefined;
-  const step = m.step ? (STEP_LABEL[m.step] ?? m.step) : null;
+  // Bước không có nhãn (tên kỹ thuật nội bộ) → không lộ ra UI, dùng câu chung
+  const step = m.step ? (STEP_LABEL[m.step] ?? STEP_LABEL.agent) : null;
   // Có câu trả lời cuối → thu gọn danh sách bước tool (giữ mở khi chờ xác nhận hoặc lỗi)
   const finished = !m.step && !!m.content && m.status !== "WAITING_CONFIRM" && !m.error;
   return (

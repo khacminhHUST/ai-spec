@@ -120,7 +120,7 @@ def test_tools_list_and_read_only(client, keys):
     c, _ = client()
     with c:
         tools = _rpc(c, "tools/list", token=_token(priv, pem)).json()["result"]["tools"]
-        assert {t["name"] for t in tools} == {"search_project_docs", "list_projects"}
+        assert {t["name"] for t in tools} == {"search_project_docs", "list_projects", "list_project_documents"}
         assert all(t["annotations"]["readOnlyHint"] for t in tools)
 
 
@@ -134,6 +134,25 @@ def test_search_and_list_projects(client, keys):
         assert [x["n"] for x in out["citations"]] == [b["n"] for b in out["blocks"]]
         _, projects = _call(c, _token(priv, pem), "list_projects")
         assert [p["project_id"] for p in projects["projects"]] == [S5]
+
+
+def test_list_project_documents(client, keys):
+    """Danh mục tài liệu theo dự án: Claude biết kho có gì thay vì suy ra từ vài kết quả tìm kiếm."""
+    (priv, pem), _ = keys
+    c, _ = client()
+    with c:
+        res, out = _call(c, _token(priv, pem), "list_project_documents", {"project_mentions": ["S5"]})
+        assert not res.get("isError")
+        p = out["projects"][0]
+        assert p["project_id"] == S5 and p["n_documents"] == len(p["documents"]) > 0
+        assert sum(p["by_stream"].values()) == p["n_documents"]
+        assert all({"title", "stream", "disciplines", "revision"} <= set(d) for d in p["documents"])
+        _, fire = _call(c, _token(priv, pem), "list_project_documents", {"project_mentions": ["S5"],
+                                                                          "disciplines": ["FIRE"]})
+        assert 0 < fire["projects"][0]["n_documents"] < p["n_documents"]
+        assert all("FIRE" in d["disciplines"] for d in fire["projects"][0]["documents"])
+        res, msg = _call(c, _token(priv, pem), "list_project_documents", {"project_mentions": ["KHONG CO"]})
+        assert res.get("isError") and "list_projects" in msg
 
 
 def test_missing_read_permission_is_tool_error(client, keys):

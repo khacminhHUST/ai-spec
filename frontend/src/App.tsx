@@ -157,7 +157,7 @@ export default function App() {
     setMessages((ms) => [
       ...ms.map((m) => (m.confirms ? { ...m, confirms: undefined } : m)), // lượt mới bỏ xác nhận đang chờ
       { role: "user", content: question, attachments: files },
-      { role: "assistant", content: "", step: "gate", citations: [] },
+      { role: "assistant", content: "", step: "agent", citations: [] },
     ]);
     return run((h, signal) =>
       streamChat({ user_id: userId, question, conversation_id, attachments: files }, h, signal),

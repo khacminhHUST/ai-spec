@@ -35,6 +35,7 @@ của tư vấn, tiêu chuẩn đơn vị vận hành (Westin/Marriott), TCVN/QC
 
 Cách dùng:
 1. Chưa rõ dự án → list_projects. Câu hỏi nhắc dự án/công trình → điền project_mentions (VD ["S5"]).
+   Cần biết kho có những tài liệu nào / thiếu bộ môn nào → list_project_documents (đừng suy ra từ kết quả tìm kiếm).
 2. search_project_docs mỗi lần 1 chủ đề, câu hỏi đầy đủ, cụ thể. Nhiều chủ đề / so sánh 2 nguồn → gọi nhiều lần.
 3. Trả lời CHỈ dựa trên `blocks`, trích dẫn [n] theo `citations` (tài liệu, revision, mục, trang).
    Nhiều nguồn mâu thuẫn → ưu tiên block có `priority` nhỏ hơn (1 là cao nhất) và nêu rõ chỗ khác nhau.
@@ -50,6 +51,12 @@ SEARCH_DESC = """Tra cứu tài liệu dự án MEP (Query Pipeline: nhận di�
   dẫn), CONTRACT (hợp đồng) – chỉ điền khi cần đúng 1 loại nguồn.
 Trả về JSON: status (OK | PARTIAL | NOT_FOUND | ASK_CLARIFY), projects, blocks (n, project, stream, priority, doc, rev,
 section, pages, vi/en = nội dung), citations."""
+
+LIST_DOCS_DESC = """Danh mục tài liệu đang hiệu lực trong kho theo dự án (tiêu đề, luồng, phân hệ, công trình, revision,
+ngôn ngữ) + số tài liệu theo luồng. Dùng khi cần biết kho có những tài liệu gì / còn thiếu bộ môn nào – KHÔNG suy ra
+từ vài kết quả search_project_docs.
+- project_mentions: tên/mã/alias dự án (VD ["CT05"]); bỏ trống = mọi dự án người dùng được xem.
+- streams / disciplines: lọc như search_project_docs (tùy chọn)."""
 
 
 def _user() -> str:
@@ -141,6 +148,47 @@ class KbMcp:
                  "aliases": info.get(pid, {}).get("aliases") or [],
                  "governing_language": info.get(pid, {}).get("governing_language", "vi")} for pid in ids]
 
+    def list_documents_for(self, user: str, project_mentions: list[str] | None, streams: list[str] | None,
+                           disciplines: list[str] | None) -> dict[str, Any]:
+        """Danh mục tài liệu đang hiệu lực (is_latest) theo dự án người dùng được xem – để Claude biết kho có gì,
+        không phải đoán từ vài kết quả tìm kiếm. project_mentions khớp mã / tên / alias (không dấu, không hoa)."""
+        from app.utils.keys import normalize_alias
+
+        if self.deps is None:
+            raise ToolError("Hệ thống đang khởi động, thử lại sau")
+        repo = self.deps.repo
+        ids = repo.user_projects(user)
+        info = repo.project_info(ids)
+        if project_mentions:
+            want = {normalize_alias(m) for m in project_mentions if m and m.strip()}
+            names: dict[str, set[str]] = {pid: {normalize_alias(pid), normalize_alias(info.get(pid, {}).get("name", ""))}
+                                          for pid in ids}
+            for a in repo.aliases(ids):
+                names.setdefault(a["project_id"], set()).add(a["alias_norm"])
+            ids = [pid for pid in ids if names.get(pid, set()) & want]
+            if not ids:
+                raise ToolError(f"Không tìm thấy dự án khớp {project_mentions} – gọi list_projects để xem tên/mã.")
+        st = {s.upper() for s in streams or []}
+        disc = {d.upper() for d in disciplines or []}
+        docs = [d for d in repo.documents(ids)
+                if (not st or (d.get("stream") or "").upper() in st)
+                and (not disc or disc & {x.upper() for x in d.get("disciplines") or []})]
+        out = []
+        for pid in ids:
+            mine = sorted((d for d in docs if d["project_id"] == pid),
+                          key=lambda d: (d.get("stream") or "", d.get("title") or ""))
+            by_stream: dict[str, int] = {}
+            for d in mine:
+                by_stream[d.get("stream") or "?"] = by_stream.get(d.get("stream") or "?", 0) + 1
+            out.append({"project_id": pid, "name": info.get(pid, {}).get("name", pid), "n_documents": len(mine),
+                        "by_stream": by_stream,
+                        "documents": [{"title": d.get("title"), "stream": d.get("stream"),
+                                       "disciplines": list(d.get("disciplines") or []), "building": d.get("building"),
+                                       "revision": d.get("revision"), "languages": list(d.get("languages") or [])}
+                                      for d in mine]})
+        return {"projects": out,
+                "note": "Chỉ liệt kê bản đang hiệu lực. Nội dung chi tiết → search_project_docs."}
+
     def _register_tools(self) -> None:
         kb = self
 
@@ -167,6 +215,13 @@ class KbMcp:
             user = kb.require()
             rows = await anyio.to_thread.run_sync(kb.list_projects_for, user)
             return json.dumps({"projects": rows}, ensure_ascii=False)
+
+        @self.mcp.tool(name="list_project_documents", description=LIST_DOCS_DESC, annotations=READ_ONLY)
+        async def list_project_documents(project_mentions: list[str] | None = None, streams: list[str] | None = None,
+                                         disciplines: list[str] | None = None) -> str:
+            user = kb.require()
+            out = await anyio.to_thread.run_sync(kb.list_documents_for, user, project_mentions, streams, disciplines)
+            return json.dumps(out, ensure_ascii=False)
 
 
 class McpServerRoute:

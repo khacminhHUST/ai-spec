@@ -25,6 +25,11 @@ UI và agent cũ **không đổi** (kể cả connector MCP riêng theo người
 |---|---|---|
 | `search_project_docs` | `question`, `project_mentions?`, `disciplines?`, `streams?` | JSON như tool của agent: `status` (OK / PARTIAL / NOT_FOUND / ASK_CLARIFY), `projects`, `blocks` (n, project, stream, priority, doc, rev, section, pages, vi/en), `citations`, `missing?`, `clarify_options?` |
 | `list_projects` | – | `projects`: project_id, name, aliases, governing_language |
+| `list_project_documents` | `project_mentions?`, `streams?`, `disciplines?` | `projects`: project_id, name, n_documents, by_stream, `documents` (title, stream, disciplines, building, revision, languages) – chỉ bản đang hiệu lực |
+
+- `list_project_documents` (từ 25/11/2026): để Claude biết kho có những tài liệu nào / thiếu bộ môn nào. Trước đó
+  Claude chỉ có tìm kiếm nên suy ra nội dung kho từ vài kết quả trả về và kết luận sai (VD "CT05 chỉ có thuyết minh
+  cơ điện" trong khi kho có đủ spec các bộ môn). `project_mentions` khớp mã / tên / alias (bỏ dấu, không phân biệt hoa).
 
 - Chạy Query Pipeline N1–N6 (không N7) qua `search_payload` (dùng chung với agent, `app/services/agent/tools/search_docs.py`).
 - Kết quả > `result_max_tokens` → cắt nội dung từng block (`truncated=true`) + `note`.
