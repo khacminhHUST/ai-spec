@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Message, ToolRun } from "../types";
 import Citations from "./Citations";
 import Icon, { Spinner } from "./Icon";
@@ -71,12 +71,51 @@ function ToolSteps({ tools, finished }: { tools: ToolRun[]; finished: boolean })
   );
 }
 
+/** Chép câu trả lời: kèm bản HTML (dán vào Word/Excel giữ bảng, in đậm) + bản markdown thô */
+function CopyButton({ text, htmlRef }: { text: string; htmlRef: React.RefObject<HTMLDivElement> }) {
+  const [done, setDone] = useState(false);
+  const copy = async () => {
+    const html = htmlRef.current?.innerHTML;
+    try {
+      if (html && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+    } catch {
+      // iframe thiếu quyền clipboard / trình duyệt cũ → cách cũ qua textarea tạm
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    setDone(true);
+    window.setTimeout(() => setDone(false), 1500);
+  };
+  return (
+    <button type="button" className="msg-copy" onClick={copy} title="Sao chép câu trả lời">
+      <Icon name={done ? "check" : "copy"} size={14} />
+      {done ? "Đã chép" : "Sao chép"}
+    </button>
+  );
+}
+
 interface Props {
   m: Message;
   onConfirm?: (confirmId: string, approve: boolean) => void;
 }
 
 export default function MessageBubble({ m, onConfirm }: Props) {
+  const mdRef = useRef<HTMLDivElement>(null);
   if (m.role === "user")
     return (
       <div className="msg user">
@@ -106,7 +145,7 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       {badge && <span className={"badge " + m.status}>{badge}</span>}
       {m.tools && m.tools.length > 0 && <ToolSteps tools={m.tools} finished={finished} />}
       {m.content && (
-        <div className="md">
+        <div className="md" ref={mdRef}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
         </div>
       )}
@@ -148,10 +187,11 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       )}
       {m.error && <div className="msg-error">Lỗi: {m.error}</div>}
       {m.citations && m.citations.length > 0 && <Citations items={m.citations} />}
-      {m.timing?.total != null && (
+      {((finished && m.content) || m.timing?.total != null) && (
         <div className="msg-timing">
-          {m.timing.first != null && <span>Chữ đầu: {formatSec(m.timing.first)}</span>}
-          <span>Nhận xong: {formatSec(m.timing.total)}</span>
+          {finished && m.content && <CopyButton text={m.content} htmlRef={mdRef} />}
+          {m.timing?.first != null && <span>Chữ đầu: {formatSec(m.timing.first)}</span>}
+          {m.timing?.total != null && <span>Nhận xong: {formatSec(m.timing.total)}</span>}
         </div>
       )}
       </div>

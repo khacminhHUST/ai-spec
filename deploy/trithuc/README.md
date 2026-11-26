@@ -179,3 +179,17 @@ Phía server 2 deploy cùng app (gateway + api, không thêm container). Một l
 curl -fsSLO https://raw.githubusercontent.com/khacminhHUST/ai-spec/main/deploy/trithuc/server1-add-mcp.sh && sh server1-add-mcp.sh
 ```
 Rồi nhờ quản trị user-management đăng ký server `ai-thongtinduan` (resource_uri như trên) và gán quyền `read`.
+
+## Nối nguồn MCP nội bộ (Revit, Catalogue…) khi server 2 không ra được edge
+Container không đọc `/etc/hosts` của máy chủ → khai tên miền ở `docker-compose.override.yml` (cạnh
+`docker-compose.yml`, compose tự nạp; `deploy.sh` không xóa file này):
+```yaml
+services:
+  api:
+    extra_hosts:
+      - "revit-mcp.hawee.com.vn:<IP>"
+      - "catalogue.hawee.com.vn:<IP>"
+      - "user-management.hawee.com.vn:<IP>"   # MEP tự đăng ký client + đổi token OAuth với server này
+```
+`<IP>`: địa chỉ nội bộ trả được HTTPS cổng 443 cho các tên miền trên (cùng IP với dòng auto-mail trong `/etc/hosts`).
+Áp dụng: `docker compose up -d --no-build --wait api && docker compose restart gateway` (gateway chỉ tra IP `api` lúc khởi động).
