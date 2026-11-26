@@ -88,12 +88,24 @@ export default function ChatView({ messages, onExample, onConfirm }: Props) {
       </div>
     );
 
+  // Bôi chọn để chép: nhấn chuột lên đoạn đang bôi thì trình duyệt hiểu là KÉO đoạn chữ (con trỏ "cấm") thay vì bôi
+  // lại → bỏ vùng chọn cũ trước khi trình duyệt xử lý mousedown (giữ Shift = nới vùng chọn như thường)
+  const freshSelection = (e: React.MouseEvent) => {
+    if (e.button !== 0 || e.shiftKey || e.detail > 1) return; // double/triple click: chọn từ / đoạn như thường
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) sel.removeAllRanges();
+  };
+  // Không kéo-thả chữ trong khung chat (vẫn kéo được liên kết / ảnh)
+  const noTextDrag = (e: React.DragEvent) => {
+    if (!(e.target instanceof Element) || !e.target.closest("a, img")) e.preventDefault();
+  };
+
   const streaming = messages[messages.length - 1]?.role === "assistant" && !!messages[messages.length - 1]?.step;
 
   return (
     <div className="chat-scroll">
       <div className="chat" ref={box} onScroll={onScroll} role="log" aria-live="polite" aria-busy={streaming}>
-        <div className="chat-inner">
+        <div className="chat-inner" onMouseDown={freshSelection} onDragStart={noTextDrag}>
           {messages.map((m, i) => (
             <MessageBubble key={i} m={m} onConfirm={onConfirm} />
           ))}
