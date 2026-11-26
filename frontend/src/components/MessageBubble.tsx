@@ -71,11 +71,15 @@ function ToolSteps({ tools, finished }: { tools: ToolRun[]; finished: boolean })
   );
 }
 
-/** Chép câu trả lời: kèm bản HTML (dán vào Word/Excel giữ bảng, in đậm) + bản markdown thô */
-function CopyButton({ text, htmlRef }: { text: string; htmlRef: React.RefObject<HTMLDivElement> }) {
+/** Chép tin nhắn: có htmlRef → kèm bản HTML (dán vào Word/Excel giữ bảng, in đậm) + bản markdown thô */
+function CopyButton({ text, htmlRef, title = "Sao chép câu trả lời" }: {
+  text: string;
+  htmlRef?: React.RefObject<HTMLDivElement>;
+  title?: string;
+}) {
   const [done, setDone] = useState(false);
   const copy = async () => {
-    const html = htmlRef.current?.innerHTML;
+    const html = htmlRef?.current?.innerHTML;
     try {
       if (html && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
         await navigator.clipboard.write([
@@ -102,7 +106,7 @@ function CopyButton({ text, htmlRef }: { text: string; htmlRef: React.RefObject<
     window.setTimeout(() => setDone(false), 1500);
   };
   return (
-    <button type="button" className="msg-copy" onClick={copy} title="Sao chép câu trả lời">
+    <button type="button" className="msg-copy" onClick={copy} title={title}>
       <Icon name={done ? "check" : "copy"} size={14} />
       {done ? "Đã chép" : "Sao chép"}
     </button>
@@ -118,15 +122,22 @@ export default function MessageBubble({ m, onConfirm }: Props) {
   const mdRef = useRef<HTMLDivElement>(null);
   if (m.role === "user")
     return (
-      <div className="msg user">
-        {m.content}
-        {m.attachments && m.attachments.length > 0 && (
-          <div className="attachments">
-            {m.attachments.map((a) => (
-              <span key={a} className="chip">
-                {a}
-              </span>
-            ))}
+      <div className="msg-user-wrap">
+        <div className="msg user">
+          {m.content}
+          {m.attachments && m.attachments.length > 0 && (
+            <div className="attachments">
+              {m.attachments.map((a) => (
+                <span key={a} className="chip">
+                  {a}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {m.content && (
+          <div className="msg-user-actions">
+            <CopyButton text={m.content} title="Sao chép câu hỏi" />
           </div>
         )}
       </div>

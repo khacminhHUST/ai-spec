@@ -1806,3 +1806,45 @@ a {
     background: var(--panel);
   }
 }
+
+/* Câu hỏi của người dùng: nút Sao chép dưới bong bóng, hiện khi rê chuột (màn cảm ứng: luôn hiện) */
+.msg-user-wrap {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: min(80%, 620px);
+}
+
+.msg-user-wrap .msg.user {
+  align-self: auto;
+  max-width: 100%;
+}
+
+.msg-user-actions {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+
+.msg-user-actions .msg-copy {
+  margin: 0 -6px 0 0;
+}
+
+.msg-user-wrap:hover .msg-user-actions,
+.msg-user-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .msg-user-actions {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .msg-user-wrap {
+    max-width: 88%;
+  }
+}
