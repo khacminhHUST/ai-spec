@@ -1848,3 +1848,10 @@ a {
     max-width: 88%;
   }
 }
+
+/* Bôi chọn trong bong bóng câu hỏi: màu chung (xanh mờ) trùng nền xanh → không thấy vùng chọn */
+.msg.user::selection,
+.msg.user *::selection {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: var(--user-bg);
+}
