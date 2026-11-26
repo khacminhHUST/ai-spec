@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRef, useState } from "react";
-import type { Message, ToolRun } from "../types";
+import type { ConfirmRequest, Message, ToolRun } from "../types";
 import Citations from "./Citations";
 import Icon, { Spinner } from "./Icon";
 
@@ -44,16 +44,23 @@ function formatSec(ms: number): string {
 }
 
 /** Các bước tool: đang chạy thì mở; xong thì thu gọn thành 1 dòng, bấm để xổ ra / ẩn đi */
-function ToolSteps({ tools, finished }: { tools: ToolRun[]; finished: boolean }) {
+function ToolSteps({ tools, finished, waiting }: { tools: ToolRun[]; finished: boolean; waiting?: boolean }) {
   const [open, setOpen] = useState(false);
   const list = (
     <ul className="tools">
       {tools.map((t, i) => (
-        <li key={i} className={t.done ? (t.ok ? "ok" : "fail") : "running"}>
+        <li key={i} className={t.done ? (t.ok ? "ok" : "fail") : waiting ? "waiting" : "running"}>
           <span className="tool-mark">
-            {t.done ? <Icon name={t.ok ? "check" : "x"} size={14} label={t.ok ? "Xong" : "Lỗi"} /> : <Spinner size={12} />}
+            {t.done ? (
+              <Icon name={t.ok ? "check" : "x"} size={14} label={t.ok ? "Xong" : "Lỗi"} />
+            ) : waiting ? (
+              <Icon name="clock" size={14} label="Chờ cho phép" />
+            ) : (
+              <Spinner size={12} />
+            )}
           </span>
           {TOOL_LABEL[t.tool] ?? t.tool}
+          {!t.done && waiting && <span className="tool-summary"> – chờ bạn cho phép</span>}
           {t.summary && <span className="tool-summary"> – {t.summary}</span>}
         </li>
       ))}
@@ -113,6 +120,75 @@ function CopyButton({ text, htmlRef, title = "Sao chép câu trả lời" }: {
   );
 }
 
+/** Giá trị tham số hiển thị gọn: chuỗi / số / bool nguyên văn, còn lại JSON 1 dòng */
+function argText(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "string") return v || "(trống)";
+  if (typeof v === "number" || typeof v === "boolean") return v === true ? "có" : v === false ? "không" : String(v);
+  return JSON.stringify(v);
+}
+
+/** Thẻ xin phép chạy thao tác trên hệ thống ngoài (tool MCP ghi / chưa rõ đọc-ghi) */
+function ConfirmCard({ c, onConfirm }: { c: ConfirmRequest; onConfirm?: Props["onConfirm"] }) {
+  const [sent, setSent] = useState<boolean | null>(null);
+  const args = Object.entries(c.args ?? {});
+  const decide = (approve: boolean) => {
+    if (sent !== null) return;
+    setSent(approve);
+    onConfirm?.(c.confirm_id, approve);
+  };
+  return (
+    <section className="confirm" aria-labelledby={`cf-${c.confirm_id}`}>
+      <div className="confirm-head">
+        <span className="confirm-icon" aria-hidden>
+          <Icon name="shield" size={18} />
+        </span>
+        <div>
+          <h4 id={`cf-${c.confirm_id}`} className="confirm-title">
+            Cần bạn cho phép
+          </h4>
+          <p className="confirm-sub">Trợ lý muốn chạy một thao tác trên hệ thống ngoài. Kiểm tra lại trước khi đồng ý.</p>
+        </div>
+      </div>
+      <dl className="confirm-args">
+        <div>
+          <dt>Thao tác</dt>
+          <dd>
+            <code>{c.tool}</code>
+          </dd>
+        </div>
+        {args.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{argText(v)}</dd>
+          </div>
+        ))}
+        {args.length === 0 && (
+          <div>
+            <dt>Tham số</dt>
+            <dd className="muted">Không có</dd>
+          </div>
+        )}
+      </dl>
+      {args.some(([, v]) => v !== null && typeof v === "object") && (
+        <details className="confirm-raw">
+          <summary>Xem tham số đầy đủ</summary>
+          <pre>{JSON.stringify(c.args, null, 2)}</pre>
+        </details>
+      )}
+      <div className="confirm-actions">
+        <button type="button" className="confirm-yes" disabled={sent !== null} onClick={() => decide(true)}>
+          <Icon name="check" size={16} />
+          {sent === true ? "Đang chạy…" : "Cho phép"}
+        </button>
+        <button type="button" className="confirm-no" disabled={sent !== null} onClick={() => decide(false)}>
+          Từ chối
+        </button>
+      </div>
+    </section>
+  );
+}
+
 interface Props {
   m: Message;
   onConfirm?: (confirmId: string, approve: boolean) => void;
@@ -142,7 +218,9 @@ export default function MessageBubble({ m, onConfirm }: Props) {
         )}
       </div>
     );
-  const badge = m.status ? STATUS_LABEL[m.status] : undefined;
+  const waiting = m.status === "WAITING_CONFIRM";
+  // Chờ xác nhận: thẻ xin phép đã nói rõ – không cần thêm nhãn
+  const badge = m.status && !waiting ? STATUS_LABEL[m.status] : undefined;
   // Bước không có nhãn (tên kỹ thuật nội bộ) → không lộ ra UI, dùng câu chung
   const step = m.step ? (STEP_LABEL[m.step] ?? STEP_LABEL.agent) : null;
   // Có câu trả lời cuối → thu gọn danh sách bước tool (giữ mở khi chờ xác nhận hoặc lỗi)
@@ -154,7 +232,7 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       </span>
       <div className="msg-body">
       {badge && <span className={"badge " + m.status}>{badge}</span>}
-      {m.tools && m.tools.length > 0 && <ToolSteps tools={m.tools} finished={finished} />}
+      {m.tools && m.tools.length > 0 && <ToolSteps tools={m.tools} finished={finished} waiting={waiting} />}
       {m.content && (
         <div className="md" ref={mdRef}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
@@ -166,19 +244,7 @@ export default function MessageBubble({ m, onConfirm }: Props) {
         </div>
       )}
       {m.confirms?.map((c) => (
-        <div key={c.confirm_id} className="confirm">
-          <div className="confirm-title">
-            <Icon name="alert" size={16} />
-            Cho phép thực hiện <code>{c.tool}</code> trên hệ thống ngoài?
-          </div>
-          <pre>{JSON.stringify(c.args, null, 2)}</pre>
-          <div className="confirm-actions">
-            <button onClick={() => onConfirm?.(c.confirm_id, true)}>Đồng ý</button>
-            <button className="secondary" onClick={() => onConfirm?.(c.confirm_id, false)}>
-              Từ chối
-            </button>
-          </div>
-        </div>
+        <ConfirmCard key={c.confirm_id} c={c} onConfirm={onConfirm} />
       ))}
       {m.files && m.files.length > 0 && (
         <div className="files">
@@ -198,11 +264,11 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       )}
       {m.error && <div className="msg-error">Lỗi: {m.error}</div>}
       {m.citations && m.citations.length > 0 && <Citations items={m.citations} />}
-      {((finished && m.content) || m.timing?.total != null) && (
+      {((finished && m.content) || (m.timing?.total != null && !waiting)) && (
         <div className="msg-timing">
           {finished && m.content && <CopyButton text={m.content} htmlRef={mdRef} />}
           {m.timing?.first != null && <span>Chữ đầu: {formatSec(m.timing.first)}</span>}
-          {m.timing?.total != null && <span>Nhận xong: {formatSec(m.timing.total)}</span>}
+          {m.timing?.total != null && !waiting && <span>Nhận xong: {formatSec(m.timing.total)}</span>}
         </div>
       )}
       </div>

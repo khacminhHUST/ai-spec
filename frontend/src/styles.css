@@ -1098,29 +1098,105 @@ a {
   color: var(--muted);
 }
 
+/* Thẻ xin phép chạy thao tác trên hệ thống ngoài: nền trung tính như thẻ khác, vạch cảnh báo bên trái */
 .confirm {
   margin: 12px 0;
-  padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--warn-fg) 35%, transparent);
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn-fg);
   border-radius: var(--radius);
-  background: var(--warn-bg);
+  background: var(--panel);
 }
 
-.confirm-title {
+.confirm-head {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
   color: var(--warn-fg);
 }
 
-.confirm pre {
-  margin: 10px 0;
+.confirm-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--fg);
+}
+
+.confirm-sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.confirm-args {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 13px;
+}
+
+.confirm-args > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 140px) 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.confirm-args dt {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.confirm-args dd {
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.confirm-args code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.confirm-raw {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.confirm-raw summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.confirm-raw summary:hover {
+  color: var(--fg-2);
+}
+
+.confirm-raw pre {
+  margin: 8px 0 0;
   padding: 10px 12px;
   max-height: 200px;
   overflow: auto;
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: var(--bg-subtle);
   font-size: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1130,27 +1206,69 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 14px;
 }
 
 .confirm-actions button {
-  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
   padding: 0 18px;
-  border: 1px solid var(--accent);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--accent-solid);
-  color: var(--accent-fg);
   font-weight: 500;
-  transition: background 0.15s var(--ease);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 
-.confirm-actions button:hover {
+.confirm-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.confirm-actions .confirm-yes {
+  background: var(--accent-solid);
+  color: var(--accent-fg);
+}
+
+.confirm-actions .confirm-yes:hover:not(:disabled) {
   background: var(--accent-solid-hover);
 }
 
-.confirm-actions button.secondary {
-  background: var(--panel);
-  color: var(--fg);
+.confirm-actions .confirm-no {
   border-color: var(--border-strong);
+  background: transparent;
+  color: var(--fg);
+}
+
+.confirm-actions .confirm-no:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+
+.confirm-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tools li.waiting {
+  color: var(--warn-fg);
+}
+
+@media (max-width: 640px) {
+  .confirm {
+    padding: 14px;
+  }
+
+  .confirm-args > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .confirm-actions button {
+    flex: 1;
+    justify-content: center;
+  }
 }
 
 .files {
