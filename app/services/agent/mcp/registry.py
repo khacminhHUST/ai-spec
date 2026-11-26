@@ -1,7 +1,10 @@
 """Registry connector: DB (khai qua giao diện) + config/mcp.yaml (chỉ đọc). Tạo/sửa/xóa, mã hóa header tĩnh.
 
-Connector trong DB thuộc riêng người tạo (`created_by` = user_id/email): chỉ người đó thấy, sửa, kết nối, dùng.
-Connector config/mcp.yaml dùng chung cho mọi người.
+Connector trong DB có 2 loại:
+- cá nhân (`shared = false`): thuộc riêng người tạo (`created_by` = user_id/email) – chỉ người đó thấy, sửa, kết nối, dùng;
+- dùng chung cho tổ chức (`shared = true`, migration 007_mcp_org.sql): mọi người thấy và tự bấm Kết nối (token riêng
+  từng người); chỉ admin sửa / xóa / đặt quyền tool (kiểm quyền ở API).
+Connector config/mcp.yaml dùng chung cho mọi người (chỉ đọc).
 
 Connector `oauth` khi tạo/sửa URL: chạy khám phá (mục 2.1) + đảm bảo có client OAuth (DCR 1 lần hoặc nhập tay).
 Header tĩnh lưu mã hóa (JSON), cho phép `${ENV_VAR}` – thay bằng giá trị trong .env lúc gọi.
@@ -28,7 +31,8 @@ AUTH_TYPES = ("oauth", "none", "headers")
 TRANSPORTS = ("streamable_http", "sse")
 YAML_PREFIX = "yaml:"
 DESCRIPTION_MAX = 300                 # = describe.DESC_MAX_CHARS (mô tả tự sinh)
-EDITABLE = ("name", "display_name", "description", "url", "transport", "auth_type", "enabled", "headers", "client_id", "client_secret")
+EDITABLE = ("name", "display_name", "description", "url", "transport", "auth_type", "enabled", "headers", "client_id",
+            "client_secret", "shared")
 
 
 class ConnectorError(ValueError):
@@ -67,8 +71,16 @@ class ConnectorRegistry:
         return out
 
     def list_db(self, owner: str) -> list[dict[str, Any]]:
-        """Connector trong DB của 1 người."""
+        """Connector trong DB người đó thấy: dùng chung + cá nhân của họ (dùng chung xếp trước)."""
         return self.store.list_connectors(owner) if owner else []
+
+    def usable(self, owner: str) -> list[dict[str, Any]]:
+        """Như list_db nhưng mỗi tên 1 connector (tên = tiền tố tool của agent): trùng tên → connector dùng chung thắng
+        (connector cá nhân tạo trước khi admin đưa connector cùng tên lên dùng chung)."""
+        out: dict[str, dict[str, Any]] = {}
+        for r in self.list_db(owner):
+            out.setdefault(r["name"], r)
+        return list(out.values())
 
     def get(self, connector_id: str) -> dict[str, Any] | None:
         """Connector trong DB, không kiểm chủ sở hữu (yaml → None: chỉ đọc, không qua registry này)."""
@@ -78,6 +90,18 @@ class ConnectorRegistry:
         """Connector trong DB nếu thuộc `owner`; của người khác → None (như không tồn tại)."""
         row = self.get(connector_id)
         return row if row is not None and owner and row.get("created_by") == owner else None
+
+    def visible(self, connector_id: str, user: str) -> dict[str, Any] | None:
+        """Connector user thấy được (dùng chung, hoặc cá nhân của chính user) – để kết nối, xem tool, dùng."""
+        row = self.get(connector_id)
+        if row is None or not user:
+            return None
+        return row if row.get("shared") or row.get("created_by") == user else None
+
+    @staticmethod
+    def can_manage(row: dict[str, Any], user: str, is_admin: bool) -> bool:
+        """Sửa / xóa / đặt quyền tool: dùng chung → admin; cá nhân → chủ sở hữu."""
+        return is_admin if row.get("shared") else bool(user) and row.get("created_by") == user
 
     def header_names(self, row: dict[str, Any]) -> list[str]:
         if not row.get("headers_enc"):
@@ -134,9 +158,12 @@ class ConnectorRegistry:
             out["description"] = " ".join(str(data["description"] or "").split())[:DESCRIPTION_MAX]
         if "enabled" in data:
             out["enabled"] = bool(data["enabled"])
+        if "shared" in data:
+            out["shared"] = bool(data["shared"])
         return out
 
-    def create(self, data: dict[str, Any], created_by: str) -> dict[str, Any]:
+    def create(self, data: dict[str, Any], created_by: str, shared: bool = False) -> dict[str, Any]:
+        """shared=True: connector dùng chung (API chỉ cho admin)."""
         created_by = (created_by or "").strip()
         if not created_by:
             raise ConnectorError("Thiếu user_id (chủ sở hữu connector)")
@@ -147,7 +174,7 @@ class ConnectorRegistry:
         row: dict[str, Any] = {"connector_id": uuid.uuid4().hex, "name": name, "display_name": f.get("display_name") or name,
                                "description": f.get("description", ""),
                                "url": f["url"], "transport": f["transport"], "auth_type": f["auth_type"],
-                               "enabled": f.get("enabled", True), "created_by": created_by}
+                               "enabled": f.get("enabled", True), "created_by": created_by, "shared": bool(shared)}
         row.update(self._auth_fields(f["auth_type"], f["url"], data, None))
         try:
             self.store.insert_connector(row)
@@ -176,8 +203,8 @@ class ConnectorRegistry:
             raise KeyError(connector_id)
         data = {k: v for k, v in data.items() if k in EDITABLE and v is not None}
         f = self._validate(data)
-        if "name" in data:
-            f["name"] = self._check_name(data["name"], old["created_by"], exclude_id=connector_id)
+        if "name" in data or f.get("shared"):       # đổi tên, hoặc đưa lên dùng chung → kiểm trùng tên
+            f["name"] = self._check_name(data.get("name", old["name"]), old["created_by"], exclude_id=connector_id)
         auth_type, url = f.get("auth_type", old["auth_type"]), f.get("url", old["url"])
         reset = auth_type != old["auth_type"] or url != old["url"]
         reauth = reset or (auth_type == "headers" and "headers" in data) or (

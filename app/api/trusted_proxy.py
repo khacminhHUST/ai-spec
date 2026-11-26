@@ -7,6 +7,7 @@ Bật bằng biến môi trường MEP_AUTH_MODE=trusted_proxy. Chuỗi tin cậ
   → gateway server 2 chỉ nhận kết nối từ IP server 1.
 Vì vậy ở đây chỉ ĐỌC payload JWT (không kiểm chữ ký, không cần JWT_SECRET) để lấy email, rồi:
   - ghi đè `user_id` trong query string và trong body JSON bằng email (bỏ giá trị trình duyệt tự gửi);
+  - `request.state.user_role` = trường `role` của token (ADMIN / USER…) – quản lý connector MCP dùng chung;
   - GET /conversations/{id}: hội thoại của người khác → 403 (route gốc không kiểm chủ sở hữu).
 Giới hạn: body multipart không sửa (đọc lại file 200 MB quá tốn) – `user_id` dạng Form ở /knowledge/uploads chỉ dùng
 để ghi vết uploaded_by; frontend gửi đúng email lấy từ token.
@@ -56,6 +57,13 @@ def identity(token: str | None, claim: str | None = None, now: float | None = No
     return None
 
 
+def role(token: str | None) -> str:
+    """Trường `role` của token web Tri thức (viết hoa; thiếu → "")."""
+    p = jwt_payload(token) if token else None
+    r = (p or {}).get("role")
+    return r.strip().upper() if isinstance(r, str) else ""
+
+
 def _header(scope: dict, name: bytes) -> str:
     return next((v.decode("latin-1") for k, v in scope["headers"] if k == name), "")
 
@@ -78,12 +86,14 @@ class TrustedProxyAuth:
         if scope["type"] != "http" or scope["path"] in EXEMPT_PATHS or scope["path"].startswith(EXEMPT_PREFIXES):
             return await self.app(scope, receive, send)
         auth = _header(scope, b"authorization")
-        email = identity(auth[7:].strip() if auth.lower().startswith("bearer ") else None, self.claim)
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else None
+        email = identity(token, self.claim)
         if not email:
             return await _send_json(send, 401, "Yêu cầu đăng nhập web Tri thức")
 
         scope = dict(scope)
         scope.setdefault("state", {})["user_email"] = email
+        scope["state"]["user_role"] = role(token)
         qs = scope.get("query_string", b"").decode("latin-1")
         if qs:
             pairs = [(k, email if k == "user_id" else v) for k, v in parse_qsl(qs, keep_blank_values=True)]

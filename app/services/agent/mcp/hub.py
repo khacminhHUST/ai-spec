@@ -2,7 +2,7 @@
 
 Tham số đọc từ config/mcp.yaml: public_base_url, client_name, tool_cache_ttl_s, refresh_skew_s, http_timeout_s,
 allow_http_localhost, state_ttl_s. Secret: MEP_SECRET_KEY (.env) – thiếu thì OAuth/header tĩnh báo lỗi rõ ràng,
-connector `none` vẫn chạy. Connector DB thuộc riêng người tạo: mọi hàm theo user_id chỉ thấy connector của user đó.
+connector `none` vẫn chạy. Mọi hàm theo user_id chỉ thấy connector dùng chung + connector cá nhân của user đó.
 """
 from __future__ import annotations
 
@@ -70,12 +70,14 @@ class McpHub:
         return self._http
 
     # ---------------------------------------------------------------- dùng cho API
-    def connector_view(self, row: dict[str, Any], statuses: dict[str, str]) -> dict[str, Any]:
-        """Không bao giờ trả giá trị header / token – chỉ tên header."""
+    def connector_view(self, row: dict[str, Any], statuses: dict[str, str], user_id: str = "",
+                       is_admin: bool = False) -> dict[str, Any]:
+        """Không bao giờ trả giá trị header / token – chỉ tên header. can_manage: user sửa/xóa/đặt quyền tool được."""
         v = {k: row.get(k) for k in ("connector_id", "name", "display_name", "description", "url", "transport", "auth_type",
                                       "enabled", "resource", "issuer", "scopes", "created_by", "created_at",
                                       "updated_at")}
-        v.update(source="db", readonly=False)
+        v.update(source="db", readonly=False, shared=bool(row.get("shared")),
+                 can_manage=self.registry.can_manage(row, user_id or row.get("created_by", ""), is_admin))
         try:
             v["header_names"] = self.registry.header_names(row) if row["auth_type"] == "headers" else []
         except Exception:  # noqa: BLE001 – thiếu MEP_SECRET_KEY
@@ -84,9 +86,9 @@ class McpHub:
         v["registration"] = bool((row.get("as_metadata") or {}).get("registration_endpoint"))
         return v
 
-    def list_connectors(self, user_id: str) -> list[dict[str, Any]]:
+    def list_connectors(self, user_id: str, is_admin: bool = False) -> list[dict[str, Any]]:
         statuses = self.tokens.store.token_statuses(user_id)
-        out = [self.connector_view(r, statuses) for r in self.registry.list_db(user_id)]
+        out = [self.connector_view(r, statuses, user_id, is_admin) for r in self.registry.list_db(user_id)]
         out += [{**y, "status": READY} for y in self.registry.yaml_connectors()]
         return out
 
@@ -100,14 +102,14 @@ class McpHub:
     # ---------------------------------------------------------------- dùng cho agent (mcp/catalog.py)
     def catalog(self, user_id: str) -> list[dict[str, str]]:
         """Connector đang bật + trạng thái với user. Chỉ đọc DB."""
-        rows = [r for r in self.registry.list_db(user_id) if r.get("enabled")]
+        rows = [r for r in self.registry.usable(user_id) if r.get("enabled")]
         statuses = self.tokens.store.token_statuses(user_id) if any(r["auth_type"] == "oauth" for r in rows) else {}
         return [source_entry(r["name"], r.get("display_name") or r["name"], r.get("description") or "",
                              statuses.get(r["connector_id"], NOT_CONNECTED) if r["auth_type"] == "oauth" else READY)
                 for r in rows]
 
     def source_tools(self, user_id: str, name: str) -> list[BaseTool]:
-        row = next((r for r in self.registry.list_db(user_id) if r["name"] == name and r.get("enabled")), None)
+        row = next((r for r in self.registry.usable(user_id) if r["name"] == name and r.get("enabled")), None)
         if row is None:
             raise SourceUnavailable(f"Không có nguồn '{name}' (hoặc nguồn đang tắt)")
         label = row.get("display_name") or name

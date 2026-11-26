@@ -1,5 +1,6 @@
 // API MCP connector (backend app/api/routes/mcp.py, proxy /mcp trong vite.config.ts).
-// Connector thuộc riêng người tạo: mọi lời gọi theo connector đều gửi user_id (chạy sau Tri thức: backend lấy từ token).
+// Connector cá nhân (chỉ người tạo thấy) hoặc dùng chung cho tổ chức (admin quản lý, ai cũng tự bấm Kết nối).
+// Mọi lời gọi theo connector đều gửi user_id (chạy sau Tri thức: backend lấy từ token).
 
 export type AuthType = "oauth" | "none" | "headers";
 export type Transport = "streamable_http" | "sse";
@@ -17,6 +18,9 @@ export interface Connector {
   enabled: boolean;
   source: "db" | "yaml";
   readonly: boolean;
+  shared?: boolean; // dùng chung cho cả tổ chức
+  can_manage?: boolean; // người đang xem được sửa / xóa / đặt quyền tool
+  created_by?: string;
   status: ConnStatus;
   header_names: string[];
   resource?: string | null;
@@ -51,6 +55,7 @@ export interface ConnectorInput {
   client_id?: string;
   client_secret?: string;
   enabled: boolean;
+  shared?: boolean;
 }
 
 export interface McpTool {
@@ -92,6 +97,9 @@ const post = (url: string, body?: unknown) =>
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+
+/** Quyền của người đang dùng (chạy sau Tri thức: ADMIN theo token; local: luôn là admin) */
+export const getMe = () => fetch("/mcp/me").then((r) => call<{ is_admin: boolean }>(r));
 
 export const listConnectors = (userId: string) =>
   fetch(`/mcp/connectors?${q(userId)}`).then((r) => call<Connector[]>(r));

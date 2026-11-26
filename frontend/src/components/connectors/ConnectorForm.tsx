@@ -4,6 +4,7 @@ import Modal from "../knowledge/Modal";
 
 interface Props {
   userId: string;
+  isAdmin?: boolean; // được thêm connector dùng chung cho tổ chức
   editing: Connector | null; // null = thêm mới
   existingNames: string[];
   /** popup: cửa sổ đã mở sẵn trong sự kiện bấm (tránh bị chặn) để đăng nhập OAuth ngay sau khi thêm */
@@ -36,10 +37,11 @@ function makeCode(name: string, url: string, taken: string[]): string {
   return code;
 }
 
-export default function ConnectorForm({ userId, editing, existingNames, onSaved, onCancel }: Props) {
+export default function ConnectorForm({ userId, isAdmin, editing, existingNames, onSaved, onCancel }: Props) {
   const [name, setName] = useState(editing ? (editing.display_name && !editing.display_name.includes("@") ? editing.display_name : editing.name) : "");
   const [url, setUrl] = useState(editing?.url ?? "");
   const [description, setDescription] = useState(editing?.description ?? "");
+  const [shared, setShared] = useState(!!isAdmin);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +76,7 @@ export default function ConnectorForm({ userId, editing, existingNames, onSaved,
           transport: "streamable_http",
           auth_type: d.auth_type,
           enabled: true,
+          shared: !!isAdmin && shared,
         },
         userId,
       );
@@ -134,6 +137,15 @@ export default function ConnectorForm({ userId, editing, existingNames, onSaved,
           />
           <span className="cn-count-text">{description.length}/300</span>
         </label>
+        {isAdmin && !editing && (
+          <label className="cn-check">
+            <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+            <span>
+              Dùng chung cho cả tổ chức
+              <span className="cn-hint">Mọi người thấy connector này ở tab Kết nối và tự đăng nhập bằng tài khoản của mình.</span>
+            </span>
+          </label>
+        )}
         {error && <div className="banner-error">{error}</div>}
         <div className="cn-form-actions">
           <button type="button" onClick={onCancel}>

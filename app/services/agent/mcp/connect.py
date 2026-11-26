@@ -36,8 +36,8 @@ class OAuthConnect:
         self.state_ttl_s = state_ttl_s
 
     def _oauth_row(self, connector_id: str, user_id: str) -> dict[str, Any]:
-        """Connector OAuth của chính user_id (của người khác → KeyError như không tồn tại)."""
-        row = self.registry.owned(connector_id, user_id)
+        """Connector OAuth user_id thấy được (dùng chung hoặc của chính họ; khác → KeyError như không tồn tại)."""
+        row = self.registry.visible(connector_id, user_id)
         if row is None:
             raise KeyError(connector_id)
         if row["auth_type"] != "oauth":

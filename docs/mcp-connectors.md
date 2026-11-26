@@ -15,9 +15,16 @@ Tài liệu chuẩn OAuth của hệ thống HAWEE, **đọc trước khi code**
 Code thật của A (`D:\ai-planner\app\api\oauth\`, `app/services/oauth/`) và MCP server mẫu (`D:\git_ai_hopdong`, `D:\New folder\mcp-reference\`) **chỉ đọc**, không sửa.
 
 Nguyên tắc:
-- **Connector riêng theo người dùng** (từ 2026-11-20, migration `006_mcp_per_user.sql`): ai thêm connector thì chỉ người đó
-  thấy, sửa, xóa, kết nối, đặt quyền tool và dùng trong agent. Người khác muốn dùng phải tự thêm. Server trong
-  `config/mcp.yaml` vẫn dùng chung.
+- **Connector cá nhân** (từ 2026-11-20, migration `006_mcp_per_user.sql`): ai thêm connector thì chỉ người đó
+  thấy, sửa, xóa, kết nối, đặt quyền tool và dùng trong agent. Server trong `config/mcp.yaml` vẫn dùng chung.
+- **Connector dùng chung cho tổ chức** (từ 2026-11-26, migration `007_mcp_org.sql`, cột `shared`), giống connector
+  tổ chức của Claude: admin thêm 1 lần (hoặc bấm "Dùng chung cho tổ chức" trên connector của mình) → mọi người thấy ở
+  tab Kết nối và **tự bấm Kết nối** bằng tài khoản của mình (token vẫn riêng từng người, `mcp_user_tokens`). Chỉ admin
+  sửa / tắt / xóa / đặt quyền tool (quyền tool áp cho mọi người). Admin = `role` ADMIN trong token web Tri thức
+  (`TrustedProxyAuth` → `request.state.user_role`; token đã được backend Tri thức kiểm chữ ký ở nginx); chạy local thì
+  ai cũng là admin. Tên connector dùng chung duy nhất trong tổ chức và không trùng tên connector cá nhân mới; connector
+  cá nhân tạo trước trùng tên → agent dùng connector dùng chung. Chuyển dùng chung → cá nhân (chỉ người tạo): xóa token
+  của mọi người.
 - **`user_id`**: chạy sau web Tri thức (`MEP_AUTH_MODE=trusted_proxy`, `deploy/trithuc/`) là email trong token đăng nhập
   Tri thức, trình duyệt không sửa được. Chạy local: client tự gửi (biết `user_id` của người khác thì dùng được connector
   của người đó – chấp nhận khi chạy local).
@@ -122,7 +129,7 @@ Mã hóa: Fernet, khóa lấy từ `MEP_SECRET_KEY` trong `.env`. Thiếu khóa 
 
 | Bảng | Cột chính |
 |---|---|
-| `mcp_connectors` | `connector_id` PK, (`created_by`, `name`) UNIQUE, `display_name`, `url`, `transport`, `auth_type` (`oauth`/`none`/`headers`), `headers_enc`, `resource`, `issuer`, `as_metadata` JSONB, `scopes`, `enabled`, `created_by` NOT NULL (chủ sở hữu), `created_at`, `updated_at` |
+| `mcp_connectors` | `connector_id` PK, (`created_by`, `name`) UNIQUE, `name` UNIQUE khi `shared`, `shared` (007), `display_name`, `url`, `transport`, `auth_type` (`oauth`/`none`/`headers`), `headers_enc`, `resource`, `issuer`, `as_metadata` JSONB, `scopes`, `enabled`, `created_by` NOT NULL (chủ sở hữu), `created_at`, `updated_at` |
 | `oauth_clients` | `issuer` + `redirect_uri` PK, `client_id`, `client_secret_enc`, `auth_method`, `registered_at` |
 | `oauth_pending` | `state` PK, `user_id`, `connector_id`, `code_verifier_enc`, `expires_at` |
 | `mcp_user_tokens` | (`user_id`, `connector_id`) PK, `access_token_enc`, `refresh_token_enc`, `expires_at`, `scope`, `status` (`connected`/`forbidden`/`needs_reauth`), `updated_at` |
@@ -147,8 +154,10 @@ Cấu hình bổ sung trong `config/mcp.yaml`: `public_base_url` (để dựng `
 | PUT | `/mcp/connectors/{id}/tools/{tool}?user_id=` `{access}` | Ghi đè đọc/ghi/tắt |
 | POST | `/mcp/connectors/{id}/test?user_id=` | Gọi thử `initialize` + `tools/list` |
 
-Mọi route theo `{id}` chỉ cho chủ sở hữu; connector của người khác → 404 (như không tồn tại). Callback OAuth: `user_id`
-của state phải là chủ connector, nếu không → lỗi, không lưu token.
+Mọi route theo `{id}`: connector cá nhân của người khác → 404 (như không tồn tại); connector dùng chung → ai cũng
+kết nối / ngắt / thử / xem tool được, còn sửa / xóa / `describe` / đặt quyền tool chỉ admin (403). `GET /mcp/me` →
+`{is_admin}`. `POST /mcp/connectors` và `PATCH` nhận thêm `shared` (chỉ admin). Callback OAuth: `user_id` của state phải
+thấy được connector (dùng chung hoặc của chính họ), nếu không → lỗi, không lưu token.
 
 Thêm proxy `/mcp` vào `frontend/vite.config.ts`. Callback đi qua origin của frontend nên `redirect_uri` dùng `public_base_url`.
 

@@ -3,6 +3,7 @@ import {
   connect,
   deleteConnector,
   disconnect,
+  getMe,
   listConnectors,
   testConnector,
   updateConnector,
@@ -46,6 +47,13 @@ export default function ConnectorsView({ userId }: { userId: string }) {
   const [checking, setChecking] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    getMe()
+      .then((m) => setIsAdmin(m.is_admin))
+      .catch(() => setIsAdmin(false));
+  }, []);
 
   const load = useCallback(() => {
     listConnectors(userId)
@@ -143,6 +151,7 @@ export default function ConnectorsView({ userId }: { userId: string }) {
       {form && (
         <ConnectorForm
           userId={userId}
+          isAdmin={isAdmin}
           editing={form.editing}
           existingNames={items.map((c) => c.name)}
           onCancel={() => setForm(null)}
@@ -159,6 +168,8 @@ export default function ConnectorsView({ userId }: { userId: string }) {
           const oauth = c.auth_type === "oauth" && !c.readonly;
           const linked = c.status !== "not_connected";
           const canTools = !oauth || linked;
+          // Sửa / tắt / xóa / quyền tool: connector cá nhân → chủ sở hữu; dùng chung → quản trị viên
+          const manage = !c.readonly && c.can_manage !== false;
           return (
             <li key={c.connector_id} className={c.enabled ? "" : "cn-disabled"}>
               <div className="cn-item">
@@ -166,7 +177,14 @@ export default function ConnectorsView({ userId }: { userId: string }) {
                   <Icon name="plug" />
                 </span>
                 <div className="cn-main">
-                  <div className="cn-name">{title(c)}</div>
+                  <div className="cn-name">
+                    {title(c)}
+                    {c.shared && (
+                      <span className="cn-tag" title="Connector dùng chung – mỗi người tự bấm Kết nối bằng tài khoản của mình">
+                        Tổ chức
+                      </span>
+                    )}
+                  </div>
                   <div className="cn-sub" title={c.description || undefined}>
                     {host(c.url)}
                     {c.description && <> · {c.description}</>}
@@ -206,12 +224,35 @@ export default function ConnectorsView({ userId }: { userId: string }) {
                             Kiểm tra kết nối
                           </button>
                         )}
-                        {!c.readonly && <button onClick={() => setForm({ editing: c })}>Sửa</button>}
-                        {!c.readonly && (
+                        {manage && <button onClick={() => setForm({ editing: c })}>Sửa</button>}
+                        {manage && (
                           <button
                             onClick={() => act(async () => void (await updateConnector(c.connector_id, { enabled: !c.enabled }, userId)))}
                           >
                             {c.enabled ? "Tắt" : "Bật"}
+                          </button>
+                        )}
+                        {manage && isAdmin && !c.shared && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Dùng chung ${title(c)} cho cả tổ chức? Mọi người sẽ thấy và tự bấm Kết nối.`))
+                                act(async () => {
+                                  await updateConnector(c.connector_id, { shared: true }, userId);
+                                  return `${title(c)} đã dùng chung cho cả tổ chức.`;
+                                });
+                            }}
+                          >
+                            Dùng chung cho tổ chức
+                          </button>
+                        )}
+                        {manage && c.shared && c.created_by === userId && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Chuyển ${title(c)} về cá nhân? Người khác sẽ không thấy và mất kết nối.`))
+                                act(async () => void (await updateConnector(c.connector_id, { shared: false }, userId)));
+                            }}
+                          >
+                            Chuyển về cá nhân
                           </button>
                         )}
                         {oauth && linked && (
@@ -219,11 +260,12 @@ export default function ConnectorsView({ userId }: { userId: string }) {
                             Ngắt kết nối
                           </button>
                         )}
-                        {!c.readonly && (
+                        {manage && (
                           <button
                             className="cn-danger"
                             onClick={() => {
-                              if (window.confirm(`Xóa connector ${title(c)}?`))
+                              const who = c.shared ? " (dùng chung – xóa với mọi người)" : "";
+                              if (window.confirm(`Xóa connector ${title(c)}${who}?`))
                                 act(() => deleteConnector(c.connector_id, userId));
                             }}
                           >
@@ -237,7 +279,7 @@ export default function ConnectorsView({ userId }: { userId: string }) {
               </div>
               {openTools === c.connector_id && (
                 <div className="cn-tools-wrap">
-                  <ToolList connector={c} userId={userId} onFail={() => recheck(c)} />
+                  <ToolList connector={{ ...c, readonly: !manage }} userId={userId} onFail={() => recheck(c)} />
                 </div>
               )}
             </li>

@@ -2,7 +2,8 @@
 cột description – 004_source_description.sql).
 
 `ConnectorStore` là interface; `PgConnectorStore` là bản Postgres. Xóa connector → token, override, state đi kèm
-bị xóa theo (ON DELETE CASCADE). Connector thuộc riêng 1 người (`created_by`, migration 006_mcp_per_user.sql).
+bị xóa theo (ON DELETE CASCADE). Connector cá nhân thuộc riêng 1 người (`created_by`, migration 006_mcp_per_user.sql);
+connector dùng chung (`shared`, migration 007_mcp_org.sql) mọi người đều thấy.
 """
 from __future__ import annotations
 
@@ -12,20 +13,21 @@ from typing import Any
 from psycopg.types.json import Jsonb
 
 CONNECTOR_FIELDS = ("name", "display_name", "description", "url", "transport", "auth_type", "headers_enc", "resource", "issuer",
-                    "as_metadata", "scopes", "enabled", "created_by")
+                    "as_metadata", "scopes", "enabled", "created_by", "shared")
 
 
 class ConnectorStore(ABC):
     @abstractmethod
     def list_connectors(self, owner: str) -> list[dict[str, Any]]:
-        """Connector của 1 người (created_by = owner)."""
+        """Connector người đó thấy: dùng chung (shared) + cá nhân của chính họ (created_by = owner).
+        Dùng chung xếp trước."""
 
     @abstractmethod
     def get_connector(self, connector_id: str) -> dict[str, Any] | None: ...
 
     @abstractmethod
     def insert_connector(self, row: dict[str, Any]) -> None:
-        """Trùng `name` trong cùng chủ sở hữu → ValueError."""
+        """Trùng `name` trong cùng chủ sở hữu / trong nhóm dùng chung → ValueError."""
 
     @abstractmethod
     def update_connector(self, connector_id: str, **fields: Any) -> None: ...
@@ -59,7 +61,8 @@ class PgConnectorStore(ConnectorStore):
             return list(cur) if cur.description else []
 
     def list_connectors(self, owner):
-        return self._q("SELECT * FROM mcp_connectors WHERE created_by = %s ORDER BY name", (owner,))
+        return self._q("SELECT * FROM mcp_connectors WHERE shared OR created_by = %s ORDER BY shared DESC, name",
+                       (owner,))
 
     def get_connector(self, connector_id):
         rows = self._q("SELECT * FROM mcp_connectors WHERE connector_id = %s", (connector_id,))

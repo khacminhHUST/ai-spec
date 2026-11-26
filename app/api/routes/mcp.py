@@ -1,5 +1,8 @@
-"""API MCP connector (docs/mcp-connectors.md mục 5). Connector thuộc riêng người tạo: mọi route theo connector nhận
-`user_id` và chỉ cho chủ sở hữu (của người khác → 404 như không tồn tại).
+"""API MCP connector (docs/mcp-connectors.md mục 5). Mọi route theo connector nhận `user_id`.
+- Connector cá nhân: chỉ chủ sở hữu thấy / dùng / sửa (của người khác → 404 như không tồn tại).
+- Connector dùng chung (`shared`): ai cũng thấy, kết nối, xem tool, thử; chỉ admin sửa / xóa / đặt quyền tool (403).
+Admin: chạy sau web Tri thức → `role` = ADMIN trong token (TrustedProxyAuth đặt request.state.user_role);
+chạy local (không có TrustedProxyAuth) → ai cũng là admin.
 
 `user_id`: chạy sau web Tri thức (MEP_AUTH_MODE=trusted_proxy) là email trong token, trình duyệt không sửa được;
 chạy local là giá trị client tự gửi.
@@ -42,6 +45,7 @@ class ConnectorIn(BaseModel):
     client_id: str | None = None
     client_secret: str | None = None
     enabled: bool = True
+    shared: bool = False                # dùng chung cho cả tổ chức (chỉ admin)
     user_id: str                        # người tạo = chủ sở hữu (created_by)
 
 
@@ -56,6 +60,7 @@ class ConnectorPatch(BaseModel):
     client_id: str | None = None
     client_secret: str | None = None
     enabled: bool | None = None
+    shared: bool | None = None          # đưa lên / gỡ khỏi dùng chung (chỉ admin)
 
 
 class DiscoverIn(BaseModel):
@@ -88,12 +93,28 @@ def _call(fn, *args, **kwargs):
         raise HTTPException(404, "không tìm thấy connector") from None
 
 
+def is_admin(request: Request) -> bool:
+    """Sau web Tri thức: role ADMIN trong token. Local (không qua TrustedProxyAuth): luôn True."""
+    if getattr(request.state, "user_email", None) is None:
+        return True
+    return getattr(request.state, "user_role", "") == "ADMIN"
+
+
 def _db_row(hub, connector_id: str, user_id: str) -> dict[str, Any]:
+    """Connector user thấy được (dùng chung hoặc của chính user)."""
     if hub.is_yaml(connector_id):
         raise HTTPException(400, "Connector từ config/mcp.yaml chỉ đọc – sửa trong file cấu hình")
-    row = hub.registry.owned(connector_id, user_id)
+    row = hub.registry.visible(connector_id, user_id)
     if row is None:
         raise HTTPException(404, "không tìm thấy connector")
+    return row
+
+
+def _managed_row(hub, connector_id: str, user_id: str, admin: bool) -> dict[str, Any]:
+    """Connector user được sửa / xóa / đặt quyền tool; dùng chung mà không phải admin → 403."""
+    row = _db_row(hub, connector_id, user_id)
+    if not hub.registry.can_manage(row, user_id, admin):
+        raise HTTPException(403, "Connector dùng chung của tổ chức – chỉ quản trị viên được thay đổi")
     return row
 
 
@@ -104,8 +125,14 @@ def _headers(items: list[HeaderItem] | None) -> list[dict[str, str]] | None:
 # ------------------------------------------------------------------ connector
 
 @router.get("/connectors")
-def list_connectors(user_id: str = Query(...), hub=Depends(get_hub)) -> list[dict[str, Any]]:
-    return hub.list_connectors(user_id)
+def list_connectors(request: Request, user_id: str = Query(...), hub=Depends(get_hub)) -> list[dict[str, Any]]:
+    return hub.list_connectors(user_id, is_admin(request))
+
+
+@router.get("/me")
+def me(request: Request) -> dict[str, bool]:
+    """Quyền của người đang dùng trên giao diện Kết nối."""
+    return {"is_admin": is_admin(request)}
 
 
 @router.post("/connectors/discover")
@@ -119,28 +146,42 @@ def discover(body: DiscoverIn, hub=Depends(get_hub)) -> dict[str, Any]:
 
 
 @router.post("/connectors", status_code=201)
-def create_connector(body: ConnectorIn, hub=Depends(get_hub)) -> dict[str, Any]:
-    data = body.model_dump(exclude={"user_id"})
+def create_connector(body: ConnectorIn, request: Request, hub=Depends(get_hub)) -> dict[str, Any]:
+    admin = is_admin(request)
+    if body.shared and not admin:
+        raise HTTPException(403, "Chỉ quản trị viên được thêm connector dùng chung cho tổ chức")
+    data = body.model_dump(exclude={"user_id", "shared"})
     data["headers"] = _headers(body.headers)
-    row = _call(hub.registry.create, data, body.user_id)
-    return hub.connector_view(row, {})
+    row = _call(hub.registry.create, data, body.user_id, body.shared)
+    return hub.connector_view(row, {}, body.user_id, admin)
 
 
 @router.patch("/connectors/{connector_id}")
-def update_connector(connector_id: str, body: ConnectorPatch, user_id: str = Query(...),
+def update_connector(connector_id: str, body: ConnectorPatch, request: Request, user_id: str = Query(...),
                      hub=Depends(get_hub)) -> dict[str, Any]:
-    _db_row(hub, connector_id, user_id)
+    admin = is_admin(request)
+    old = _managed_row(hub, connector_id, user_id, admin)
+    if body.shared is not None and body.shared != bool(old.get("shared")):
+        if not admin:
+            raise HTTPException(403, "Chỉ quản trị viên được đưa connector lên / gỡ khỏi dùng chung")
+        if not body.shared and old.get("created_by") != user_id:
+            # gỡ khỏi dùng chung → thành connector cá nhân của người tạo; admin khác sẽ không thấy nữa
+            raise HTTPException(400, "Chỉ người tạo được chuyển connector này về cá nhân – hoặc xóa connector")
     data = body.model_dump(exclude_none=True)
     if body.headers is not None:
         data["headers"] = _headers(body.headers)
     row, _ = _call(hub.registry.update, connector_id, data)
+    if old.get("shared") and not row.get("shared"):
+        # về cá nhân: token của người khác không còn dùng được – xóa cho sạch
+        hub.registry.oauth_store.delete_connector_tokens(connector_id)
     hub.invalidate(connector_id)
-    return hub.connector_view(row, hub.tokens.store.token_statuses(user_id))
+    return hub.connector_view(row, hub.tokens.store.token_statuses(user_id), user_id, admin)
 
 
 @router.delete("/connectors/{connector_id}", status_code=204)
-def delete_connector(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub)) -> Response:
-    _db_row(hub, connector_id, user_id)
+def delete_connector(connector_id: str, request: Request, user_id: str = Query(...),
+                     hub=Depends(get_hub)) -> Response:
+    _managed_row(hub, connector_id, user_id, is_admin(request))
     _call(hub.registry.delete, connector_id)
     hub.invalidate(connector_id)
     return Response(status_code=204)
@@ -216,9 +257,9 @@ def list_tools(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub
 
 
 @router.post("/connectors/{connector_id}/describe")
-def describe(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, str]:
+def describe(connector_id: str, request: Request, user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, str]:
     """Gợi ý mô tả cho danh mục nguồn của agent (không lưu – người dùng xem lại rồi bấm Lưu)."""
-    row = _db_row(hub, connector_id, user_id)
+    row = _managed_row(hub, connector_id, user_id, is_admin(request))
     if row["auth_type"] == "oauth" and hub.tokens.status(user_id, connector_id) is None:
         raise HTTPException(409, "Chưa kết nối – bấm Kết nối trước để server trả danh sách tool")
     try:
@@ -229,9 +270,9 @@ def describe(connector_id: str, user_id: str = Query(...), hub=Depends(get_hub))
 
 
 @router.put("/connectors/{connector_id}/tools/{tool_name}")
-def set_tool_access(connector_id: str, tool_name: str, body: AccessIn, user_id: str = Query(...),
-                    hub=Depends(get_hub)) -> dict[str, Any]:
-    _db_row(hub, connector_id, user_id)
+def set_tool_access(connector_id: str, tool_name: str, body: AccessIn, request: Request,
+                    user_id: str = Query(...), hub=Depends(get_hub)) -> dict[str, Any]:
+    _managed_row(hub, connector_id, user_id, is_admin(request))
     hub.registry.store.set_override(connector_id, tool_name, body.access)
     return {"tool": tool_name, "override": body.access}
 

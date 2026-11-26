@@ -156,3 +156,89 @@ def test_connectors_are_private_per_user(api):
         assert {t.name for t in hub.source_tools("a@hawee.vn", "kho")} == {"kho_list_items", "kho_create_item"}
         assert [e["status"] for e in hub.catalog("b@hawee.vn") if e["name"] == "kho"] == ["not_connected"]  # 'kho' của B
         assert ("b@hawee.vn", aid) not in store.tokens
+
+
+def _tri_thuc_token(email: str, role: str) -> str:
+    """Token web Tri thức giả (TrustedProxyAuth chỉ đọc payload, không kiểm chữ ký)."""
+    import base64
+    import time
+
+    b = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")   # noqa: E731
+    return f"{b({'alg': 'HS256'})}.{b({'email': email, 'role': role, 'type': 'access', 'exp': time.time() + 600})}.x"
+
+
+def test_shared_connectors_admin_manages_everyone_connects(api):
+    """Connector dùng chung: ADMIN thêm/sửa/xóa/đặt quyền tool; người khác thấy, tự kết nối (token riêng), không sửa được."""
+    from app.api.trusted_proxy import TrustedProxyAuth
+
+    c, hub, fa, store = api()
+    c.app.add_middleware(TrustedProxyAuth)
+    adm = {"Authorization": "Bearer " + _tri_thuc_token("admin@hawee.vn", "ADMIN")}
+    usr = {"Authorization": "Bearer " + _tri_thuc_token("b@hawee.vn", "USER")}
+    q = {"user_id": "x"}                                   # bị TrustedProxyAuth ghi đè bằng email trong token
+    with c:
+        assert c.get("/mcp/me", headers=adm).json() == {"is_admin": True}
+        assert c.get("/mcp/me", headers=usr).json() == {"is_admin": False}
+        body = {"name": "revit", "url": MCP_URL, "auth_type": "oauth", "shared": True, "user_id": "x"}
+        assert c.post("/mcp/connectors", json=body, headers=usr).status_code == 403
+        r = c.post("/mcp/connectors", json=body, headers=adm)
+        assert r.status_code == 201, r.text
+        sid = r.json()["connector_id"]
+        assert r.json()["shared"] is True and r.json()["can_manage"] is True
+
+        # Người thường thấy connector dùng chung, chưa kết nối, không quản lý được
+        v = next(x for x in c.get("/mcp/connectors", params=q, headers=usr).json() if x["name"] == "revit")
+        assert v["shared"] and not v["can_manage"] and v["status"] == "not_connected"
+        for method, path, kw in [("patch", "", {"json": {"enabled": False}}), ("delete", "", {}),
+                                 ("post", "/describe", {}),
+                                 ("put", "/tools/create_item", {"json": {"access": "write"}})]:
+            r = getattr(c, method)(f"/mcp/connectors/{sid}{path}", params=q, headers=usr, **kw)
+            assert r.status_code == 403, (method, path, r.status_code)
+        # Tên dùng chung không được trùng với connector cá nhân mới
+        assert c.post("/mcp/connectors", json={**body, "shared": False}, headers=usr).status_code == 400
+
+        # Người thường tự kết nối → token của riêng họ, agent dùng được nguồn
+        p = httpx.URL(c.post(f"/mcp/connectors/{sid}/connect", params=q, headers=usr).json()["authorize_url"]).params
+        code = fa.issue_code("b@hawee.vn", p["client_id"], p["redirect_uri"], p["code_challenge"])
+        assert '"status": "connected"' in c.get("/mcp/oauth/callback", params={"code": code, "state": p["state"]}).text
+        assert ("b@hawee.vn", sid) in store.tokens and ("admin@hawee.vn", sid) not in store.tokens
+        assert {t.name for t in hub.source_tools("b@hawee.vn", "revit")} == {"revit_list_items", "revit_create_item"}
+        assert [e["status"] for e in hub.catalog("admin@hawee.vn") if e["name"] == "revit"] == ["not_connected"]
+        assert c.get(f"/mcp/connectors/{sid}/tools", params=q, headers=usr).status_code == 200
+
+        # Admin đặt quyền tool → áp cho mọi người
+        assert c.put(f"/mcp/connectors/{sid}/tools/create_item", json={"access": "disabled"}, params=q,
+                     headers=adm).status_code == 200
+        hub.invalidate(sid)
+        assert {t.name for t in hub.source_tools("b@hawee.vn", "revit")} == {"revit_list_items"}
+
+        # Admin đưa connector cá nhân lên dùng chung; người thường không được
+        own = c.post("/mcp/connectors", json={"name": "pub", "url": "https://pub.example.com/mcp", "auth_type": "none",
+                                              "user_id": "x"}, headers=usr).json()
+        assert c.patch(f"/mcp/connectors/{own['connector_id']}", json={"shared": True}, params=q,
+                       headers=usr).status_code == 403
+        mine = c.post("/mcp/connectors", json={"name": "pub2", "url": "https://pub.example.com/mcp", "auth_type": "none",
+                                               "user_id": "x"}, headers=adm).json()
+        assert not mine["shared"]
+        r = c.patch(f"/mcp/connectors/{mine['connector_id']}", json={"shared": True}, params=q, headers=adm)
+        assert r.status_code == 200 and r.json()["shared"] is True
+        assert any(x["name"] == "pub2" for x in c.get("/mcp/connectors", params=q, headers=usr).json())
+
+        # Admin xóa → mất với mọi người (kèm token)
+        assert c.delete(f"/mcp/connectors/{sid}", params=q, headers=adm).status_code == 204
+        assert ("b@hawee.vn", sid) not in store.tokens
+        assert all(x["name"] != "revit" for x in c.get("/mcp/connectors", params=q, headers=usr).json())
+
+
+def test_shared_name_wins_over_personal_in_agent(api):
+    """Người dùng có connector cá nhân trùng tên với connector dùng chung (tạo trước): agent dùng connector dùng chung."""
+    c, hub, fa, store = api()
+    with c:
+        mine = c.post("/mcp/connectors", json={"name": "kho", "url": "https://pub.example.com/mcp", "auth_type": "none",
+                                               "user_id": "b"}).json()
+        org = c.post("/mcp/connectors", json={"name": "kho", "url": "https://pub.example.com/mcp", "auth_type": "none",
+                                              "display_name": "Kho tổ chức", "shared": True, "user_id": "admin"})
+        assert org.status_code == 201, org.text
+        assert [e["label"] for e in hub.catalog("b") if e["name"] == "kho"] == ["Kho tổ chức"]
+        ids = [x["connector_id"] for x in c.get("/mcp/connectors", params={"user_id": "b"}).json() if x["source"] == "db"]
+        assert ids == [org.json()["connector_id"], mine["connector_id"]]        # giao diện vẫn hiện cả 2
