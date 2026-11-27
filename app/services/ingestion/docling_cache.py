@@ -45,6 +45,10 @@ _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 _UNITS = {"mm", "cm", "km", "ft", "kg", "kw", "kva", "kvar", "kwh", "mw", "hz", "khz", "db", "dba", "pa", "kpa",
           "mpa", "psi", "lm", "lx", "cd", "nm", "mph", "rpm", "cfm", "pt", "px", "st", "nd", "rd", "th", "vs",
           "dr", "mr", "mrs", "ms", "hr", "hrs", "min", "sq", "pcs", "hp", "kn", "ml", "lb", "lbs", "qty", "pp"}
+# Âm tiết tiếng Việt rơi mất nguyên âm có dấu chỉ còn [phụ âm đầu][phụ âm cuối]: "Độc lập" → "Đc lp", "nhất" → "nht".
+# Ký hiệu kỹ thuật (hdd, Hhh, Wx, mg, VRd, kNm, qtt…) không có dạng này → không tính (báo nhầm cả file → OCR thừa).
+_VI_FRAGMENT = re.compile(r"(?:ngh|ng|nh|ch|gh|gi|kh|ph|th|tr|[bcdđghklmnprstvx])?(?:ng|nh|ch|[cmnpt])?",
+                          re.IGNORECASE)
 
 
 def text_broken(text: str) -> bool:
@@ -70,8 +74,15 @@ def text_broken(text: str) -> bool:
              if len(w) >= 2 and w.isalpha() and any(ch.islower() for ch in w) and w.lower() not in _UNITS]
     if len(words) < 25:
         return False
-    novowel = sum(1 for w in words if not any(ch in _VOWELS for ch in w))
-    return novowel / len(words) > 0.12
+    # Đếm theo từ khác nhau: chữ rơi dấu thật thì đa dạng, ký hiệu (bt, ln, Wx…) thì lặp lại cả trang.
+    distinct = {w.lower() for w in words}
+    novowel = {w.lower() for w in words if not any(ch in _VOWELS for ch in w) and _vi_fragment(w)}
+    return len(novowel) / len(distinct) > 0.12
+
+
+def _vi_fragment(w: str) -> bool:
+    """Từ không nguyên âm trông như âm tiết Việt bị rơi dấu: chữ thường hoặc Hoa đầu, dạng phụ âm đầu + cuối."""
+    return w[1:] == w[1:].lower() and _VI_FRAGMENT.fullmatch(w) is not None
 
 
 def file_sha256(path: str | Path) -> str:

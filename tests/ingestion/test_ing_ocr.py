@@ -36,6 +36,22 @@ def test_text_broken_flagged(text):
     assert dc.text_broken(text) is True
 
 
+# Bảng tính kỹ thuật có text layer tốt – ký hiệu không nguyên âm (hdd, Hhh, Wx, VRd, mg…) từng bị báo nhầm
+# "lỗi font" → OCR lại cả file (F2HH_TM MEP 205 tr, GBIA1.1 4001 353 tr bị từ chối – 26/11/2026).
+CALC_VI = ("Tính toán bơm sự cố cho bể tự hoại. H = Hhh + hb + hdd + hcb + htd + hdp, L = 4 m. Hhh = 4 m, hb = 2 m, "
+           "hdd = i x l = 0.06 m, hcb = 30% hdd, htd = 1.5 m, hdp = 3 m. Qb = 25 m3/h, Qngđ = 96 m3, ống đẩy bơm D110. "
+           "Chọn bơm có lưu lượng Qb và cột áp H theo bảng tính. Wbn, Wbth, Wbm, qtt, qdc, Nnh, Ncq, Stt, Vt. ")
+CALC_EN = ("Fc Compressive force. VEd Resultant of shear forces Vy, Vz in bolt. MEd Bending moment. VRd,c Design "
+           "resistance in case of concrete cone failure under shear load - EN1992-4 - Cl. 7.2.2.5. VRd,cp Design "
+           "resistance in case of concrete pryout failure. ULS41 1.1 SW +1.2 SDL +1.89 Wx+1, ULS42 Wx+2, ULS43 Wx-1, "
+           "ULS44 Wx-2, Ncr, Lcr, ds, Ltb, BxH, kNm, mg, mg, mg, bt, bt, ln, ln. ")
+
+
+@pytest.mark.parametrize("text", [CALC_VI * 2, CALC_EN * 2])
+def test_engineering_symbols_not_flagged(text):
+    assert dc.text_broken(text) is False
+
+
 def test_short_text_never_flagged():
     assert dc.text_broken("Đc lp") is False
 
