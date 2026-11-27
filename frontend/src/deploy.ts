@@ -16,6 +16,13 @@ const BASE = import.meta.env.BASE_URL || "/";
 const API_PREFIX = String(import.meta.env.VITE_API_PREFIX ?? "").replace(/^\/+|\/+$/g, "");
 const TOKEN_KEY = String(import.meta.env.VITE_AUTH_TOKEN_KEY ?? "");
 const USER_CLAIM = String(import.meta.env.VITE_AUTH_USER_CLAIM ?? "");
+// Làm mới token giống web Tri thức (FE/services/authService.ts): POST {refresh_token} → {access_token, refresh_token},
+// ghi lại cùng kho; khóa navigator.locks trùng tên để trang cha và iframe không làm mới chồng nhau (refresh token
+// xoay vòng). Trang cha chỉ làm mới khi chính nó gặp 401 → người dùng chỉ thao tác trong iframe sẽ bị hết phiên.
+const REFRESH_KEY = String(import.meta.env.VITE_AUTH_REFRESH_KEY ?? "");
+const REFRESH_URL = String(import.meta.env.VITE_AUTH_REFRESH_URL ?? "");
+const REFRESH_LOCK = String(import.meta.env.VITE_AUTH_REFRESH_LOCK ?? "");
+const REFRESH_BEFORE_S = 60; // token còn ít hơn 60 s → làm mới trước khi gửi
 // Các nhóm route của backend (giống proxy trong vite.config.ts)
 const API_ROOTS = ["/chat", "/conversations", "/mcp", "/knowledge", "/projects"];
 
@@ -31,20 +38,69 @@ export function apiUrl(path: string): string {
   return BASE.replace(/\/+$/, "") + (API_PREFIX ? `/${API_PREFIX}` : "") + path;
 }
 
+const ok = (v: string | null): v is string => !!v && v !== "undefined" && v !== "null";
+const unquote = (v: string) => (v.startsWith('"') ? (JSON.parse(v) as string) : v);
+
 /** Token của web Tri thức: sessionStorage (không "ghi nhớ") trước, rồi localStorage. */
 export function readToken(): string | null {
   if (!TOKEN_KEY) return null;
   // Như Tri thức (FE/services/authService.ts › khoPhien, coGiaTri): "Ghi nhớ" → localStorage, không → sessionStorage
   // của tab; bỏ giá trị rác "undefined"/"null".
-  const ok = (v: string | null): v is string => !!v && v !== "undefined" && v !== "null";
   try {
     const s = sessionStorage.getItem(TOKEN_KEY);
     const raw = ok(s) ? s : localStorage.getItem(TOKEN_KEY);
-    if (!ok(raw)) return null;
-    return raw.startsWith('"') ? (JSON.parse(raw) as string) : raw;
+    return ok(raw) ? unquote(raw) : null;
   } catch {
     return null;
   }
+}
+
+/** Kho đang giữ phiên – cùng cách chọn với Tri thức: sessionStorage nếu có token/refresh ở đó, không thì localStorage. */
+function sessionStore(): Storage {
+  return ok(sessionStorage.getItem(REFRESH_KEY)) || ok(sessionStorage.getItem(TOKEN_KEY)) ? sessionStorage : localStorage;
+}
+
+/** Số giây token còn hiệu lực (không có exp → Infinity). */
+function secondsLeft(token: string): number {
+  const exp = jwtPayload(token)?.exp;
+  return typeof exp === "number" ? exp - Date.now() / 1000 : Infinity;
+}
+
+let refreshing: Promise<string | null> | null = null;
+
+/** Làm mới token → token mới; null nếu không làm mới được (refresh token hết hạn / lỗi mạng / chưa cấu hình).
+ * `stale`: token vừa bị từ chối – trong lúc chờ khóa mà nơi khác (trang cha) đã làm mới thì dùng luôn token đó. */
+function refreshToken(stale: string | null, fetchRaw: typeof fetch): Promise<string | null> {
+  if (!REFRESH_KEY || !REFRESH_URL) return Promise.resolve(null);
+  if (refreshing) return refreshing;
+  const run = async (): Promise<string | null> => {
+    const cur = readToken();
+    if (cur && cur !== stale && secondsLeft(cur) > REFRESH_BEFORE_S) return cur;
+    const store = sessionStore();
+    const rt = store.getItem(REFRESH_KEY);
+    if (!ok(rt)) return null;
+    try {
+      const r = await fetchRaw(REFRESH_URL, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: unquote(rt) }),
+      });
+      if (!r.ok) return null;
+      const j = (await r.json()) as { access_token?: string; refresh_token?: string };
+      if (!j.access_token) return null;
+      store.setItem(TOKEN_KEY, j.access_token);
+      if (j.refresh_token) store.setItem(REFRESH_KEY, j.refresh_token);
+      return j.access_token;
+    } catch {
+      return null;
+    }
+  };
+  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  refreshing = (REFRESH_LOCK && locks?.request ? locks.request(REFRESH_LOCK, run) : run()).finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
 }
 
 function jwtPayload(token: string): Record<string, unknown> | null {
@@ -162,9 +218,19 @@ export function installDeployAdapter() {
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input !== "string" || !isApiPath(input)) return orig(input, init);
     const headers = new Headers(init?.headers);
-    const token = readToken();
+    let token = readToken();
+    if (token && authMode && secondsLeft(token) < REFRESH_BEFORE_S) token = (await refreshToken(token, orig)) ?? token;
     if (token) headers.set("Authorization", `Bearer ${token}`);
-    const r = await orig(apiUrl(input), { ...init, headers });
+    let r = await orig(apiUrl(input), { ...init, headers });
+    if (r.status === 401 && authMode) {
+      // Token bị từ chối (hết hạn giữa chừng) → làm mới rồi gửi lại 1 lần (body của app là chuỗi/FormData – gửi lại được)
+      const fresh = await refreshToken(token, orig);
+      if (fresh && fresh !== token) {
+        headers.set("Authorization", `Bearer ${fresh}`);
+        r = await orig(apiUrl(input), { ...init, headers });
+        token = fresh;
+      }
+    }
     if (r.status === 401 && authMode) {
       notifyExpired();
       // nginx server 1 trả trang HTML 401 → thay bằng câu ngắn để giao diện không in nguyên HTML

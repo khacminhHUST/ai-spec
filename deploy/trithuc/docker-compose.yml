@@ -79,6 +79,10 @@ services:
         VITE_API_PREFIX: api
         VITE_AUTH_TOKEN_KEY: ${AUTH_TOKEN_KEY:?đặt AUTH_TOKEN_KEY (STORAGE_KEY_TOKEN của web Tri thức) trong .env}
         VITE_AUTH_USER_CLAIM: ${AUTH_USER_CLAIM:-}
+        # Tự làm mới token như web Tri thức (để trống AUTH_REFRESH_URL= để tắt)
+        VITE_AUTH_REFRESH_KEY: ${AUTH_REFRESH_KEY:-hawee_refresh_token}
+        VITE_AUTH_REFRESH_URL: ${AUTH_REFRESH_URL-/api/auth/refresh}
+        VITE_AUTH_REFRESH_LOCK: ${AUTH_REFRESH_LOCK:-hawee-lam-moi-phien}
     image: mep-gateway:latest
     environment:
       PUBLIC_PREFIX: ${PUBLIC_PREFIX:-/thongtinduan}
