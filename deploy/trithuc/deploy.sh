@@ -21,7 +21,7 @@ if [ "$SRC" != "$MEP_DIR" ]; then
   rsync -a --delete \
     --exclude .git --exclude .github --exclude .env --exclude '**/.env' --exclude .venv \
     --exclude docker-compose.override.yml \
-    --exclude frontend/node_modules --exclude frontend/dist --exclude artifacts --exclude data \
+    --exclude frontend/node_modules --exclude frontend/dist --exclude artifacts --exclude data --exclude prod_data \
     --exclude '__pycache__' --exclude '*.pdf' --exclude '~$*' \
     "$SRC/" "$MEP_DIR/"
 fi

@@ -6,7 +6,7 @@ from app.services.agent.sandbox import ExecResult, SandboxManager
 from app.services.agent.sandbox.mock_backend import MockSandbox
 from app.services.agent.state import AgentContext
 from app.services.agent.tools.sandbox_tools import make_sandbox_tools
-from tests.agent.fakes import CTX, call
+from tests.agent.fakes import call
 
 pytestmark = pytest.mark.unit
 

@@ -128,8 +128,8 @@ class KbMcp:
         if payload["status"] != "ASK_CLARIFY":
             count = self.deps.count_tokens
             if count(json.dumps(payload, ensure_ascii=False)) > self.cfg.result_max_tokens:
-                payload = {**summarize_payload(payload),
-                           "note": "Kết quả dài: nội dung từng block đã bị cắt (truncated=true). "
+                payload = {**summarize_payload(payload, self.cfg.result_max_tokens, count),
+                           "note": "Kết quả dài: một số block đã bị cắt (truncated=true). "
                                    "Cần đủ số liệu thì tra lại hẹp hơn (1 mục / 1 bảng)."}
         return payload
 

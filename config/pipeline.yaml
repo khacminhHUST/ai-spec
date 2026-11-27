@@ -27,6 +27,8 @@ retrieval:
   keyword_boost: 2.0
   fusion: rrf
   branch_timeout_s: 5
+  discipline_mode: soft        # hard = lọc cứng theo phân hệ; soft = ưu tiên phân hệ nhưng không loại tài liệu khác
+                               # (2026-11-27: CT05 hỏi báo cháy → FIRE, tài liệu báo cháy gắn ELV bị loại)
 
 rerank:
   # 2026-11-19: Gemini chấm điểm (server triển khai không có GPU: 0.6B trên CPU 8 nhân ≈ 83s / 50 đoạn).
@@ -36,19 +38,32 @@ rerank:
   model: gemini-3.8-flash
   provider: gemini                # LLM chấm 0–10 / đoạn (app/providers/reranker.py › GeminiReranker)
   thinking_level: low             # minimal nhanh hơn (50 đoạn: 1.7s vs ~6s) nhưng câu vàng #12 trả lời bịa thay vì NOT_FOUND
-  batch_size: 40                  # số đoạn / 1 lần gọi; nhiều hơn → chia lô gọi song song
+  batch_size: 40                  # số đoạn / 1 lần gọi; nhiều hơn → chia lô gọi song song (bật max_candidates thì
+                                  # dùng 30 = 4 lô: đo 20 câu rerank p50 4.2s, p90 4.5s)
   max_chars: 2000                 # cắt mỗi đoạn (child ≤ 400 token)
+  hedge_after_s: 8                # lô chưa xong sau 8s (thường ~5s) → gửi thêm 1 bản, lấy bản xong trước
+  max_wait_s: 18                  # quá 18s → lô đó dùng missing_score (2026-11-27: 1 lô treo 30s làm câu hỏi mất 41s)
   gemini_min_score: 0.6           # ngưỡng riêng thang Gemini: ≥ 6/10 = chứa (một phần) câu trả lời; 3–5 chỉ cùng chủ đề
                                   # (đoạn LLM bỏ sót / lô lỗi → điểm = ngưỡng này: vẫn giữ)
   instruction: "Given a question from an MEP engineer, judge whether the passage from project documents helps answer it"
   min_score: 0.3                  # ngưỡng cho reranker P(yes) (local / deepinfra / mock)
   max_per_doc: 5
+  # 2026-11-27: chỉ chấm top-N ứng viên theo fusion_score (mặc định ~390 ứng viên ≈ 10 lô Gemini/lần tra). TẮT (0):
+  # N=120 + batch_size 30: rerank p50 4.8→3.9s, hết đuôi 13–17s, rẻ ~3x; câu vàng giữ 95.8% nhưng bộ khó 100% → 88.9%
+  # (2 lần chạy; câu rộng h04 mất mục tiêu chuẩn DW/144 điểm sát ngưỡng). Giới hạn mỗi doc (k=6) còn tệ hơn: giữ 72%
+  # đoạn đạt ngưỡng (đoạn đúng dồn vào ít tài liệu) → để 0.
+  max_candidates: 0
+  max_candidates_per_doc: 0       # > 0: mỗi tài liệu tối đa k (đa dạng tài liệu), thiếu chỗ lấp theo fusion_score
 
 context:
   token_budget: 24000
-  max_parent_tokens: 6000
+  max_parent_tokens: 3000     # parent dài hơn → tiêu đề + child trúng ± neighbor_children (6000 ≈ trần parent khi ingest
+                              # nên gần như không cắt; 2026-11-27 hạ 3000)
   neighbor_children: 1
   reference_hops: 1
+  dedup_threshold: 0.8        # bỏ khối có ≥ 80% nội dung (shingle 5 từ) nằm trong khối đã giữ của doc/mục khác
+                              # (VD phần chung spec PCCC 3.01 ↔ Cấp thoát nước 2.01); 0 = tắt
+  drop_heading_only_chars: 60 # khối chính còn < N chữ/số sau khi bỏ dòng tiêu đề, không kèm bảng/tham chiếu → bỏ; 0 = tắt
 
 grader:
   llm_check_below: 0.5        # chỉ gọi LLM grader khi top1_score < ngưỡng

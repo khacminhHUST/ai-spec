@@ -1,0 +1,338 @@
+# Bộ câu hỏi "khó" DREAM CT05 (dữ liệu production) – mô phỏng câu người dùng thật dễ làm agent tra lặp nhiều lần
+# (prod 2026-11: "Ống luồn dây được đi như nào ở dự án CT05" 64s / 5 lần tra; "Kiểm tra quy định lắp đặt điện khu vực
+# chung cư cao tầng CT05" 28–35s). Cùng schema với tests/fixtures/ct05_golden.yaml (đọc header file đó), thêm:
+# - type: broad (câu rộng/mơ hồ) | multi_part (nhiều ý trong 1 câu) | compare (đối chiếu 2 tài liệu / 2 hệ thống) |
+#   partial (tài liệu chỉ có MỘT PHẦN – phải trả lời phần có và nói rõ phần không có) | multi_turn (câu tiếp nối) |
+#   typo (viết tắt / không dấu / gõ nhanh).
+# - turns (tuỳ chọn): các câu hỏi TRƯỚC, agent trả lời lần lượt trong cùng conversation_id; chỉ chấm `question` (lượt
+#   cuối). Thời gian từng lượt ghi trong kết quả (turns[].total_s).
+# - max_ok_s (tuỳ chọn): thời gian chấp nhận được của câu (lượt cuối): lookup/partial/typo 20, rộng/nhiều ý/so sánh 30,
+#   nhiều lượt 25. run_eval tổng hợp % câu vượt.
+# - Câu broad: must_include là 3–5 ý chính chắc chắn phải có (câu trả lời đầy đủ thường dài hơn reference).
+# - Câu partial: must_include gồm số liệu phần CÓ + 1 mục "nói rõ phần thiếu" (nhiều cách diễn đạt).
+# Mọi đáp án kiểm chứng bằng SQL đọc content_md thật (schema prod, 2026-11-27); phần "không có" kiểm bằng ~* nhiều từ
+# khóa VN+EN trên cả 74 tài liệu (ghi ở comment từng câu).
+#
+# Cách chạy (KHÔNG chạy cả bộ khi chỉ thử script – mỗi câu 2–5 lượt gọi Gemini + judge):
+#   python -m tests.eval.run_eval --suite tests/fixtures/ct05_hard.yaml --ids h01,h15
+project: DREAM-CT05
+ns: prod
+questions:
+  # ---------------------------------------------------------------- broad – câu rộng/mơ hồ (5)
+  - id: h01
+    type: broad
+    # Câu prod thật (64s, 5 lần tra). Nội dung rải ở nhiều tài liệu: EL 4.7 (giá đỡ), FP 3.10 (ống thép, hộp nối),
+    # ELV 5.2 (ống báo cháy), FP 3.10 §3.7 (bịt lỗ xuyên).
+    question: "Ống luồn dây được đi như nào ở dự án CT05"
+    max_ok_s: 30
+    must_include:
+      - ["trần treo", "trần giả", "suspended ceiling", "false ceiling", "hệ trần", "trần"]
+      - ["mạ kẽm", "galvani", "RGS"]
+      - ["40%"]
+      - ["chống cháy", "chặn lửa", "chịu lửa", "fire stop", "firestop", "fire-stop", "fire stopping"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Các ý chính trong tài liệu CT05: (1) Ống luồn đi trên trần treo phải được đỡ bằng đai/móc treo gắn vào kết cấu tòa nhà, độc lập với hệ treo trần; hộp nối, hộp kéo dây gắn vào kết cấu, không dựa vào giá đỡ ống; đai ống bằng gang dẻo mạ kẽm nhúng nóng loại 1 lỗ (EL 4.7 §2.2/§3). (2) Ống kim loại là ống thép hàn mạ kẽm theo BS 4568, không nhỏ hơn Ø20mm; hộp nối gang dẻo dạng tròn cho ống ≤Ø25mm, hộp chữ nhật cho ống ≥Ø32mm; đấu nối thiết bị cố định bằng ống mềm kim loại, ở phòng bơm dùng ống mềm kín nước bọc PVC; lắp đặt theo CP5 (FP 3.10 §1.2, §2.5). (3) Ống báo cháy: mọi dây đi trong ống, lấp đầy ≤40% tiết diện; không đi chung với dây nguồn; ngầm/ngoài trời/phòng máy/hầm dùng ống thép mạ kẽm cứng RGS, khu khác EMT tối thiểu 19mm; dán nhãn cách 7m (ELV 5.2 §3.2). (4) Chỗ ống/cáp xuyên tường, sàn phải bịt bằng vật liệu chống cháy/chặn lửa được duyệt (FP 3.10 §3.7, EL 4.1 §3.1)."
+    sources:
+      - {doc: "EL – 4.7 Cable Support & Duct System", section: "2.2", page: 2}
+      - {doc: "Fire Protection – 3.10 Electrical installation", section: "1.2", page: 2}
+      - {doc: "Fire Protection – 3.10 Electrical installation", section: "2.5", page: 4}
+      - {doc: "ELV – 5.2 Fire Detection and Alarm", section: "3.2", page: 6}
+      - {doc: "Fire Protection – 3.10 Electrical installation", section: "3.7", page: 11}
+
+  - id: h02
+    type: broad
+    # Câu prod thật (28–35s). "Chung cư" chỉ có ở Thuyết minh (QCVN 04:2021/BXD, phần cấp điện căn hộ) – spec EL 4.x
+    # là yêu cầu chung không theo loại công trình. Kém chắc chắn: agent có thể trả lời theo spec EL 4.1.
+    question: "Kiểm tra quy định lắp đặt điện khu vực chung cư cao tầng CT05"
+    max_ok_s: 30
+    must_include:
+      - ["TCVN 9207", "TCVN9207", "TCVN 9206", "TCVN9206", "QCVN 12:2014", "QCVN 12", "QCVN 04:2021", "QCVN 04-2021"]
+      - ["busway", "thanh dẫn", "busbar"]
+      - ["120 phút", "120 minutes", "120 min", "120'"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Thuyết minh thiết kế CT05: (1) Tiêu chuẩn áp dụng gồm QCVN 01:2020/BCT an toàn điện, QCVN 12:2014 hệ thống điện nhà ở và nhà công cộng, TCVN 9206:2012 lắp đặt thiết bị điện, TCVN 9207:2012 lắp đặt đường dẫn điện trong nhà ở và công trình công cộng, TCVN 7447 (IEC 60364), QCVN 04:2021/BXD nhà chung cư, QCVN 06:2022/BXD an toàn cháy (§2.1.a). (2) Hạ thế 380/220V 3 pha 4 dây 50Hz; trục cấp điện chính bằng busway nhôm 3P+N+E đi đứng trong phòng điện tầng; đồng hồ kWh từng căn hộ đặt ở phòng điện tầng do ngành điện quản lý; tủ phân phối đặt trong phòng tủ điện tầng; tủ theo IEC 61439 (§2.4.1). (3) Dây/cáp cấp cho hệ thống PCCC phải chịu lửa không thấp hơn 120 phút, đi trong hộp/máng cáp; hệ kỹ thuật trong hầm ngăn bằng kết cấu ≥EI 45 (§2.4.1). (4) Chiếu sáng căn hộ LPD < 8W/m²; đèn khẩn cấp có pin độc lập 2 giờ (phòng bơm chữa cháy 3 giờ) (§2.4.3)."
+    sources:
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "2.1.a", page: 6}
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "2.4.1", page: 11}
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "2.4.3", page: 13}
+      - {doc: "CT5 Tender Design Report", section: "2.4.1", page: 11}
+
+  - id: h03
+    type: broad
+    question: "Yêu cầu chung về hệ thống tiếp địa ở CT05?"
+    max_ok_s: 30
+    must_include:
+      - ["1 ohm", "1 Ω", "1Ω", "01 Ohm", "1 ôm", "one (1) ohm", "một ohm"]
+      - ["16mm", "16 mm", "D16"]
+      - ["25mm x 3mm", "25 x 3", "25x3", "25mm x3mm", "25 mm x 3 mm"]
+      - ["TCVN 9358", "TCVN9358", "BS 7430", "BS7430"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "(1) Thiết kế, thi công theo TCVN 9358-2012 và BS 7430; hệ tiếp địa chung, các hệ riêng: trung thế, hạ thế, máy phát, data/viễn thông; điện trở mỗi lưới tiếp địa < 1 ohm; nhà thầu đo điện trở suất đất, tự xác định số cọc để đạt giá trị (EL 4.12 §1.1–1.2, §2.1). (2) Cọc tiếp địa thép bọc đồng Ø16mm (Thuyết minh: D16x2,4m), có hố kiểm tra bê tông đúc sẵn, sâu ≥300mm dưới mặt đất, biển tên đồng (EL 4.12 §2.2–2.3). (3) Băng tiếp địa thép 25mm x 3mm chôn ≥300mm dưới kết cấu sàn, các băng cách nhau ≥6m; khoan thì bơm hợp chất giảm điện trở 60% bentonite + 40% thạch cao (§2.1, §2.5). (4) Thanh cái tiếp địa chính đồng mạ thiếc 50x6mm dài ≥1000mm đặt cao 300mm trên sàn hoàn thiện, tối thiểu 2 kết nối trực tiếp (§2.6). (5) Dây bảo vệ màu xanh/vàng hoặc băng đồng ≥25x3mm; tiết diện theo bảng (S≤16: S; 16–35: 16; >35: S/2) (§3.1). Thuyết minh: chống sét < 10 Ohm, trung/hạ thế và điện nhẹ < 1 Ohm, nối bằng cáp đồng trần 70mm² hàn hóa nhiệt (§2.4.4)."
+    sources:
+      - {doc: "EL – 4.12 Earthing System", section: "1.1", page: 2}
+      - {doc: "EL – 4.12 Earthing System", section: "2.2", page: 5}
+      - {doc: "EL – 4.12 Earthing System", section: "2.5", page: 6}
+      - {doc: "EL – 4.12 Earthing System", section: "2.6", page: 6}
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "2.4.4", page: 15}
+
+  - id: h04
+    type: broad
+    question: "Cần lưu ý gì khi thi công lắp đặt ống gió ở CT05?"
+    max_ok_s: 30
+    must_include:
+      - ["DW/144", "DW144", "DW 144", "DW/l44"]
+      - ["DW/143", "DW143", "DW 143"]
+      - ["mạ kẽm", "galvani"]
+      - ["bịt kín", "làm kín", "bịt đầu", "che đầu", "seal", "nắp che", "tấm che"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "(1) Ống gió và phụ kiện theo HVCA DW/144 (chế tạo), DW/143 (thử kín), SMACNA, NFPA 90A; vật liệu chống cháy theo TCVN 2622 và BS 476 Part 7 (ACMV 1.05 §1.5). (2) Vật liệu: tôn mạ kẽm nhúng nóng BS EN10327 lớp Z18; ống hút khói bếp thương mại bằng inox SUS 304 dày tối thiểu 1,27mm, mối hàn; độ dày tôn theo DW/144 theo cấp áp (§2.1, §2.4). (3) Giá treo, bu lông mạ kẽm nhúng nóng; ngoài trời dùng inox (§2.13). (4) Ống gió lắp cứng, không rung lắc, đúng kích thước; mặt trong không gồ ghề, cạnh sắc; bố trí mặt bích bắt bu lông để tháo lắp; bịt kín đầu ống hở ngay sau khi lắp, trước khi làm hoàn thiện (§3.2, bảng §3.2). (5) Thử kín ống trung/cao áp theo DW/143 trong quá trình lắp, rò vượt Bảng 31 thì tháo làm lại; ống thấp áp không bắt buộc thử trừ khi yêu cầu; ống gió chính VAV và trục gió tươi/thải phải thử (§3.5). (6) Vệ sinh bên trong, che đậy khi thi công, chạy quạt thổi bụi trước khi nối thiết bị đầu cuối (§3.8)."
+    sources:
+      - {doc: "ACMV – 1.05 Ductwork and Fittings", section: "1.5", page: 5}
+      - {doc: "ACMV – 1.05 Ductwork and Fittings", section: "2.1", page: 5}
+      - {doc: "ACMV – 1.05 Ductwork and Fittings", section: "table_3_2_1", page: 19}
+      - {doc: "ACMV – 1.05 Ductwork and Fittings", section: "3.5", page: 20}
+      - {doc: "ACMV – 1.05 Ductwork and Fittings", section: "3.8", page: 21}
+
+  - id: h05
+    type: broad
+    question: "Cần lưu ý gì khi thi công cáp ngầm chôn đất ở CT05?"
+    max_ok_s: 30
+    must_include:
+      - ["0.9", "0,9", "900", "750"]
+      - ["75mm", "75 mm"]
+      - ["1500 kg", "1500kg", "1.500 kg", "1,500 kg", "1.500kg"]
+      - ["MCT", "multi-cable transit", "kín nước", "watertight", "chống thấm"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "(1) Độ sâu: đặt trực tiếp trong đất sâu 0,9–1,3m dưới cao độ mặt đường tại mép bó vỉa (EL 4.8 §4.3); một chỗ khác trong cùng spec ghi tối thiểu 750mm dưới cốt hoàn thiện (§1.3) – nên nêu chỗ lệch; qua đường dùng ống uPVC Ø150mm bọc bê tông sâu 900mm. (2) Dùng cáp bọc giáp cho cáp chôn đất/trong ống/rãnh hở (§1.1). (3) Đáy rãnh phẳng, rải lớp cát/đất sàng dày 75mm; kéo cáp trên con lăn cách nhau 4m; tuân thủ bán kính uốn tối thiểu, không xoắn số 8; kéo máy phải có ly hợp trượt giới hạn lực kéo tối đa 1500 kg (§4.13). (4) Lấp đất lần 1 cao 150mm trên cáp, đặt tấm PVC báo hiệu, lấp lần 2 khoảng 330mm, đầm từng lớp 300mm. (5) Cáp vào phòng điện/viễn thông bịt kín nước bằng bộ MCT ngay sau khi kéo; dở dang thì bịt tạm (§4.11). (6) Đánh dấu vị trí ống qua đường (§4.12); thử cách điện trước và sau khi kéo cáp (đồng hồ đến 2,5kV)."
+    sources:
+      - {doc: "EL – 4.8 Power Cable and Conductor", section: "4.3", page: 13}
+      - {doc: "EL – 4.8 Power Cable and Conductor", section: "4.13", page: 15}
+      - {doc: "EL – 4.8 Power Cable and Conductor", section: "4.11", page: 15}
+      - {doc: "EL – 4.8 Power Cable and Conductor", section: "1.3", page: 5}
+
+  # ---------------------------------------------------------------- multi_part – nhiều ý trong 1 câu (4)
+  - id: h06
+    type: multi_part
+    question: "Màu dây pha, dây trung tính, dây tiếp địa và bán kính uốn cong tối thiểu của cáp đồng bọc giáp ở CT05?"
+    max_ok_s: 30
+    must_include:
+      - ["đỏ", "red"]
+      - ["đen", "black"]
+      - ["xanh lá", "green", "xanh/vàng", "xanh-vàng", "vàng xanh"]
+      - ["6D", "6 D", "6 lần đường kính", "6 x D", "6xD"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Màu cách điện cáp PVC: dây pha đỏ, vàng, xanh dương; trung tính đen; tiếp địa xanh lá-vàng; điều khiển trắng (EL 4.8 §2.1.1). Bán kính uốn tối thiểu (bảng EL 4.8): cáp đồng tròn bọc giáp (BS 5467/6724/6346) 6D cả khi lắp đặt và gần đầu cáp; không bọc giáp 4D (D 10–25mm) / 6D (D > 25mm); nhôm đặc hoặc đồng định hình 8D; IEC 502 lõi đơn bọc giáp 15D/12D, 3 lõi bọc giáp 12D/10D."
+    sources:
+      - {doc: "EL – 4.8 Power Cable and Conductor", section: "1.3", page: 5}
+      - {doc: "EL – 4.8 Power Cable and Conductor", section: "table_1_3_1", page: 12}
+
+  - id: h07
+    type: multi_part
+    question: "Máy phát điện CT05: thời gian khởi động cấp tải tối đa, bồn dầu ngày và bồn dầu dự trữ đủ chạy bao lâu, độ ồn tối đa cho phép?"
+    max_ok_s: 30
+    must_include:
+      - ["30 giây", "30 s", "30s", "30 seconds", "30 sec"]
+      - ["3 giờ", "3 hours", "3h", "3 tiếng"]
+      - ["10 giờ", "10 hours", "10h", "10 tiếng", "10000", "10.000", "10,000"]
+      - ["70 dB", "70dB", "70db"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Thuyết minh §2.4.2: máy phát khởi động tự động, cấp điện cho phụ tải trong tối đa 30 giây (cài đặt được); máy phát cho khối công cộng/thương mại và tủ lạnh căn hộ cấp tải trong 15 giây; bồn dầu ngày đủ chạy liên tục 3 giờ; bồn dầu dự trữ đủ chạy liên tục 10 giờ; đặt trong phòng cách âm tầng hầm, độ ồn tối đa 70 dB tại 1m bên ngoài phòng máy. Spec EL 4.15 (bảng bồn dầu máy phát): bồn dầu ngầm 10000L, phòng máy có bồn dầu đủ chạy đầy tải tối thiểu 3 giờ."
+    sources:
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "2.4.2", page: 13}
+      - {doc: "EL – 4.15 Generator", section: "table_2_7_1", page: 10}
+      - {doc: "CT5 Tender Design Report", section: "2.4.2", page: 13}
+
+  - id: h08
+    type: multi_part
+    question: "Thang máy CT05 yêu cầu vận tốc tối thiểu, thời gian chờ tối đa, độ ồn trong cabin và nguồn điện cấp thế nào?"
+    max_ok_s: 30
+    must_include:
+      - ["2m/s", "2 m/s", "2 m/giây", "2m/giây", "2 mét/giây", "2 m/sec"]
+      - ["60 giây", "60s", "60 s", "60 seconds", "60 sec"]
+      - ["50dB", "50 dB"]
+      - ["380V", "380 V"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Vận tốc thang tối thiểu 2 m/s hoặc theo tính toán; khả năng vận chuyển 5 phút ≥7%; thời gian chờ không quá 60 giây ± 2 giây (Thuyết minh §6.3). Độ ồn trong buồng thang 50 dB(A); nguồn chính 3 pha 5 dây 380V 50Hz, chiếu sáng 1 pha 3 dây 220V 50Hz; thời gian mở cửa TB 1,6 giây; giữ được 125% tải định mức (Thuyết minh §6.2, Lift 6.1 §1.2)."
+    sources:
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "6.3", page: 55}
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "6.2", page: 55}
+      - {doc: "Lift – 6.1 Lift General Requirement", section: "1.2", page: 3}
+
+  - id: h09
+    type: multi_part
+    question: "Bình nước nóng căn hộ CT05: công suất điện trở, bảo vệ chống giật bao nhiêu mA, cấp IP và thời gian bảo hành?"
+    max_ok_s: 30
+    must_include:
+      - ["2.5kW", "2,5kW", "2.5 kW", "2,5 kW"]
+      - ["30mA", "30 mA"]
+      - ["IP24", "IP 24"]
+      - ["5 năm", "5 years", "05 năm", "năm năm"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Bình nước nóng tích hợp trọn bộ (xuất xứ Thái Lan): điện trở đồng 2,5kW; ELCB bảo vệ dòng rò 30mA; cấp bảo vệ IP24; lòng bình thép tráng men, cách nhiệt PU 40kg/m³; bảo hành ≥ 5 năm cho lòng bình (không cần thay thanh Mg định kỳ), 2 năm cho linh kiện khác; tiêu chuẩn IEC 60335-1, IEC 60335-2-21 (PL 2.08 §2.1)."
+    sources:
+      - {doc: "Plumbing And Sanitary – 2.08 Water Heater", section: "2.1", page: 2}
+      - {doc: "Plumbing And Sanitary – 02. Plumbing And Sanitary Spec", section: "2.15", page: 66}
+
+  # ---------------------------------------------------------------- compare – đối chiếu (2)
+  - id: h10
+    type: compare
+    # Spec FP 3.08 ghi K = 80 (đơn vị mét, ≈ K5.6 đơn vị Anh); Thuyết minh §5.3.3 ghi K=8 cho nhà xe/thương mại và
+    # K=5.6 cho căn hộ/văn phòng – K8 (≈K115) không khớp K80 của spec.
+    question: "Hệ số K đầu phun sprinkler CT05 ghi trong spec và trong thuyết minh thiết kế có khớp nhau không?"
+    max_ok_s: 30
+    must_include:
+      - ["K = 80", "K=80", "K 80", "K-80", "K80", "K-factor 80", "K factor 80", "hệ số K 80", "hệ số K là 80", "hệ số K = 80", "hệ số K bằng 80"]
+      - ["5.6", "5,6"]
+      - ["K=8", "K = 8", "K8", "K-8", "K 8", "hệ số K 8", "K bằng 8", "K là 8"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Không hoàn toàn khớp. Spec Sprinkler (FP 3.08 §2.1): đầu phun lỗ 15mm, K = 80 (+5%) (đơn vị l/phút/bar^0.5), nhiệt độ danh định 68°C cho shophouse, bãi xe, căn hộ, 141°C cho kho (bảng §2.1). Thuyết minh (§5.3.3): đầu phun 68°C, K=8 cho nhà xe và thương mại, K=5.6 cho căn hộ, văn phòng, tiện ích; khoảng cách đầu phun ≤ 4m. K80 (mét) tương đương K5.6 (đơn vị Anh) nên khớp với khu căn hộ, nhưng nhà xe/thương mại Thuyết minh dùng K8 (≈ K115) – lớn hơn spec; cần xác nhận với tư vấn."
+    sources:
+      - {doc: "Fire Protection – 3.08 Sprinkler system", section: "2.1", page: 3}
+      - {doc: "Fire Protection – 3.08 Sprinkler system", section: "table_2_1_1", page: 4}
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "5.3.3", page: 49}
+
+  - id: h11
+    type: compare
+    question: "So sánh yêu cầu thử áp lực của hệ thống sprinkler và hệ thống cấp nước sinh hoạt ở CT05"
+    max_ok_s: 30
+    must_include:
+      - ["15 bar", "15bar"]
+      - ["6 giờ", "6 tiếng", "sáu giờ", "six hours", "6 hours", "6h"]
+      - ["125m", "125 m", "125 mét"]
+      - ["24 giờ", "24 tiếng", "24h", "24 hours"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Sprinkler: thử thủy lực từng phần trước vận hành, cách ly công tắc áp lực, nâng áp bằng bơm tay tới áp thử và giữ gần như không đổi trong 6 giờ (FP 3.14 §2.3); áp thử tối thiểu hệ sprinkler 15 bar (làm việc 10 bar, ống/phụ kiện 16 bar) (FP 3.08 bảng §1.2). Cấp nước sinh hoạt: thử thủy lực tối thiểu 24 giờ ở áp không thấp hơn 125m cột nước hoặc 1,5 lần áp làm việc cực đại (lấy giá trị lớn hơn), áp cuối không giảm quá 5%, có Quản lý kỹ thuật giám sát, ống âm tường/sàn thử trước khi trát (PL 2.12 §3.3). Khác nhau: sprinkler áp cao hơn (15 bar ≈ 150m cột nước) nhưng thời gian giữ ngắn hơn (6 giờ so với 24 giờ)."
+    sources:
+      - {doc: "Fire Protection – 3.14 Testing and commissioning", section: "2.3", page: 3}
+      - {doc: "Fire Protection – 3.08 Sprinkler system", section: "table_1_2_2", page: 3}
+      - {doc: "Plumbing And Sanitary – 2.12 Testing and commissioning", section: "3.3", page: 4}
+
+  # ---------------------------------------------------------------- partial – tài liệu chỉ có một phần (3)
+  # Phần "không có" đã kiểm bằng SQL content_md ~* (mọi lang, 74 tài liệu), không có kết quả:
+  #   h12: busway/busduct/busbar trunking/thanh dẫn/thanh cái kèm Schneider|Siemens|ABB|LS Cable|Legrand|Eaton|
+  #        Mitsubishi|Starkstrom|Powell|Hitachi|Furukawa|Megabar|vendor list|danh sách nhà cung cấp|approved brand|
+  #        thương hiệu|xuất xứ|G7 (chỉ có "xuất xứ" của bình chữa cháy) – spec chỉ yêu cầu cùng 1 nhà sản xuất, chứng
+  #        nhận ASTA/KEMA/UL.
+  #   h13: fuel consumption|tiêu hao nhiên liệu kèm g/kWh|l/h|lít/giờ|litres per hour – spec chỉ yêu cầu GHI NHẬN mức
+  #        tiêu hao từng bước chạy thử, không có giới hạn.
+  #   h14: (thang máy|lift car|elevator|fire lift) trong 200 ký tự quanh \d{3,4} kg – không có tải trọng định mức (kg).
+  - id: h12
+    type: partial
+    question: "Busway CT05 yêu cầu cấp bảo vệ IP bao nhiêu và chỉ định hãng sản xuất nào?"
+    max_ok_s: 20
+    must_include:
+      - ["IP54", "IP 54"]
+      - ["IP66", "IP 66"]
+      - ["không có", "không tìm thấy", "chưa có", "không đề cập", "không nêu", "không được đề cập", "không quy định", "không chỉ định", "không ghi", "không được nêu", "chưa được nêu", "không thấy"]
+    must_not_include: ["Schneider", "Siemens"]
+    expected_status: PARTIAL
+    reference_answer: "Có: busway cấp bảo vệ IP54 trong nhà, IP66 ngoài trời theo IEC 60529; 1000V, 3 pha 4 dây (100%N + 50%E), theo IEC 61439-6:2012 hoặc UL857; mọi phụ kiện cùng 1 nhà sản xuất với thanh dẫn; chứng nhận bởi tổ chức độc lập (ASTA, KEMA, UL) (EL 4.13 §3.1). Không có: tài liệu CT05 không chỉ định hãng sản xuất/thương hiệu busway cụ thể."
+    sources:
+      - {doc: "EL – 4.13 Busway", section: "3.1", page: 2}
+
+  - id: h13
+    type: partial
+    question: "Chạy thử nghiệm thu máy phát CT05 phải chạy 100% tải trong bao lâu, và suất tiêu hao nhiên liệu tối đa cho phép là bao nhiêu lít/giờ?"
+    max_ok_s: 20
+    must_include:
+      - ["2 giờ", "2 hours", "2 tiếng", "2h", "hai giờ"]
+      - ["không có", "không tìm thấy", "chưa có", "không đề cập", "không nêu", "không được đề cập", "không quy định", "không ghi", "không được nêu", "chưa được nêu", "không thấy", "chỉ yêu cầu ghi", "chỉ yêu cầu ghi nhận"]
+    must_not_include: []
+    expected_status: PARTIAL
+    reference_answer: "Có: chạy thử liên tục 5 phút không tải, 1 giờ 50%, 1 giờ 75%, 2 giờ 100% công suất danh định; nhà thầu cấp nhiên liệu và tải giả điện trở; ghi nhận mức tiêu hao nhiên liệu của từng bước; mỗi 30 phút ghi kW/kVA, điện áp, dòng, tần số… (EL 4.15 §4.2). Không có: tài liệu không quy định suất tiêu hao nhiên liệu tối đa (lít/giờ hay g/kWh) – chỉ yêu cầu ghi nhận."
+    sources:
+      - {doc: "EL – 4.15 Generator", section: "4.2", page: 16}
+      - {doc: "DRC607(CT5)- DD - Spec", section: "7.6.p5", page: 619}
+
+  - id: h14
+    type: partial
+    question: "Thang máy chữa cháy CT05: giếng thang chịu lửa bao nhiêu phút và tải trọng định mức bao nhiêu kg?"
+    max_ok_s: 20
+    must_include:
+      - ["180 phút", "180 minutes", "180 min", "180'"]
+      - ["150 phút", "150 minutes", "150 min", "150'"]
+      - ["không có", "không tìm thấy", "chưa có", "không đề cập", "không nêu", "không được đề cập", "không quy định", "không ghi", "không được nêu", "chưa được nêu", "không thấy"]
+    must_not_include: ["1000kg", "1000 kg", "1600kg", "1600 kg", "1350kg", "1350 kg", "1150kg", "1150 kg"]
+    expected_status: PARTIAL
+    reference_answer: "Có (lệch giữa 2 tài liệu): Spec thang máy Lift 6.1 §3.2 yêu cầu giếng thang chống cháy tối thiểu 180 phút; Thuyết minh §6.4 (và CT5 Tender Design Report) ghi tối thiểu 150 phút – nên lấy giá trị chặt hơn và xác nhận với tư vấn. Không có: tài liệu không nêu tải trọng định mức (kg) của thang chữa cháy (chỉ yêu cầu giữ được 125% tải định mức)."
+    sources:
+      - {doc: "Lift – 6.1 Lift General Requirement", section: "3.2", page: 6}
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "6.4", page: 55}
+
+  # ---------------------------------------------------------------- multi_turn – câu tiếp nối (2)
+  - id: h15
+    type: multi_turn
+    turns:
+      - "Thử áp đường ống cấp nước sinh hoạt CT05 yêu cầu thế nào?"
+    question: "thế còn ống thoát nước thì sao?"
+    max_ok_s: 25
+    must_include:
+      - ["37.5", "37,5"]
+      - ["3 phút", "ba phút", "3 minutes", "three minutes"]
+      - ["BS 5572", "BS5572"]
+      - ["2 giờ", "2 tiếng", "2 hours", "2h"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Thử hệ thoát nước (PL 2.12 §3.4): chia từng đoạn theo phương ngang, mỗi đoạn 3 tầng; thử kín nước/kín khí bằng không khí, khói hoặc nước theo BS 5572; thử khí giữ 37,5mm cột nước không ít hơn 3 phút không sụt; không đạt thì dùng khói và bọt xà phòng dò mối nối rồi thử lại; ống PP trên sàn: mỗi mối nối thử 3m cột nước ≥ 2 giờ, mối nối chuyển trục đứng (>10m) sang ngang thử 10m cột nước ≥ 2 giờ, giãn nở ≤ 1cm; thử xả bằng bóng nhỏ và kiểm tra bệt xả trôi giấy, mẩu thuốc, que diêm."
+    sources:
+      - {doc: "Plumbing And Sanitary – 2.12 Testing and commissioning", section: "3.4", page: 5}
+
+  - id: h16
+    type: multi_turn
+    turns:
+      - "Ắc quy của hệ thống báo cháy CT05 phải duy trì hoạt động được bao lâu khi mất điện?"
+      - "Còn thang máy thì sao?"
+    question: "thế còn đèn chiếu sáng sự cố?"
+    max_ok_s: 25
+    must_include:
+      - ["2 giờ", "2 hours", "2 tiếng", "2h", "hai giờ", "two (2) hours", "hai (2) giờ"]
+      - ["3 giờ", "3 hours", "3 tiếng", "3h", "ba giờ"]
+      - ["50%"]
+      - ["20 giờ", "20 hours", "20 tiếng", "20h", "twenty (20) hours"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Đèn chiếu sáng khẩn cấp có bộ pin riêng Ni-Cd tích hợp, duy trì đèn tối đa (up to) 2 giờ sau khi mất điện, quang thông không dưới 50% so với khi có điện lưới suốt 2 giờ; bộ sạc tự động sạc đầy trong không quá 20 giờ; theo BS 5266, IEC 598-2, TCVN 13456:2022 (EL 4.11 §1). Thuyết minh §2.4.3: đèn khẩn cấp lối thoát hiểm có pin độc lập cho 2 giờ hoạt động, riêng phòng bơm chữa cháy 3 giờ."
+    sources:
+      - {doc: "EL – 4.11 Emergency Evacuation Lighting", section: "sec_0", page: 1}
+      - {doc: "THUYẾT MINH HỒ SƠ THIẾT KẾ THI CÔNG HẠNG MỤC: CƠ ĐIỆN", section: "2.4.3", page: 13}
+
+  # ---------------------------------------------------------------- typo – viết tắt / không dấu (2)
+  - id: h17
+    type: typo
+    question: "ong luon day bao chay ct05 lap ntn, dung loai ong gi"
+    max_ok_s: 20
+    must_include:
+      - ["40%"]
+      - ["RGS", "thép mạ kẽm", "mạ kẽm"]
+      - ["EMT"]
+      - ["19mm", "19 mm"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Mọi dây báo cháy đi trong ống, lấp đầy ≤40% tiết diện trong (khi ≥3 sợi); không đi chung ống/hộp/máng với dây nguồn; ống ngầm, ngoài trời, phòng máy, tầng hầm dùng ống thép mạ kẽm cứng (RGS), khu vực khác dùng EMT tối thiểu 19mm; nối thiết bị có thể dùng ống mềm 20mm; dán nhãn 'Báo cháy' cách tối thiểu 7m và tại chỗ xuyên tường; hộp nối, co sơn đỏ; giá đỡ thép mạ kẽm (ELV 5.2 §3.2)."
+    sources:
+      - {doc: "ELV – 5.2 Fire Detection and Alarm", section: "3.2", page: 6}
+      - {doc: "DRC607(CT5)- DD - Spec", section: "7.6.p7", page: 648}
+
+  - id: h18
+    type: typo
+    question: "kc toi thieu cap dong luc vs cap data ct05 bn mm"
+    max_ok_s: 20
+    must_include:
+      - ["300mm", "300 mm"]
+      - ["600mm", "600 mm"]
+    must_not_include: []
+    expected_status: OK
+    reference_answer: "Tại điểm giao cắt không nhỏ hơn 300mm; chạy song song không nhỏ hơn 600mm, trừ khi có che chắn được chấp thuận; cách tối thiểu 1m với nguồn điện từ như đèn huỳnh quang (ELV 5.3 §5.1)."
+    sources:
+      - {doc: "ELV – 5.3 Telephone and Data", section: "5.1", page: 6}

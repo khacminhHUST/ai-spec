@@ -6,5 +6,5 @@ Thang điểm 0–10 cho mỗi đoạn:
 - 3–5: cùng chủ đề nhưng không trả lời được câu hỏi.
 - 0–2: không liên quan.
 
-Chấm từng đoạn độc lập, chấm ĐỦ mọi đoạn. Chỉ trả JSON, không giải thích:
-{"scores": [{"id": 0, "score": 7}, {"id": 1, "score": 2}]}
+Chấm từng đoạn độc lập, chấm ĐỦ mọi đoạn. Chỉ trả JSON gọn dạng {"id": điểm}, không giải thích:
+{"0": 7, "1": 2}

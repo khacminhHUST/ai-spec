@@ -7,11 +7,12 @@ Mỗi khối context được đánh số toàn cục trong lượt agent (state
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Callable
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import ToolMessage
@@ -24,6 +25,7 @@ from app.services.agent.loop.context import fit_or_offload
 from app.services.agent.sandbox import SandboxManager
 from app.services.agent.state import AgentContext, runtime_context
 from app.services.agent.tools.base import clip, fail, ok
+from app.services.query.context import drop_heading_only
 from app.services.query.deps import Deps
 from app.services.query.graph import build_graph
 
@@ -31,7 +33,7 @@ log = logging.getLogger(__name__)
 
 DESC = """Tra cứu tài liệu dự án (thuyết minh, spec, chỉ dẫn kỹ thuật, tiêu chuẩn vận hành/Westin, TCVN/QCVN, hợp đồng) của các dự án người dùng có quyền.
 Dùng khi: cần số liệu/yêu cầu kỹ thuật để trả lời hoặc để đưa vào file. MỌI số liệu đưa vào câu trả lời/file phải lấy từ kết quả tool này (hoặc file người dùng gửi).
-- question: câu hỏi tra cứu đầy đủ, cụ thể, 1 chủ đề/lần (VD "Bảng 4.3 lưu lượng gió tươi theo khu vực trong Thuyết minh S5"). Cần nhiều chủ đề/nhiều nguồn → gọi nhiều lần.
+- question: câu hỏi tra cứu đầy đủ, cụ thể, 1 chủ đề/lần (VD "Bảng 4.3 lưu lượng gió tươi theo khu vực trong Thuyết minh S5"). Cần nhiều chủ đề/nhiều nguồn → gọi nhiều lần CÙNG LÚC trong 1 bước (chạy song song); số bước tra mỗi câu hỏi có giới hạn.
 - project_mentions: tên/mã dự án hoặc công trình người dùng nhắc (VD ["S5"]); không nhắc → bỏ trống (dùng dự án đang chọn).
 - disciplines: lọc phân hệ trong HVAC, ELECTRICAL, ELV, PLUMBING, FIRE, LIFT, BMS, GENERAL (không chắc → bỏ trống).
 - streams: lọc loại nguồn LEGAL_STANDARD (TCVN/QCVN), OPERATOR_STANDARD (Westin/Marriott), DESIGN_CONSULTANT (thuyết minh/spec/chỉ dẫn), CONTRACT (hợp đồng). Chỉ điền khi cần đúng 1 loại nguồn (VD so sánh Thuyết minh với Westin → gọi 2 lần, mỗi lần 1 stream).
@@ -42,7 +44,23 @@ Trả về JSON: status (OK | PARTIAL | NOT_FOUND | ASK_CLARIFY), projects (name
 
 SUMMARY_BLOCK_CHARS = 400
 SUMMARY_TABLE_CHARS = 1500     # bảng ngắn giữ nguyên trong bản tóm tắt
+SUMMARY_RESERVE_TOKENS = 600   # chừa cho note/full_result_file khi xếp khối đầy đủ vào bản tóm tắt
+EMPTY_TABLE_CHARS = 30         # bảng kèm < N chữ/số và không có chữ số → coi là rỗng (VD "| Type | L |")
 _SECTION_RE = re.compile(r"^(?P<scope>.*__)?sec_(?P<num>\d+_\d+)$")
+_ALNUM_RE = re.compile(r"\w", re.UNICODE)
+
+
+def near_empty_table(text: str | None) -> bool:
+    """Bảng gần như rỗng: tối đa 1 hàng, ngắn, không số liệu – VD "| Type | L |" (thường do cắt cột song ngữ khi
+    ingest). Bảng ≥ 2 hàng có chữ (VD bảng màu pha) luôn giữ."""
+    if not text:
+        return True
+    rows = [ln for ln in text.splitlines()
+            if ln.strip().startswith("|") and re.sub(r"[|:\-\s]", "", ln) and not re.fullmatch(r"[|:\-\s]+", ln)]
+    body = re.sub(r"[|:\-\s]", "", text)
+    if not body:
+        return True
+    return len(rows) <= 1 and not any(c.isdigit() for c in body) and len(_ALNUM_RE.findall(body)) < EMPTY_TABLE_CHARS
 
 
 def apply_hints(router: dict[str, Any], project_mentions: list[str] | None, disciplines: list[str] | None,
@@ -88,6 +106,7 @@ def expand_sibling_tables(deps: Deps, context: list[dict[str, Any]], max_tables:
                 "page_start": r.get("page_start"), "page_end": r.get("page_end"), "is_reference": True,
                 "referenced_by": parent["section_key"]})
             t[r["lang"]] = r["content_md"]
+    tables = {k: t for k, t in tables.items() if not all(near_empty_table(t.get(lang)) for lang in ("vi", "en"))}
     out: list[dict[str, Any]] = []
     for b in context:
         out.append(b)
@@ -135,10 +154,31 @@ def _summary_block(b: dict[str, Any]) -> dict[str, Any]:
     return short
 
 
-def summarize_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Bản ngắn: cắt nội dung từng khối (bảng ngắn giữ nguyên), đánh dấu truncated."""
+def summarize_payload(payload: dict[str, Any], max_tokens: int | None = None,
+                      count_tokens: Callable[[str], int] | None = None) -> dict[str, Any]:
+    """Bản ngắn, đánh dấu truncated ở khối bị cắt.
+
+    Có max_tokens: duyệt theo thứ tự (đã theo điểm rerank), khối nào còn vừa ngân sách thì giữ NGUYÊN, không vừa mới cắt –
+    để agent trả lời được ngay mà không phải đọc file (mỗi lần đọc là 1 vòng LLM gửi lại toàn bộ ngữ cảnh).
+    Không có max_tokens: cắt đều mọi khối (bảng ngắn giữ nguyên).
+    """
     short = {k: v for k, v in payload.items() if k not in ("blocks", "citations")}
-    short["blocks"] = [_summary_block(b) for b in payload.get("blocks", [])]
+    blocks = payload.get("blocks", [])
+    if not max_tokens or count_tokens is None:
+        short["blocks"] = [_summary_block(b) for b in blocks]
+        return short
+    dump = lambda o: json.dumps(o, ensure_ascii=False, default=str)  # noqa: E731
+    cut = [_summary_block(b) for b in blocks]
+    left = max_tokens - SUMMARY_RESERVE_TOKENS - count_tokens(dump(short)) - sum(count_tokens(dump(c)) for c in cut)
+    out = []
+    for b, c in zip(blocks, cut):
+        if c.get("truncated"):
+            extra = count_tokens(dump(b)) - count_tokens(dump(c))
+            if extra <= left:
+                left -= extra
+                c = b
+        out.append(c)
+    short["blocks"] = out
     return short
 
 
@@ -196,6 +236,8 @@ def search_payload(search: SearchDocs, ctx: AgentContext, active: list[str], que
         context = expand_sibling_tables(search.deps, context, sibling_tables_max)
     except Exception as e:  # noqa: BLE001 – phần bổ sung: lỗi thì vẫn trả kết quả chính
         log.warning("nạp bảng của mục lỗi: %s", e)
+    # khối chính chỉ còn tiêu đề (không bảng/tham chiếu kèm) → bỏ; xét SAU khi nạp bảng của mục
+    context = drop_heading_only(context, int(search.deps.cfg("context").get("drop_heading_only_chars", 0)))
     first = ctx.allocate_sources(len(context), existing)
     blocks = [_block(b, first + i, profiles) for i, b in enumerate(context)]
     cites = [_citation(b, first + i) for i, b in enumerate(context)]
@@ -226,8 +268,9 @@ def search_impl(search: SearchDocs, manager: SandboxManager, agent_cfg: dict[str
     if payload["status"] == "ASK_CLARIFY":
         return ok(**payload), [], active
     try:
-        payload, _ = fit_or_offload(manager, ctx.conversation_id, "search", payload, summarize_payload,
-                                    int(agent_cfg["tool_result_max_tokens"]), search.deps.count_tokens)
+        max_tok, count = int(agent_cfg["tool_result_max_tokens"]), search.deps.count_tokens
+        payload, _ = fit_or_offload(manager, ctx.conversation_id, "search", payload,
+                                    lambda p: summarize_payload(p, max_tok, count), max_tok, count)
     except Exception as e:  # noqa: BLE001 – sandbox lỗi: vẫn trả bản tóm tắt
         log.warning("offload kết quả search lỗi: %s", e)
         payload = {**summarize_payload(payload), "note": "Kết quả bị cắt (không ghi được file sandbox)."}

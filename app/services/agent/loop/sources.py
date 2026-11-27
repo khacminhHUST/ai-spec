@@ -60,7 +60,9 @@ class SourcesMiddleware(AgentMiddleware):
     def wrap_model_call(self, request, handler):
         ctx = runtime_context(request.runtime)
         have = {t.name for t in request.tools if isinstance(t, BaseTool)}
-        extra = [t for n, t in self._open_tools(request.state, request.runtime).items() if n not in have]
+        forced = bool((request.state or {}).get("force_answer"))  # bước trả lời ép buộc (loop/limits.py): không tool
+        extra = [] if forced else [t for n, t in self._open_tools(request.state, request.runtime).items()
+                                   if n not in have]
         text = catalog_text(ctx.sources, list((request.state or {}).get("open_sources") or []))
         system = SystemMessage(f"{request.system_prompt or ''}\n\n{text}".strip())
         return handler(request.override(tools=[*request.tools, *extra], system_message=system))

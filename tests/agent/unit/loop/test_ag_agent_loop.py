@@ -119,9 +119,10 @@ def test_final_answer_strips_copied_files_note(mock_settings):
 
 
 def test_max_steps_stops_with_message(mock_settings):
+    # LLM vẫn gọi tool ở bước trả lời ép buộc → tool call bị bỏ, không còn chữ → thông báo dừng cố định
     agent, model, _ = _agent(mock_settings, [tool_call("list_files")], cfg_over={"max_steps": 3})
     res = agent_result(_run(agent))
-    assert len(model.calls) == 3
+    assert len(model.calls) == 3                                   # bước thứ 3 (cuối) là bước trả lời ép buộc
     assert "giới hạn 3 bước" in res["answer"] and res["stop_reason"]
 
 
@@ -130,7 +131,7 @@ def test_consecutive_tool_errors_stop(mock_settings):
                              cfg_over={"max_consecutive_tool_errors": 3, "max_steps": 20})
     st = _run(agent)
     errors = [m for m in st["messages"] if isinstance(m, ToolMessage) and m.status == "error"]
-    assert len(errors) == 3 and len(model.calls) == 3
+    assert len(errors) == 3 and len(model.calls) == 4              # 3 bước gọi tool lỗi + 1 bước trả lời ép buộc
     assert "lỗi 3 lần liên tiếp" in agent_result(st)["answer"]
 
 
@@ -139,7 +140,7 @@ def test_wall_time_stop(mock_settings):
     agent, model, _ = _agent(mock_settings, [tool_call("list_files")], cfg_over={"max_wall_time_s": 250},
                              clock=lambda: next(clock))
     res = agent_result(_run(agent))
-    assert len(model.calls) == 2 and "thời gian tối đa 250" in res["answer"]
+    assert len(model.calls) == 3 and "thời gian tối đa 250" in res["answer"]
 
 
 def test_tool_exception_becomes_structured_error(mock_settings):

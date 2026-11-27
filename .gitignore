@@ -24,6 +24,8 @@ S5_Bo-tai-lieu-mau_GD-thiet-ke_20261020/
 *.tar
 mep-models*/
 data/uploads/
+# Dữ liệu prod tải về để test local (export 1 dự án: chunk + vector)
+/prod_data/
 
 # file khóa tạm của Office
 ~$*

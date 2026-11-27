@@ -139,7 +139,7 @@ Checkpointer: `PostgresSaver`, `thread_id = conversation_id`. Bảng `conversati
 ### N3. Retrieval — fan-out song song (LangGraph `Send`)
 - **Sinh nhánh:** `project × stream × lang`, với stream ∈ `router.streams` (rỗng = tất cả), lang ∈ {vi, en}. **Bỏ nhánh** nếu profile cho biết stream đó không có tài liệu ở lang đó; bỏ lang `en` nếu `queries_en` rỗng.
 - **Mỗi nhánh:**
-  1. Filter Qdrant: `project_id`, `stream`, `disciplines` ∩ (`router.disciplines` ∪ `GENERAL`), `is_latest = true`.
+  1. Filter Qdrant: `project_id`, `stream`, `is_latest = true`; phân hệ theo `retrieval.discipline_mode`: `hard` = lọc cứng `disciplines` ∩ (`router.disciplines` ∪ `GENERAL`); `soft` (mặc định từ 2026-11-27) = thêm prefetch có lọc phân hệ bên cạnh prefetch không lọc, RRF cộng điểm tài liệu đúng phân hệ nhưng không loại tài liệu gắn nhãn khác (VD hỏi báo cháy → FIRE, spec báo cháy gắn ELV).
   2. Dense: `queries_<lang>` → model theo `config/models.yaml` (VN: Qwen3 + query instruction · EN: Gemini `RETRIEVAL_QUERY`).
   3. Sparse: BM25 với query + `exact_keywords` (keyword được nhân trọng số `retrieval.keyword_boost`).
   4. Fusion RRF dense + sparse.
@@ -150,6 +150,8 @@ Checkpointer: `PostgresSaver`, `thread_id = conversation_id`. Bảng `conversati
 ### N4. Rerank — theo từng tài liệu
 - **In:** `candidates`, `router.rewritten_question`
 - **Logic:** reranker đa ngữ chấm (rewritten_question, child.text). Với mỗi `doc_id`: giữ child có score ≥ `rerank.min_score`, tối đa `rerank.max_per_doc`. Child VN và EN được chấm chung.
+- **Giới hạn ứng viên** (cờ từ 2026-11-27, mặc định TẮT): `rerank.max_candidates` > 0 → chỉ chấm top-N ứng viên theo `fusion_score` (RRF theo hạng, so được giữa các nhánh); `rerank.max_candidates_per_doc` > 0 → mỗi tài liệu tối đa k, thiếu chỗ lấp theo fusion. Đo CT05 (N = 120, k = 0, `batch_size` 30): rerank p50 4.8 → 3.9s, hết đuôi 13–17s, số đoạn chấm 390 → 120; câu vàng giữ 95.8% nhưng bộ câu khó 100% → 88.9% (câu hỏi rộng mất mục sát ngưỡng, VD tiêu chuẩn DW/144) nên chưa bật. k = 6 còn tệ hơn (giữ 72% đoạn đạt ngưỡng vì đoạn đúng dồn vào ít tài liệu).
+- **Gemini chấm điểm:** lô `batch_size` đoạn gọi song song, trả JSON gọn `{"id": điểm}`; lô chưa xong sau `hedge_after_s` → gửi thêm 1 bản, lấy bản xong trước; quá `max_wait_s` → `missing_score`.
 - **Out:** `reranked`, `top1_score`
 - **Rẽ nhánh:** `reranked` rỗng → `status = NOT_FOUND` → N7 · ngược lại → N5.
 
@@ -159,8 +161,9 @@ Checkpointer: `PostgresSaver`, `thread_id = conversation_id`. Bảng `conversati
   1. Lấy `parent_chunks` theo `parent_id` (distinct), 1 truy vấn.
   2. Ghép parent VN + EN cùng `doc_id + section_key` thành 1 khối (`<vi>`, `<en>`) — **giữ cả hai**, không bỏ bản nào.
   3. `referenced_ids` → lấy parent được tham chiếu trong **các tài liệu đã nạp** (1 hop). Tham chiếu ngoài hệ thống → ghi nhãn "chưa có trong hệ thống".
-  4. Parent > `context.max_parent_tokens` → chỉ lấy header/tiêu đề + child trúng ± `context.neighbor_children` child lân cận.
-  5. Sắp theo điểm rerank, cắt theo `context.token_budget`.
+  4. Parent > `context.max_parent_tokens` (3000, trước 6000 ≈ trần parent khi ingest nên gần như không cắt) → chỉ lấy header/tiêu đề + child trúng ± `context.neighbor_children` child lân cận.
+  5. Sắp theo điểm rerank. Khử trùng (`context.dedup_threshold`, 0 = tắt): khối có ≥ ngưỡng shingle 5 từ (VN + EN) nằm trong 1 khối đã giữ của doc/mục khác → bỏ (khối nguồn `priority` nhỏ hơn thay chỗ khối trước). Rồi cắt theo `context.token_budget`.
+  6. (`search_payload`, sau khi nạp bảng của mục) `context.drop_heading_only_chars` > 0 → bỏ khối chính chỉ còn tiêu đề (bỏ dòng heading / dòng trùng số-tên mục còn < N chữ/số ở mọi ngôn ngữ, không có bảng), trừ khi kèm khối bảng/tham chiếu hoặc tham chiếu ngoài hệ thống; mọi khối đều là tiêu đề → giữ nguyên.
 - **Out:** `context` (mỗi block: project_id, stream, priority, doc title, revision, section_key, title, vi, en, page_start, page_end, is_reference)
 
 ### N6. Grader
@@ -231,7 +234,7 @@ Checkpointer: `PostgresSaver`, `thread_id = conversation_id`. Bảng `conversati
    | 5 | remove | S7 | [S5] |
 2. **N3 sinh nhánh**: dự án chỉ có VN → không sinh nhánh EN; `streams` rỗng → mọi stream có tài liệu.
 3. **N4**: lọc ngưỡng, giới hạn mỗi tài liệu; rỗng → NOT_FOUND.
-4. **N5**: ghép VN/EN cùng section_key; loại trùng parent; cắt parent dài; tôn trọng ngân sách token.
+4. **N5**: ghép VN/EN cùng section_key; loại trùng parent; cắt parent dài; tôn trọng ngân sách token; khử khối gần trùng giữa tài liệu; bỏ khối chỉ có tiêu đề (`tests/query/test_q_quality.py`, cùng giới hạn ứng viên N4).
 5. **N6**: regex phát hiện "Bảng 4.3" chưa có nội dung; rẽ đúng nhánh D/E/F; không vượt 1 hop.
 6. **N1**: parse JSON lỗi → fallback.
 7. **Graph**: chạy đủ 4 đường: OK, PARTIAL, NOT_FOUND, ASK_CLARIFY.

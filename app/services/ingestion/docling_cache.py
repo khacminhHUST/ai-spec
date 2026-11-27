@@ -117,11 +117,6 @@ def needs_full_ocr(broken: list[int], n_text: int) -> bool:
     return bool(broken) and len(broken) >= max(1, 0.1 * n_text)
 
 
-def scan_pages(path: str | Path, min_chars: int = 30) -> list[int]:
-    """Trang (1-based) không có text layer nhưng có ảnh → cần OCR."""
-    return analyze_pages(path, min_chars)[0]
-
-
 # ---------------------------------------------------------------- bộ OCR
 
 ENGINES = ("auto", "tesseract", "easyocr", "rapidocr")

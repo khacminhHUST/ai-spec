@@ -171,3 +171,9 @@ Dữ liệu giả lập cho phiên B (`tests/fixtures/query_seed/`):
 - Báo cáo kết quả test ngắn gọn: pass/fail + lý do fail.
 - Agent: `tests/agent/` (unit, integration/sandbox cần Docker + image), kịch bản E2E `tests/fixtures/agent_scenarios.yaml`
   → `tests/agent/e2e/test_ag_scenarios.py` (chạy với `MEP_NS=ingest`).
+- Eval trên dữ liệu prod (CT05, 74 tài liệu – file export `prod_data/ct05.jsonl.gz`, không commit;
+  nạp: `python -m app.cli.migrate --ns prod` rồi `python -m tests.eval.import_project prod_data/ct05.jsonl.gz`):
+  `python -m tests.eval.run_eval --suite tests/fixtures/ct05_golden.yaml [--ids c01,c04] [--compare old.json]`
+  Bộ câu khó (hỏi rộng, nhiều ý, nhiều lượt, gõ không dấu – tái hiện ca 60s): `--suite tests/fixtures/ct05_hard.yaml`.
+  (24 câu: lookup/table/broad/multi_source/not_found; chấm từ khóa + LLM judge). Ngưỡng chấp nhận (local): accuracy ≥ 85%,
+  không bịa số; total p50 ≤ 20s, p90 ≤ 35s; TB ≤ 1,5 lần tra / câu. Mỗi lần chạy cả bộ ≈ 250 lượt gọi Gemini.

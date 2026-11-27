@@ -32,6 +32,9 @@ def discipline_filter(disciplines: list[str]) -> list[str] | None:
     return sorted({*disciplines, "GENERAL"}) if disciplines else None
 
 
+DISCIPLINE_MODES = ("hard", "soft")
+
+
 class QdrantRetriever(Retriever):
     def __init__(self, settings: Settings, client=None, embedders: dict[str, Embedder] | None = None):
         from app.db.client import qdrant
@@ -60,6 +63,7 @@ class QdrantRetriever(Retriever):
         return self._cache[key]
 
     def _filter(self, project_id: str, stream: str, disciplines: list[str], doc_ids: list[str] | None) -> qm.Filter:
+        """Lọc cứng project/stream/bản mới nhất (+ phân hệ nếu có, + doc_ids)."""
         must: list[Any] = [
             qm.FieldCondition(key="project_id", match=qm.MatchValue(value=project_id)),
             qm.FieldCondition(key="stream", match=qm.MatchValue(value=stream)),
@@ -77,11 +81,22 @@ class QdrantRetriever(Retriever):
         if not queries:
             return []
         k = int(self.cfg["top_k_per_doc"])
+        # Phân hệ: hard = lọc cứng; soft = tìm cả có lọc và không lọc rồi RRF (tài liệu đúng phân hệ được cộng điểm, tài
+        # liệu gắn nhãn khác – VD báo cháy gắn ELV khi hỏi FIRE – vẫn tìm được).
+        mode = self.cfg.get("discipline_mode", "hard")
+        if mode not in DISCIPLINE_MODES:
+            raise ValueError(f"retrieval.discipline_mode không hợp lệ: {mode!r}")
         flt = self._filter(project_id, stream, disciplines, doc_ids)
-        prefetch = [qm.Prefetch(query=self._embed(lang, q), using="dense", filter=flt, limit=k * 5) for q in queries]
+        filters = [flt]
+        if mode == "soft" and discipline_filter(disciplines):
+            flt = self._filter(project_id, stream, [], doc_ids)
+            filters.append(flt)
         sp = query_sparse(" ".join(queries), keywords, float(self.cfg.get("keyword_boost", 1.0)))
-        if sp["indices"]:
-            prefetch.append(qm.Prefetch(query=qm.SparseVector(**sp), using="sparse", filter=flt, limit=k * 5))
+        prefetch = []
+        for f in filters:
+            prefetch += [qm.Prefetch(query=self._embed(lang, q), using="dense", filter=f, limit=k * 5) for q in queries]
+            if sp["indices"]:
+                prefetch.append(qm.Prefetch(query=qm.SparseVector(**sp), using="sparse", filter=f, limit=k * 5))
         res = self.client.query_points_groups(
             self.settings.collection(lang), prefetch=prefetch, query=qm.FusionQuery(fusion=qm.Fusion.RRF),
             query_filter=flt, group_by="doc_id", group_size=k, limit=20, with_payload=True,

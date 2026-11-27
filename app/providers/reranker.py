@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
 import logging
@@ -66,9 +67,15 @@ class GeminiReranker(Reranker):
         self.max_chars = int(cfg.get("max_chars", 2000))
         self.min_score = float(cfg.get("gemini_min_score", 0.6))   # thang LLM khác P(yes) → ngưỡng riêng
         self.missing_score = float(cfg.get("missing_score", self.min_score))
+        # Lô chậm bất thường (Gemini đôi khi treo 20–30s): sau hedge_after_s gửi thêm 1 bản, lấy bản xong trước;
+        # quá max_wait_s → missing_score. Cả hai = 0 → gọi song song như cũ, không hạn thời gian.
+        self.hedge_after_s = float(cfg.get("hedge_after_s", 0))
+        self.max_wait_s = float(cfg.get("max_wait_s", 0))
         overrides = {"provider": cfg.get("llm_provider", "google_genai"), "model": self.model, "temperature": 0}
         if cfg.get("thinking_level"):
             overrides["thinking_level"] = cfg["thinking_level"]
+        if cfg.get("max_wait_s"):
+            overrides["timeout"] = float(cfg["max_wait_s"])   # request treo không giữ thread mãi
         self._llm = llm or get_chat_model("fast", settings, **overrides)
 
     def _messages(self, query: str, docs: list[str]) -> list:
@@ -82,13 +89,16 @@ class GeminiReranker(Reranker):
 
     @staticmethod
     def parse(text: str, n: int) -> dict[int, float]:
-        """JSON {"scores": [{"id", "score"}]} → {id: score/10}; bỏ id lạ / điểm không phải số."""
+        """JSON {"0": 7, "1": 2} (dạng gọn – ít token ra, nhanh ~1s/lô) hoặc {"scores": [{"id", "score"}]} → {id: score/10};
+        bỏ id lạ / điểm không phải số."""
         import json
         import re
 
         m = re.search(r"\{.*\}", text or "", re.S)
         raw = json.loads(m.group(0)) if m else {}
         out: dict[int, float] = {}
+        if isinstance(raw, dict) and "scores" not in raw:
+            raw = {"scores": [{"id": k, "score": v} for k, v in raw.items()]}
         for it in raw.get("scores") or [] if isinstance(raw, dict) else []:
             try:
                 i, sc = int(it["id"]), float(it["score"])
@@ -119,14 +129,65 @@ class GeminiReranker(Reranker):
     def score(self, query: str, documents: list[str]) -> list[float]:
         if not documents:
             return []
-        from concurrent.futures import ThreadPoolExecutor
-
         batches = [documents[i : i + self.batch_size] for i in range(0, len(documents), self.batch_size)]
-        if len(batches) == 1:
-            return self._score_batch(query, batches[0])
-        with ThreadPoolExecutor(max_workers=len(batches)) as ex:
-            parts = list(ex.map(lambda b: self._score_batch(query, b), batches))
-        return [x for part in parts for x in part]
+        if self.hedge_after_s <= 0 and self.max_wait_s <= 0:
+            if len(batches) == 1:
+                return self._score_batch(query, batches[0])
+            with ThreadPoolExecutor(max_workers=len(batches)) as ex:
+                parts = list(ex.map(lambda b: self._score_batch(query, b), batches))
+            return [x for part in parts for x in part]
+        return [x for part in self._score_hedged(query, batches) for x in part]
+
+    def _score_hedged(self, query: str, batches: list[list[str]]) -> list[list[float]]:
+        """Mỗi lô 1 request; lô chưa xong sau hedge_after_s (hoặc lỗi) → thêm 1 request, lấy cái xong trước;
+        quá max_wait_s → missing_score. Executor riêng mỗi lần gọi (không tranh worker giữa các câu hỏi); request
+        thua chạy nốt trong nền, bị chặn bởi timeout của client LLM."""
+        import time
+        from concurrent.futures import FIRST_COMPLETED, wait
+
+        start = time.monotonic()
+        wait_s = self.max_wait_s or 60.0
+        hedge_at = start + (self.hedge_after_s if self.hedge_after_s > 0 else float("inf"))
+        deadline = start + wait_s
+        ex = ThreadPoolExecutor(max_workers=2 * len(batches), thread_name_prefix="rerank")
+        futs = {i: [ex.submit(self._score_batch, query, b)] for i, b in enumerate(batches)}
+        out: dict[int, list[float]] = {}
+        try:
+            while len(out) < len(batches):
+                for i, fs in futs.items():
+                    if i in out:
+                        continue
+                    ok = [f for f in fs if f.done() and f.exception() is None]
+                    if ok:
+                        out[i] = ok[0].result()
+                    elif all(f.done() for f in fs):                      # mọi bản đều lỗi
+                        if len(fs) < 2:
+                            fs.append(ex.submit(self._score_batch, query, batches[i]))
+                        else:
+                            out[i] = [self.missing_score] * len(batches[i])
+                if len(out) == len(batches):
+                    break
+                now = time.monotonic()
+                if now >= deadline:
+                    slow = [i for i in futs if i not in out]
+                    log.warning("rerank Gemini: %d lô quá %.0fs → missing_score", len(slow), wait_s)
+                    for i in slow:
+                        out[i] = [self.missing_score] * len(batches[i])
+                    break
+                if now >= hedge_at:
+                    slow = [i for i in futs if i not in out and len(futs[i]) < 2]
+                    if slow:
+                        log.info("rerank Gemini: %d lô chậm > %.0fs → gửi lại", len(slow), self.hedge_after_s)
+                    for i in slow:
+                        futs[i].append(ex.submit(self._score_batch, query, batches[i]))
+                    hedge_at = float("inf")
+                pending = [f for i, fs in futs.items() if i not in out for f in fs if not f.done()]
+                if pending:
+                    wait(pending, timeout=max(0.0, min(hedge_at, deadline) - time.monotonic()),
+                         return_when=FIRST_COMPLETED)
+        finally:
+            ex.shutdown(wait=False, cancel_futures=True)
+        return [out[i] for i in range(len(batches))]
 
 
 class LocalQwenReranker(Reranker):

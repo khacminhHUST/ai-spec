@@ -11,7 +11,6 @@ from app.providers.llm import MockChatModel
 from app.services.ingestion import chunk_llm
 from app.services.ingestion.bilingual import attach_captions, merge_page_break_tables
 from app.services.ingestion.chunks import (
-    ChildDraft,
     ParentDraft,
     Unit,
     build_children,

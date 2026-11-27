@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import { useRef, useState } from "react";
 import type { ConfirmRequest, Message, ToolRun } from "../types";
 import Citations from "./Citations";
+import { plainMath } from "../utils/plainMath";
 import Icon, { Spinner } from "./Icon";
 
 const STEP_LABEL: Record<string, string> = {
@@ -235,7 +236,7 @@ export default function MessageBubble({ m, onConfirm }: Props) {
       {m.tools && m.tools.length > 0 && <ToolSteps tools={m.tools} finished={finished} waiting={waiting} />}
       {m.content && (
         <div className="md" ref={mdRef}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{plainMath(m.content)}</ReactMarkdown>
         </div>
       )}
       {step && !(m.content && m.step === "generate") && (

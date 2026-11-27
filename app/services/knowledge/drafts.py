@@ -47,10 +47,6 @@ def load_draft(artifact_dir: Path) -> Draft:
     return Draft(doc, parents, children)
 
 
-def read_report(artifact_dir: Path) -> dict[str, Any]:
-    return json.loads((Path(artifact_dir) / "report.json").read_text(encoding="utf-8"))
-
-
 def sections(artifact_dir: Path) -> list[dict[str, Any]]:
     """Cây mục: parent (cả SECTION và TABLE) theo thứ tự xuất hiện, kèm số child."""
     d = Path(artifact_dir)

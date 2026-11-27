@@ -11,7 +11,6 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
 from app.core.config import ROOT
 from app.prompts import render
@@ -136,8 +135,3 @@ def group_units(units: list[str], unit_tokens: list[int], para_start: list[bool]
     if groups is None:
         return Grouping(greedy_groups(unit_tokens, max_tokens, min_tokens), "fallback", err)
     return Grouping(groups, source)
-
-
-def clear_cache(path: Path = CACHE_DIR) -> None:
-    for f in path.glob("*.json"):
-        f.unlink()

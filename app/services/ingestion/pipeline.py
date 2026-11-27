@@ -20,9 +20,7 @@ from app.services.ingestion.chunks import (
     build_children,
     build_parents,
     integrity_check,
-    md_row,
     split_large_sections,
-    table_header_md,
 )
 from app.services.ingestion.metadata import DocMeta, infer_metadata, make_doc_id, meta_summary
 from app.services.ingestion.parse import ParsedDoc, TextLayer, parse_pdf

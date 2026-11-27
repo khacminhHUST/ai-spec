@@ -7,7 +7,8 @@ from app.services.agent.config import agent_cfg
 from app.services.agent.sandbox import SandboxManager
 from app.services.agent.sandbox.mock_backend import MockSandbox
 from app.services.agent.state import AgentContext
-from app.services.agent.tools.search_docs import SearchDocs, apply_hints, expand_sibling_tables, make_search_tool
+from app.services.agent.tools.search_docs import (SearchDocs, apply_hints, expand_sibling_tables, make_search_tool,
+                                                  near_empty_table, summarize_payload)
 from tests.agent.fakes import call_cmd
 from tests.query.fakes import S5, S6, InMemoryRepo, make_deps, router_json, scripted_llm
 
@@ -84,7 +85,7 @@ def test_large_result_goes_to_sandbox_file(mock_settings):
     tool, _, _, _, boxes = _setup(mock_settings, max_tokens=50)
     out, upd = call_cmd(tool, question="Bán kính uốn cáp > 25mm2?")
     path = out["full_result_file"]
-    assert path.startswith("input/search_") and "read_file" in out["note"]
+    assert path.startswith("input/search_") and "run_code" in out["note"]
     full = json.loads(boxes["conv-1"].get_file(path))
     assert full["blocks"][0]["vi"] and len(full["blocks"]) == len(out["blocks"])
     assert len(json.dumps(out, ensure_ascii=False)) < len(json.dumps(full, ensure_ascii=False))
@@ -152,3 +153,29 @@ def test_apply_hints():
     assert h["project_action"] == "set" and h["project_mentions"] == ["S5"]
     assert h["disciplines"] == ["HVAC"] and h["streams"] == ["OPERATOR_STANDARD"]
     assert apply_hints(r, None, None, None)["streams"] == ["CONTRACT"]
+
+
+def test_near_empty_sibling_tables_dropped():
+    from types import SimpleNamespace
+
+    assert near_empty_table("| Type | L |") and near_empty_table("| A | B |\n|---|---|\n| | |") and near_empty_table(None)
+    assert not near_empty_table("| Chiếu sáng | 1.5mm2 |")
+    assert not near_empty_table("| Rendered masonry partition | Flush wall box with conduit chased into wall |")
+    rows = [_row("table_5_7_1", text="| Type | L |"), _row("table_5_7_1", "en", "| Loại | |"), _row("table_5_7_2")]
+    out = expand_sibling_tables(SimpleNamespace(repo=_TableRepo(rows)), [_sec("sec_5_7")], 3)
+    assert [b["section_key"] for b in out] == ["sec_5_7", "table_5_7_2"]
+
+
+def test_summary_keeps_top_blocks_full_within_budget():
+    count = lambda t: len(t) // 3  # noqa: E731
+    long = "Nội dung yêu cầu kỹ thuật dài. " * 60                               # ~1900 ký tự > SUMMARY_BLOCK_CHARS
+    payload = {"status": "OK", "blocks": [{"n": i, "vi": long} for i in range(1, 6)], "citations": []}
+    short = summarize_payload(payload, 2600, count)
+    full = [b for b in short["blocks"] if not b.get("truncated")]
+    assert [b["n"] for b in full] == [1, 2] and full[0]["vi"] == long          # khối đầu nguyên vẹn
+    assert all(b["truncated"] for b in short["blocks"][2:])
+    assert all(b.get("truncated") for b in summarize_payload(payload)["blocks"])  # không ngân sách → cắt đều
+
+
+def test_text_only_multi_row_table_kept():
+    assert not near_empty_table("| Pha | Màu |\n|---|---|\n| L | Đỏ |\n| N | Xanh |")

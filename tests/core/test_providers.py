@@ -99,3 +99,48 @@ def test_gemini_reranker_loi_giu_nguyen():
                                                                                            calls=[]))
     assert r.score("q", ["a", "b"]) == [0.3, 0.3]
     assert GeminiReranker.parse('{"scores": [{"id": 0, "score": 12}, {"id": 9, "score": 5}, {"id": "x"}]}', 2) == {0: 1.0}
+    assert GeminiReranker.parse('```json\n{"0": 7, "1": "x", "5": 3}\n```', 2) == {0: 0.7}     # dạng gọn
+
+
+def test_gemini_reranker_hedge_lo_cham():
+    """Lô treo > hedge_after_s → gửi thêm 1 bản, lấy bản xong trước; quá max_wait_s → missing_score."""
+    import time
+
+    from app.providers.reranker import GeminiReranker
+
+    calls: list[str] = []
+
+    class Slow(GeminiReranker):
+        def _score_batch(self, query, docs):
+            calls.append(docs[0])
+            if docs[0] == "treo" and calls.count("treo") == 1:
+                time.sleep(1.0)                  # request đầu của lô 2 treo, bản gửi lại xong ngay
+            if docs[0] == "chết":
+                time.sleep(1.0)                  # lô luôn treo → hết max_wait_s
+            return [0.9] * len(docs)
+
+    r = Slow({"model": "x", "batch_size": 1, "gemini_min_score": 0.3, "hedge_after_s": 0.1, "max_wait_s": 0.5},
+             settings=None, llm=MockChatModel(responses=["{}"], calls=[]))
+    t = time.perf_counter()
+    assert r.score("q", ["a", "treo"]) == [0.9, 0.9] and calls.count("treo") == 2
+    assert time.perf_counter() - t < 0.6
+    t = time.perf_counter()
+    assert r.score("q", ["a", "chết"]) == [0.9, 0.3]
+    assert time.perf_counter() - t < 0.8
+
+
+def test_gemini_reranker_hedge_loi_ca_hai_ban():
+    """Bản đầu ném lỗi → gửi lại ngay; cả 2 bản lỗi → missing_score, không treo tới deadline."""
+    import time
+
+    from app.providers.reranker import GeminiReranker
+
+    class Boom(GeminiReranker):
+        def _score_batch(self, query, docs):
+            raise RuntimeError("x")
+
+    r = Boom({"model": "x", "batch_size": 1, "gemini_min_score": 0.3, "hedge_after_s": 5, "max_wait_s": 10},
+             settings=None, llm=MockChatModel(responses=["{}"], calls=[]))
+    t = time.perf_counter()
+    assert r.score("q", ["a"]) == [0.3]
+    assert time.perf_counter() - t < 1.0

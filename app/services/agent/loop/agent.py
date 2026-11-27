@@ -23,7 +23,7 @@ from app.prompts import render
 from app.providers.llm import MockChatModel
 from app.services.agent.loop.confirm import ConfirmMiddleware
 from app.services.agent.loop.context import ToolGuardMiddleware, approx_tokens
-from app.services.agent.loop.limits import LimitsMiddleware
+from app.services.agent.loop.limits import BUDGET_STATUS, LimitsMiddleware
 from app.services.agent.loop.sources import SourcesMiddleware
 from app.services.agent.mcp.catalog import SourceCatalog
 from app.services.agent.sandbox import OUTPUT_DIR, SandboxManager
@@ -48,12 +48,32 @@ def get_agent_model(cfg: dict[str, Any], settings: Settings | None = None) -> Ba
     kwargs: dict[str, Any] = {}
     if cfg["provider"] == "google_genai" and cfg.get("thinking_level"):
         kwargs["thinking_config"] = {"thinking_level": cfg["thinking_level"]}
-    return init_chat_model(cfg["model"], model_provider=cfg["provider"], api_key=s.api_key(cfg["provider"]),
-                           temperature=float(cfg.get("temperature", 0.1)), **kwargs)
+    if cfg.get("request_timeout_s"):            # mặc định SDK: không timeout
+        kwargs["timeout"] = float(cfg["request_timeout_s"])
+    if cfg.get("max_attempts"):                 # mặc định SDK Google: 6 lần (1 = không thử lại)
+        kwargs["max_retries"] = int(cfg["max_attempts"])
+    common = dict(api_key=s.api_key(cfg["provider"]), temperature=float(cfg.get("temperature", 0.1)), **kwargs)
+    if cfg["provider"] == "google_genai" and cfg.get("first_token_timeout_s"):   # chunk đầu chậm → gửi thêm 1 request
+        from app.services.agent.loop.hedge import HedgedChatGoogleGenerativeAI
+
+        return HedgedChatGoogleGenerativeAI(model=cfg["model"], first_token_timeout_s=float(cfg["first_token_timeout_s"]),
+                                            **common)
+    return init_chat_model(cfg["model"], model_provider=cfg["provider"], **common)
 
 
-def system_prompt(skills: dict[str, Skill]) -> str:
-    return render("agent/system", skills=skills_prompt(skills))
+def search_budget_text(a: dict[str, Any] | None) -> str:
+    """Câu dặn về ngân sách tra trong system prompt – khớp trần ép bằng code (loop/limits.py)."""
+    rounds = int((a or {}).get("max_search_rounds") or 0)
+    if not rounds:
+        return "Tối đa 2 bước tra cho 1 câu hỏi: sau đó trả lời bằng nội dung đã có, nêu rõ ý nào chưa tìm thấy. "
+    return (f"Hệ thống chỉ cho tra tối đa {rounds} bước cho 1 câu hỏi (nhiều lần tra song song trong 1 bước tính "
+            f"1 bước); hết lượt thì trả lời bằng nội dung đã có, ý chưa tra được thì nói rõ là chưa tra được do giới hạn "
+            f"lượt tra và gợi ý người dùng hỏi tiếp. ")
+
+
+def system_prompt(skills: dict[str, Skill], a: dict[str, Any] | None = None) -> str:
+    """a = agent.yaml › agent (ngân sách tra)."""
+    return render("agent/system", skills=skills_prompt(skills), search_budget=search_budget_text(a))
 
 
 def build_agent(model: BaseChatModel, toolset: ToolSet, skills: dict[str, Skill], cfg: dict[str, Any],
@@ -63,15 +83,14 @@ def build_agent(model: BaseChatModel, toolset: ToolSet, skills: dict[str, Skill]
     nguồn ngoài (gắn tool của nguồn đã mở) → confirm (xét access sau khi đã có tool)."""
     a = cfg["agent"]
     middleware = [
-        LimitsMiddleware(int(a["max_steps"]), int(a["max_consecutive_tool_errors"]), float(a["max_wall_time_s"]),
-                         clock=clock),
+        LimitsMiddleware.from_cfg(a, clock=clock),
         SummarizationMiddleware(model, trigger=("tokens", int(a["summarize_above_tokens"])), keep=("messages", 20)),
         PatchToolCallsMiddleware(),
         ToolGuardMiddleware(manager, int(a["tool_result_max_tokens"]), count_tokens),
         *([SourcesMiddleware(catalog)] if catalog is not None else []),
         ConfirmMiddleware(),
     ]
-    return create_agent(model, toolset.tools, system_prompt=system_prompt(skills), middleware=middleware,
+    return create_agent(model, toolset.tools, system_prompt=system_prompt(skills, a), middleware=middleware,
                         state_schema=HarnessState, context_schema=AgentContext, checkpointer=checkpointer,
                         name="agent")
 
@@ -107,6 +126,8 @@ def tool_summary(content: Any) -> tuple[bool, str]:
     success = obj.get("ok") is not False
     if not success:
         return False, clip(str(obj.get("error") or "lỗi"), SSE_PREVIEW_CHARS)
+    if obj.get("status") == BUDGET_STATUS:
+        return True, "bỏ qua (hết lượt tra)"
     if "status" in obj:
         return True, f"{obj['status']}: {len(obj.get('blocks') or [])} mục"
     if obj.get("new_files"):

@@ -10,6 +10,7 @@
 .claude
 artifacts
 data
+prod_data
 tests
 docs
 sandbox

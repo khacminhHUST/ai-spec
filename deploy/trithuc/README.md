@@ -8,8 +8,8 @@ nginx và 1 iframe; không thêm container, không sửa backend Tri thức.
 | | Giá trị |
 |---|---|
 | Server 1 (web Tri thức, `nginx_proxy`) | `10.34.91.6` |
-| Server 2 (app MEP) | `10.34.91.10` – `srv-ai-tools`, Ubuntu 24.04, 16 GB RAM, **dùng chung** với các app khác (elec-qto, revit-mcp, catalogue, pdf_parse – chiếm cổng 80/443/441/442/555) |
-| Thư mục cài trên S2 | `~/mep` (user `ai-tool`) |
+| Server 2 (app MEP) | `10.34.91.8` – server `ai-hopdong` (trước đây `10.34.91.10` – `srv-ai-tools`) |
+| Thư mục cài trên S2 | `/home/ai-hopdong/mep` (user `ai-hopdong`; `deploy.sh` mặc định `MEP_DIR=~/mep`) |
 | Repo | `https://github.com/khacminhHUST/ai-spec.git`, branch `main` (public) |
 | `AUTH_TOKEN_KEY` | `hawee_auth_token` (`frontend/services/userService.ts` của web Tri thức) |
 | Cổng gateway | `8090` |

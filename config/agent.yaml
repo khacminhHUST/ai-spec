@@ -9,9 +9,22 @@ agent:
   model: gemini-3.8-flash   # nâng model nếu tỉ lệ code lỗi cao
   temperature: 0.1
   thinking_level: low       # mỗi bước nhanh hơn; nâng nếu tỉ lệ code lỗi cao
-  max_steps: 25
+  request_timeout_s: 120    # mỗi lần gọi LLM agent (mặc định SDK: không timeout)
+  max_attempts: 3           # gọi LLM agent tối đa N lần khi lỗi mạng/429 (mặc định SDK Google: 6)
+  first_token_timeout_s: 8  # chưa có chunk đầu sau N giây → gửi thêm 1 request, lấy cái ra trước (loop/hedge.py;
+                            #   đo: token đầu p95 4.6s, ~2% bước chờ 9–31s). 0 = tắt. Chỉ google_genai.
+  # Trần cứng (loop/limits.py): chạm trần → 1 bước trả lời ép buộc (không tool) từ dữ liệu đã có, status PARTIAL.
+  # Thời gian tính theo thời gian chạy thực (không gồm lúc chờ người dùng xác nhận tool write).
+  max_steps: 25             # số lần gọi LLM / lượt, gồm bước trả lời ép buộc
   max_consecutive_tool_errors: 3
   max_wall_time_s: 300
+  forced_answer_timeout_s: 60   # bước trả lời ép buộc: timeout riêng, không thử lại → trần tổng ≈ max_wall_time_s + 60
+  # Lượt tra / lượt hỏi (lưới an toàn, ép bằng code; 0 = không giới hạn): đủ N bước có gọi search_project_docs (gọi
+  # song song trong 1 bước = 1 bước) → các bước sau bỏ tool search, nhắc trả lời bằng dữ liệu đã có (chỉ ở bước ngay sau
+  # khi đóng / có call bị chặn); call search vẫn sinh ra → BUDGET_EXHAUSTED, không chạy; 2 bước liên tiếp toàn call bị
+  # chặn → ép trả lời. Tool tạo file / nguồn ngoài không bị chặn.
+  max_search_rounds_total: 4   # trần tổng số bước tra (gồm cả bước toàn NOT_FOUND – được tra lại; 2026-11-27 A4)
+  max_search_rounds: 2
   tool_result_max_tokens: 12000   # 4000 → câu hỏi rộng (10 mục) bị ghi ra file, agent tốn ~10 lần run_code để đọc
   sibling_tables_max: 20    # search_project_docs nạp kèm tối đa N bảng table_A_B_* của mục sec_A_B đã trúng
   summarize_above_tokens: 60000

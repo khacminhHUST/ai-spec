@@ -241,7 +241,7 @@ def hard_split(text: str, lang: str, budget: int) -> list[str]:
         if count_tokens(text[start:], lang) <= budget:
             pieces.append(text[start:])
             break
-        lo, hi, best = start + 1, len(text), None
+        best = None
         cand = [s for s in spaces if s > start]
         if not cand:
             pieces.append(text[start:])

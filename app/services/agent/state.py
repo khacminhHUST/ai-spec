@@ -25,6 +25,8 @@ class AgentContext:
     sources: list[dict] = field(default_factory=list)           # danh mục nguồn ngoài đầu lượt (mcp/catalog.py)
     open_sources: list[str] = field(default_factory=list)       # nguồn đã mở ở các lượt trước
     next_source_n: int = 1                                      # số [n] kế tiếp trong lượt (tool chạy song song)
+    loop_running: bool = False                                  # LimitsMiddleware đánh dấu: False ở lần chạy đầu sau
+                                                                #   resume → không tính thời gian chờ xác nhận
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def allocate_sources(self, count: int, existing: int) -> int:
@@ -76,6 +78,13 @@ class HarnessState(AgentState):
     step_count: NotRequired[Annotated[int, PrivateStateAttr]]
     started_at: NotRequired[Annotated[float, PrivateStateAttr]]
     stop_reason: NotRequired[str | None]
+    # ngân sách lượt (loop/limits.py): đếm trong after_model, quyết định trong before_model
+    force_answer: NotRequired[Annotated[str | None, PrivateStateAttr]]   # lý do ép bước trả lời (không tool)
+    search_rounds: NotRequired[Annotated[int, PrivateStateAttr]]         # số bước LLM có gọi search_project_docs
+    active_s: NotRequired[Annotated[float, PrivateStateAttr]]            # giây chạy thực (không gồm chờ xác nhận)
+    tick: NotRequired[Annotated[float, PrivateStateAttr]]                # thời điểm đo active_s lần cuối
+    search_closed: NotRequired[Annotated[str | None, PrivateStateAttr]]  # hết lượt tra (lý do)
+    search_closed_at: NotRequired[Annotated[int | None, PrivateStateAttr]]  # step_count lúc đóng tra cứu
 
 
 # ------------------------------------------------------------------ messages hội thoại ⇄ agent
